@@ -13,7 +13,7 @@ import '../log/engine_log.dart';
 /// a static no-op default keeps the engine usable when no sink is installed
 /// — most engine tests mount bare and must stay green — and the app installs
 /// its real implementation once at boot via `Engine.initialize`, exactly like
-/// [ApiClient] or [AppStorage]. Installing the sink itself is app-side
+/// [NetworkClient] or [AppStorage]. Installing the sink itself is app-side
 /// wiring, not engine code; this class only holds and forwards to it.
 ///
 /// Every entry point is exception-isolated: a throwing sink must never

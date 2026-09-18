@@ -3,7 +3,7 @@
 /// The engine only *observes*; it owns none of the delivery concerns. Identity
 /// (`session_id`, `install_id`, `seq`), ordering, durability, batching, auth and
 /// transport all belong to the app-side implementation, which is injected at boot
-/// exactly like [ApiClient] and [AppStorage]. Keeping that split is what lets
+/// exactly like [NetworkClient] and [AppStorage]. Keeping that split is what lets
 /// `lib/core/**` stay free of app packages.
 ///
 /// See `_docs/engine-v3/TELEMETRY.md` for the event taxonomy and the identity model.

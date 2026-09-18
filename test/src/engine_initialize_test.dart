@@ -6,9 +6,8 @@ import 'package:sdui_engine/src/dependency/app_storage.dart';
 import 'package:sdui_engine/src/dependency/secure_storage.dart';
 import 'package:sdui_engine/src/dependency/video_source.dart';
 import 'package:sdui_engine/src/contract/external_command.dart';
-import 'package:sdui_engine/src/dependency/api_client.dart';
+import 'package:sdui_engine/src/dependency/network_client.dart';
 import 'package:sdui_engine/src/engine.dart';
-import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
 import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
@@ -61,15 +60,12 @@ class _InjectedCommand implements ExternalCommand {
   Future<Object?> run(CommandInvocation invocation) async => null;
 }
 
-class _ApiClient implements ApiClient {
-  const _ApiClient();
+class _NetworkClient implements NetworkClient {
+  const _NetworkClient();
 
   @override
-  Future<ApiResult> execute({
-    required String query,
-    required Map<String, Object?> variables,
-    String? correlationId,
-  }) async => const ApiResult();
+  Future<NetworkResult> send(NetworkRequest request) async =>
+      const NetworkResult();
 }
 
 void main() {
@@ -87,7 +83,7 @@ void main() {
     group('initialize', () {
       test('전달한 external command를 freeze 전에 등록해 resolve할 수 있다', () {
         Engine.initialize(
-          apiClient: const _ApiClient(),
+          networkClient: const _NetworkClient(),
           imageSource: const _ImageSource(),
           videoSource: const _VideoSource(),
           appStorage: _AppStorage(),
@@ -100,7 +96,7 @@ void main() {
 
       test('앱이 넘긴 위젯을 freeze 전에 등록해 템플릿이 그 _type을 쓸 수 있다', () {
         Engine.initialize(
-          apiClient: const _ApiClient(),
+          networkClient: const _NetworkClient(),
           imageSource: const _ImageSource(),
           videoSource: const _VideoSource(),
           appStorage: _AppStorage(),

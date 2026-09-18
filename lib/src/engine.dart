@@ -6,9 +6,9 @@ import 'dependency/telemetry_sink.dart';
 import 'dependency/video_source.dart';
 import 'runtime/driver/app_storage_driver.dart';
 import 'runtime/driver/secure_storage_driver.dart';
-import 'dependency/api_client.dart';
+import 'dependency/network_client.dart';
 import 'runtime/driver/_base.dart';
-import 'runtime/driver/api_driver.dart';
+import 'runtime/driver/net_driver.dart';
 import 'runtime/driver/driver_registry.dart';
 import 'runtime/driver/external_driver.dart';
 import 'runtime/engine_catalog.dart';
@@ -39,7 +39,8 @@ final class Engine {
   ///   the engine only routes the type, exactly as it does for
   ///   [ExternalCommand].
   static void initialize({
-    required ApiClient apiClient,
+    required NetworkClient networkClient,
+    Map<String, NetworkClient> networkProtocols = const {},
     required ImageSource imageSource,
     required VideoSource videoSource,
     required AppStorage appStorage,
@@ -54,7 +55,9 @@ final class Engine {
     }
     ImageSourceRegistry.install(imageSource);
     VideoSourceRegistry.install(videoSource);
-    DriverRegistry.installEngineOwned(ApiDriver(client: apiClient));
+    DriverRegistry.installEngineOwned(
+      NetDriver(client: networkClient, protocols: networkProtocols),
+    );
     DriverRegistry.installEngineOwned(AppStorageDriver(store: appStorage));
     DriverRegistry.installEngineOwned(SecureStorageDriver(store: secureStorage));
     for (final command in externalCommands) {

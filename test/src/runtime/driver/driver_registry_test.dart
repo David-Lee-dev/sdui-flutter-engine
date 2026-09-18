@@ -55,7 +55,7 @@ void main() {
 
     test('기본 제공 driver는 등록 없이 resolve된다', () {
       for (final type in const [
-        'api',
+        'net',
         'sys_haptic',
         'app_storage',
         'secure_storage',

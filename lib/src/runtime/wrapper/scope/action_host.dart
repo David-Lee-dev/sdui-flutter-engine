@@ -208,7 +208,7 @@ final class ActionHost implements ActionSink {
         var ok = true;
         final params = ExpressionEvaluator.resolveMap(command.params, readEnv);
         final ctx = _context(params, invocation, branchOrigin);
-        final measurement = command.type == 'api'
+        final measurement = command.type == 'net'
             ? await _startMeasurement(command, params, invocation, branchOrigin)
             : _failureMeasurement(command, params, invocation, branchOrigin);
         try {
@@ -286,7 +286,7 @@ final class ActionHost implements ActionSink {
     _CommandMeasurement? measurement;
     try {
       final params = ExpressionEvaluator.resolveMap(command.params, readEnv);
-      measurement = command.type == 'api'
+      measurement = command.type == 'net'
           ? await _startMeasurement(
               command,
               params,
@@ -427,50 +427,26 @@ final class ActionHost implements ActionSink {
   }
 }
 
-/// Extracts command telemetry without exposing arbitrary variable values.
+/// Extracts command telemetry without exposing parameter values.
+///
+/// Command vocabulary is implementation-owned (the `net` command's request
+/// fields belong to the app's [NetworkClient]), so the engine records only
+/// shapes — the sorted parameter key list — never values. Apps that want
+/// richer request telemetry own the place to add it: their client.
 abstract final class CommandTelemetry {
-  /// Variable keys whose scalar values may leave the engine boundary.
-  static const Set<String> variableAllowlist = {
-    'partnerId',
-    'productId',
-    'shopId',
-    'missionId',
-    'adLogId',
-    'externalId',
-    'ticketCount',
-    'order',
-    'side',
-    'currency',
-  };
-
-  /// Builds command properties while discarding every non-allowlisted value.
+  /// Builds command properties from engine-known structure only.
   static Map<String, Object?> properties({
     required String type,
     required Map<String, Object?> params,
     required ActionInvocation invocation,
     required String? branchOrigin,
   }) {
-    final rawVariables = params['variables'];
-    final variables = rawVariables is Map
-        ? rawVariables.map((key, value) => MapEntry('$key', value))
-        : const <String, Object?>{};
-    final keys = variables.keys.toList()..sort();
-    final allowed = <String, Object?>{};
-    for (final key in keys) {
-      final value = variables[key];
-      if (variableAllowlist.contains(key) &&
-          (value is String || value is num)) {
-        allowed[key] = value;
-      }
-    }
     return {
       'type': type,
-      if (params['query'] is String) 'query_id': params['query'],
       'origin': invocation.origin,
       if (branchOrigin != null) 'branch_origin': branchOrigin,
       'invocation_id': invocation.invocationId,
-      'var_keys': keys,
-      'vars': allowed,
+      'param_keys': params.keys.toList()..sort(),
     };
   }
 }

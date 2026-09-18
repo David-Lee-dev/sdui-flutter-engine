@@ -84,7 +84,7 @@ void main() {
 
       test('중첩 Map/List 안의 바인딩도 재귀 컴파일', () {
         final cmd = compile({
-          '_type': 'api',
+          '_type': 'net',
           'args': {'id': r'${user_id}', 'fixed': 1},
         }).steps.single.single;
 
@@ -104,7 +104,7 @@ void main() {
     group('핸들러', () {
       test('_then·_error·_always를 Flow로 담고 params엔 안 샌다', () {
         final cmd = compile({
-          '_type': 'api',
+          '_type': 'net',
           'query_id': 'claim',
           '_then': {'_type': 'set', 'done': true},
           '_error': {
@@ -123,7 +123,7 @@ void main() {
 
       test('_error가 맵이 아니면 InvalidTemplateException', () {
         expect(
-          () => compile({'_type': 'api', '_error': 'nope'}),
+          () => compile({'_type': 'net', '_error': 'nope'}),
           throwsInvalidTemplate,
         );
       });
@@ -208,7 +208,7 @@ void main() {
       test('_error의 code 키(_ 기본 가지 포함)는 값 공간이라 자유 (양성)', () {
         expect(
           () => compile({
-            '_type': 'api',
+            '_type': 'net',
             '_error': {
               '_': {'_type': 'log'},
             },

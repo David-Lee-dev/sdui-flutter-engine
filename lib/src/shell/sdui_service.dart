@@ -16,9 +16,8 @@ import '../contract/external_command.dart';
 /// [onRegister] runs once per service before the engine catalog freezes —
 /// SDK initialization belongs there.
 ///
-/// A single standalone command can still be passed via
-/// `Sdui.initialize(externalCommands: [...])`; a service is the shape for an
-/// integration that owns several commands or needs setup.
+/// A standalone command without SDK setup still ships as a service — a
+/// one-command [commands] list with the default no-op [onRegister].
 abstract class SduiService {
   const SduiService();
 

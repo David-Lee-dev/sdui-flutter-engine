@@ -1,3 +1,11 @@
 .dart_tool/
 build/
 *.iml
+# codex (project scope) — 중앙 관리 symlink만 추적, 인증·런타임 상태는 제외
+/.codex/*
+!/.codex/config.toml
+!/.codex/README.md
+!/.codex/AGENTS.md
+!/.codex/agents/
+/.codex/agents/*
+!/.codex/agents/*.toml

@@ -130,9 +130,9 @@ Action _action(Command command, {bool dedupe = true}) => Action(
   dedupe: dedupe,
 );
 
-/// 'api' 는 이제 엔진 소유 — 테스트 driver 는 내부 설치 경로로 넣는다.
+/// 'net' 는 이제 엔진 소유 — 테스트 driver 는 내부 설치 경로로 넣는다.
 void _register(Driver driver) {
-  if (driver.type == 'api') {
+  if (driver.type == 'net') {
     DriverRegistry.installEngineOwned(driver);
   } else {
     DriverRegistry.register(driver);
@@ -154,13 +154,13 @@ void main() {
       test('api reserves before execution and masks variable values', () async {
         final sink = _TelemetrySink();
         Telemetry.install(sink);
-        final driver = _TelemetryDriver('api');
+        final driver = _TelemetryDriver('net');
         _register(driver);
         final host = ActionHost(
           actions: {
             'load': _action(
               const Command(
-                type: 'api',
+                type: 'net',
                 params: {
                   'query': 'Viewer',
                   'variables': {
@@ -183,14 +183,16 @@ void main() {
 
         expect(sink.events, hasLength(1));
         expect(sink.events.single.correlationId, 'invocation-1');
-        expect(sink.events.single.properties['var_keys'], [
-          'keyword',
-          'nested',
-          'partnerId',
+        expect(sink.events.single.properties['param_keys'], [
+          'query',
+          'variables',
         ]);
-        expect(sink.events.single.properties['vars'], {
-          'partnerId': 'partner-1',
-        });
+        // Parameter *values* never leave the engine — request vocabulary is
+        // implementation-owned, so telemetry records shapes only.
+        expect(
+          sink.events.single.properties.containsKey('vars'),
+          isFalse,
+        );
         expect(sink.completions.single['outcome'], 'success');
       });
 
@@ -199,17 +201,17 @@ void main() {
         () async {
           final sink = _TelemetrySink();
           Telemetry.install(sink);
-          final driver = _TelemetryDriver('api');
+          final driver = _TelemetryDriver('net');
           _register(driver);
           final host = ActionHost(
             actions: {
               'load': _action(
                 const Command(
-                  type: 'api',
+                  type: 'net',
                   params: {'query': 'First'},
                   then: [
                     [
-                      Command(type: 'api', params: {'query': 'Second'}),
+                      Command(type: 'net', params: {'query': 'Second'}),
                     ],
                   ],
                 ),
@@ -242,12 +244,12 @@ void main() {
         Telemetry.install(sink);
         _register(
           _TelemetryDriver(
-            'api',
+            'net',
             error: const DriverError(DriverError.handled),
           ),
         );
         final host = ActionHost(
-          actions: {'load': _action(const Command(type: 'api'))},
+          actions: {'load': _action(const Command(type: 'net'))},
           env: ScopeEnvironment(const {}),
         );
 

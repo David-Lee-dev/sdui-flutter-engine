@@ -2,10 +2,11 @@
 ///
 /// Quick start:
 /// ```dart
-/// Sdui.initialize(screenLoader: MyScreenLoader(), apiClient: MyApiClient());
+/// Sdui.initialize(screenLoader: MyScreenLoader(), networkClient: MyNetworkClient());
 /// runApp(MaterialApp.router(routerConfig: Sdui.router()));
 /// ```
-/// Every seam has a working default and accepts a replacement — see [Sdui].
+/// The app implements and injects every dependency seam (telemetry alone
+/// falls back to a no-op sink) — see [Sdui].
 ///
 /// This barrel is the package's entire public API; implementation lives under
 /// `src/` and is not part of the contract (importing `src/` paths is
@@ -14,7 +15,8 @@
 library;
 
 // ── Dependencies: the app implements and injects ALL of these ──────────────
-export 'src/dependency/api_client.dart' show ApiClient, ApiResult;
+export 'src/dependency/network_client.dart'
+    show NetworkClient, NetworkRequest, NetworkResult;
 export 'src/shell/sdui_service.dart'
     show CommandDismissed, CommandFailure, CommandInvocation, ExternalCommand;
 export 'src/dependency/image_source.dart'

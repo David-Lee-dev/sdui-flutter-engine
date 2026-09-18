@@ -612,7 +612,7 @@ void main() {
               '_state': {'result': 0},
               '_action': {
                 'load': {
-                  '_type': 'api',
+                  '_type': 'net',
                   '_then': {'_type': 'set', 'result': r'${data}'},
                 },
               },

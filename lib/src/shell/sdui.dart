@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueKey;
 import 'package:go_router/go_router.dart';
 
-import '../dependency/api_client.dart';
+import '../dependency/network_client.dart';
 import '../shell/sdui_service.dart';
 import '../dependency/image_source.dart';
 import '../dependency/app_storage.dart';
@@ -60,7 +60,8 @@ final class Sdui {
   /// drivers (a driver with the same type replaces the default).
   static void initialize({
     required ScreenLoader screenLoader,
-    required ApiClient apiClient,
+    required NetworkClient networkClient,
+    Map<String, NetworkClient> networkProtocols = const {},
     required ImageSource imageSource,
     required VideoSource videoSource,
     required AppStorage appStorage,
@@ -79,7 +80,8 @@ final class Sdui {
       videoSource: videoSource,
       appStorage: appStorage,
       secureStorage: secureStorage,
-      apiClient: apiClient,
+      networkClient: networkClient,
+      networkProtocols: networkProtocols,
       externalCommands: [for (final service in services) ...service.commands],
       telemetry: telemetry ?? const NoopTelemetrySink(),
       widgets: widgets,

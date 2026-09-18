@@ -32,13 +32,10 @@ final class _FakeSecureStorage implements SecureStorage {
   Future<void> delete(String key) async {}
 }
 
-final class _FakeApiClient implements ApiClient {
+final class _FakeNetworkClient implements NetworkClient {
   @override
-  Future<ApiResult> execute({
-    required String query,
-    required Map<String, Object?> variables,
-    String? correlationId,
-  }) async => const ApiResult();
+  Future<NetworkResult> send(NetworkRequest request) async =>
+      const NetworkResult();
 }
 
 final class _FakeService extends SduiService {
@@ -81,7 +78,7 @@ void main() {
         final loader = _FakeLoader();
         Sdui.initialize(
           screenLoader: loader,
-          apiClient: _FakeApiClient(),
+          networkClient: _FakeNetworkClient(),
           imageSource: _FakeImageSource(),
           videoSource: _FakeVideoSource(),
           appStorage: _FakeAppStorage(),
@@ -90,7 +87,7 @@ void main() {
         expect(Sdui.screenLoader, same(loader));
         // Default system drivers and the api command register automatically.
         expect(DriverRegistry.knows('sys_haptic'), isTrue);
-        expect(DriverRegistry.knows('api'), isTrue);
+        expect(DriverRegistry.knows('net'), isTrue);
       });
 
       test('screenLoader before initialize throws', () {
@@ -103,7 +100,7 @@ void main() {
         final service = _FakeService();
         Sdui.initialize(
           screenLoader: _FakeLoader(),
-          apiClient: _FakeApiClient(),
+          networkClient: _FakeNetworkClient(),
           imageSource: _FakeImageSource(),
           videoSource: _FakeVideoSource(),
           appStorage: _FakeAppStorage(),
@@ -112,8 +109,8 @@ void main() {
         );
         expect(service.registered, 1);
         expect(DriverRegistry.knows('fake_service_cmd'), isTrue);
-        // The data plane rides the same path: 'api' is a service command now.
-        expect(DriverRegistry.knows('api'), isTrue);
+        // The data plane rides the same path: 'net' is a service command now.
+        expect(DriverRegistry.knows('net'), isTrue);
       });
     });
 
@@ -133,7 +130,7 @@ void main() {
         final loader = _FakeLoader();
         Sdui.initialize(
           screenLoader: loader,
-          apiClient: _FakeApiClient(),
+          networkClient: _FakeNetworkClient(),
           imageSource: _FakeImageSource(),
           videoSource: _FakeVideoSource(),
           appStorage: _FakeAppStorage(),
@@ -157,7 +154,7 @@ void main() {
       ) async {
         Sdui.initialize(
           screenLoader: _FakeLoader(),
-          apiClient: _FakeApiClient(),
+          networkClient: _FakeNetworkClient(),
           imageSource: _FakeImageSource(),
           videoSource: _FakeVideoSource(),
           appStorage: _FakeAppStorage(),

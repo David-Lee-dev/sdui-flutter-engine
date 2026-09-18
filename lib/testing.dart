@@ -14,8 +14,8 @@
 library;
 
 import 'src/compile/schema/widget_schema.dart';
-import 'src/dependency/api_client.dart';
-import 'src/runtime/driver/api_driver.dart';
+import 'src/dependency/network_client.dart';
+import 'src/runtime/driver/net_driver.dart';
 import 'src/runtime/driver/driver_registry.dart';
 import 'src/runtime/media/image_source_registry.dart';
 import 'src/runtime/media/video_source_registry.dart';
@@ -28,10 +28,10 @@ import 'src/shell/sdui_state.dart';
 export 'sdui_engine.dart';
 export 'src/runtime/driver/driver_registry.dart' show DriverRegistry;
 
-/// Installs [client] as the `api` driver's backend for a bare test mount —
-/// the widget-test equivalent of `Sdui.initialize(apiClient: ...)`.
-void installTestApiClient(ApiClient client) {
-  DriverRegistry.installEngineOwned(ApiDriver(client: client));
+/// Installs [client] as the `net` driver's backend for a bare test mount —
+/// the widget-test equivalent of `Sdui.initialize(networkClient: ...)`.
+void installTestNetworkClient(NetworkClient client) {
+  DriverRegistry.installEngineOwned(NetDriver(client: client));
 }
 
 /// Restores every process-wide engine state to its unfrozen built-in default:

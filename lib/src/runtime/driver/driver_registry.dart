@@ -4,7 +4,7 @@ import '../log/logging_driver.dart';
 import 'package:sdui_engine/src/compile/schema/command_schema.dart';
 import '_base.dart';
 import 'anchoring_driver.dart';
-import 'api_driver.dart';
+import 'net_driver.dart';
 import 'app_storage_driver.dart';
 import 'haptic_driver.dart';
 import 'secure_storage_driver.dart';
@@ -20,7 +20,7 @@ final class DriverRegistry {
 
   static const Map<String, Driver> _builtins = {
     'set': SetDriver(),
-    'api': ApiDriver(),
+    'net': NetDriver(),
     'sys_haptic': HapticDriver(),
     'anchoring': AnchoringDriver(),
     'app_storage': AppStorageDriver(),

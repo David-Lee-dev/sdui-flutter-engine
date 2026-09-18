@@ -51,7 +51,7 @@ void main() {
     );
 
     EngineLog.net('hidden');
-    EngineLog.driver.start('api', const {'query': 'viewer'});
+    EngineLog.driver.start('net', const {'query': 'viewer'});
 
     expect(lines, hasLength(1));
     expect(lines.single, contains('[driver]'));
