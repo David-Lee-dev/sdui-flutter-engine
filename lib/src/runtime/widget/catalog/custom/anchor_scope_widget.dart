@@ -8,11 +8,10 @@ import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 
 import '../../../driver/driver_registry.dart';
 import '../../../engine_registries.dart';
-import '../../../interpreter/building/node_builder.dart';
+import '../../../directive_subtree.dart';
 import '../../../util/props_resolver.dart';
 import '../../../wrapper/scope/scope.dart';
 import '../../anchor_scope/anchor_scope_anchors.dart';
-import '../../factory.dart';
 
 /// `anchor_scope` — Owns the stacking context `anchor`s inside it fly within.
 ///
@@ -152,7 +151,9 @@ class _AnchorScopeHostState extends State<_AnchorScopeHost>
   }
 
   @override
-  bool hasItem(String item) => _directiveFor(item) != null;
+  // The contract asks "is this a declared key", not "does it compile" —
+  // compilation stays lazy in [launch], whose null case already no-ops.
+  bool hasItem(String item) => widget.items.containsKey(item);
 
   @override
   Future<void> launch({
@@ -178,7 +179,7 @@ class _AnchorScopeHostState extends State<_AnchorScopeHost>
       // A fresh Scope + build per flight — instantiating the same compiled
       // directive again gives each concurrent flight independent state (own
       // `_motion` timers), matching what a fresh node in the tree would do.
-      content: Scope.ofState(const {}, child: NodeBuilder.build(directive)),
+      content: Scope.ofState(const {}, child: DirectiveSubtree.mount(directive)),
       // `dispose()` also drives this (via finish()) after the widget has
       // already unmounted — setState would throw there, so plain removal
       // covers that path and the rebuild-triggering path covers the rest.
@@ -206,7 +207,9 @@ class _AnchorScopeHostState extends State<_AnchorScopeHost>
     final template = widget.items[item];
     if (template is! Map) return null;
     try {
-      WidgetFactory.ensureRegistered();
+      // No ensureRegistered here: this widget was built *by* the factory, so
+      // both catalogs are seeded by construction. Not importing the factory
+      // keeps factory -> catalog -> factory from becoming an import cycle.
       DriverRegistry.ensureRegistered();
       return Compile.build(
         Map<String, Object?>.from(template),

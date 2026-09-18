@@ -31,15 +31,39 @@ DriverContext _ctx(
   Map<String, Object?> params, {
   Object? event,
   bool cancelled = false,
+  void Function() Function(void Function())? onOwnerDispose,
 }) => DriverContext(
   params: params,
   state: _NoState(),
   event: event,
   isCancelled: () => cancelled,
+  onOwnerDispose: onOwnerDispose,
 );
 
 void main() {
   group('ExternalDriver', () {
+    test('onDispose 등록이 소유 스코프의 dispose 체인에 연결된다', () async {
+      final registered = <void Function()>[];
+      void Function()? received;
+      final driver = ExternalDriver(
+        _HookCommand((invocation) async {
+          received = invocation.onDispose(() {});
+          return null;
+        }),
+      );
+
+      await driver.run(
+        _ctx(const {}, onOwnerDispose: (cleanup) {
+          registered.add(cleanup);
+          return () => registered.remove(cleanup);
+        }),
+      );
+
+      expect(registered, hasLength(1));
+      received!(); // 정상 종료 시 등록 해제
+      expect(registered, isEmpty);
+    });
+
     test("type returns the wrapped command's type", () {
       final driver = ExternalDriver(_FakeCommand(type: 'app_external'));
 
@@ -112,4 +136,13 @@ void main() {
       expect(command.invocation?.isCancelled, isTrue);
     });
   });
+}
+
+final class _HookCommand implements ExternalCommand {
+  const _HookCommand(this._run);
+  final Future<Object?> Function(CommandInvocation) _run;
+  @override
+  String get type => 'hook';
+  @override
+  Future<Object?> run(CommandInvocation invocation) => _run(invocation);
 }

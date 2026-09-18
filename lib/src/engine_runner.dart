@@ -6,7 +6,9 @@ import 'package:sdui_engine/src/ir/model/scope_config.dart';
 
 import 'runtime/driver/driver_registry.dart';
 import 'runtime/engine_host.dart';
+import 'runtime/engine_subtree.dart';
 import 'runtime/engine_registries.dart';
+import 'runtime/directive_subtree.dart';
 import 'runtime/interpreter/building/node_builder.dart';
 import 'runtime/log/engine_log.dart';
 import 'runtime/telemetry/telemetry.dart';
@@ -159,6 +161,19 @@ class _EngineRunnerState extends State<EngineRunner>
   @override
   void initState() {
     super.initState();
+    // Lower runtime modules (the modal frame) mount nested engines through
+    // this seam instead of importing the runner — see [EngineSubtree].
+    DirectiveSubtree.builder ??= NodeBuilder.build;
+    EngineSubtree.builder ??= (request) => EngineRunner(
+      template: request.template,
+      rootData: request.rootData,
+      host: request.host,
+      screenId: request.screenId,
+      screenViewId: request.screenViewId,
+      surfaceType: request.surfaceType,
+      modalId: request.modalId,
+      resolveExitReason: request.resolveExitReason,
+    );
     _tryCompile();
     if (widget.screenId != null) WidgetsBinding.instance.addObserver(this);
   }

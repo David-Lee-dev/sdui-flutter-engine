@@ -40,7 +40,8 @@ export 'src/runtime/media/asset_image_source.dart' show AssetImageSource;
 export 'src/runtime/media/asset_video_source.dart' show AssetVideoSource;
 export 'src/impl/noop_telemetry_sink.dart' show NoopTelemetrySink;
 
-// ── Extension points: services (commands) and custom widgets ────────────────
+// ── Extension points: services (commands), custom widgets, motions, functions
+export 'src/runtime/motion/_base.dart' show Motion, MotionParams, MotionPlan;
 export 'src/ir/model/layout_protocol.dart' show LayoutProtocol;
 export 'src/runtime/widget/contract/action_sink.dart'
     show ActionInvocation, ActionNode, ActionSink;

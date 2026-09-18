@@ -14,6 +14,10 @@ final class EngineLog {
   static LogLevel _minLevel = LogLevel.debug;
   static bool _colors = true;
   static Set<String>? _tags;
+  // `null` = the ambient [debugPrint], read at call time — tests (and
+  // Flutter itself) swap that global, so binding it once here would freeze a
+  // stale reference.
+  static void Function(String line)? _output;
 
   /// Zone flag marking a scope whose engine logs are suppressed (see
   /// [runSilently]).
@@ -48,10 +52,19 @@ final class EngineLog {
   static T runSilently<T>(T Function() body) =>
       runZoned(body, zoneValues: const {_silentZoneKey: true});
 
-  /// Updates debug logging filters and presentation.
-  static void configure({LogLevel? minLevel, bool? colors, Set<String>? tags}) {
+  /// Updates debug logging filters, presentation, and destination.
+  ///
+  /// [output] replaces where formatted lines go (default [debugPrint]) —
+  /// route engine logs into the app's own logger without forking the engine.
+  static void configure({
+    LogLevel? minLevel,
+    bool? colors,
+    Set<String>? tags,
+    void Function(String line)? output,
+  }) {
     if (minLevel != null) _minLevel = minLevel;
     if (colors != null) _colors = colors;
+    if (output != null) _output = output;
     _tags = tags == null ? null : Set<String>.unmodifiable(tags);
   }
 
@@ -104,7 +117,7 @@ final class EngineLog {
         '  ${_segment(levelText, _levelColor(level))}'
         '  ${_segment(tagText, '\x1B[2m')}'
         '  ${message()}';
-    debugPrint(line);
+    (_output ?? (l) => debugPrint(l))(line);
   }
 
   static String _segment(String text, String color) =>

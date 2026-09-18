@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../dependency/screen_loader.dart';
 import '../engine_runner.dart';
 import '../runtime/engine_host.dart';
+import '../runtime/telemetry/telemetry.dart';
 
 /// Builds the widget shown while a screen's template is loading.
 typedef SduiLoadingBuilder = Widget Function(BuildContext context);
@@ -17,6 +18,11 @@ typedef SduiErrorBuilder =
 /// This is the default page the generic route uses. Override the loading and
 /// error surfaces via [loadingBuilder] / [errorBuilder], or replace the page
 /// entirely by registering your own route for a screen id.
+///
+/// The page owns the visit's telemetry identity: each successful load issues
+/// a fresh `screen_view_id`, records `screen_view`, and hands the id to
+/// [EngineRunner] — which measures dwell/scroll and emits the matching
+/// `screen_leave` (mirroring how the modal frame owns its surface's view).
 final class SduiScreenPage extends StatefulWidget {
   const SduiScreenPage({
     super.key,
@@ -42,19 +48,57 @@ final class SduiScreenPage extends StatefulWidget {
 }
 
 final class _SduiScreenPageState extends State<SduiScreenPage> {
-  late Future<LoadedScreen> _screen;
+  /// The in-flight load; results from an abandoned load (retry pressed) are
+  /// ignored by identity comparison.
+  Future<LoadedScreen>? _pending;
+
+  LoadedScreen? _loaded;
+  Object? _error;
+
+  /// The current visit's `screen_view_id` — issued per successful load.
+  String? _screenViewId;
 
   @override
   void initState() {
     super.initState();
-    _screen = widget.loader.load(widget.screenId);
+    _load();
+  }
+
+  void _load() {
+    final future = widget.loader.load(widget.screenId);
+    _pending = future;
+    future.then(
+      (screen) {
+        if (!mounted || !identical(future, _pending)) return;
+        final viewId = Telemetry.newId();
+        Telemetry.record(
+          'screen_view',
+          screenId: widget.screenId,
+          screenViewId: viewId,
+          properties: {'surface_type': 'screen'},
+        );
+        setState(() {
+          _loaded = screen;
+          _error = null;
+          _screenViewId = viewId;
+        });
+      },
+      onError: (Object error, StackTrace stack) {
+        if (!mounted || !identical(future, _pending)) return;
+        setState(() {
+          _error = error;
+          _loaded = null;
+        });
+      },
+    );
   }
 
   void _retry() {
-    final next = widget.loader.load(widget.screenId);
     setState(() {
-      _screen = next;
+      _loaded = null;
+      _error = null;
     });
+    _load();
   }
 
   NavigateHandle _navigateHandle(GoRouter router) => NavigateHandle(
@@ -75,7 +119,7 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
       widget.loadingBuilder?.call(context) ??
       const Scaffold(body: Center(child: CircularProgressIndicator()));
 
-  Widget _error(BuildContext context, Object error) =>
+  Widget _errorView(BuildContext context, Object error) =>
       widget.errorBuilder?.call(context, error, _retry) ??
       Scaffold(
         body: Center(
@@ -88,26 +132,21 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
 
   @override
   Widget build(BuildContext context) {
+    final error = _error;
+    if (error != null) return _errorView(context, error);
+    final loaded = _loaded;
+    if (loaded == null) return _loading(context);
+
     final router = GoRouter.of(context);
-    return FutureBuilder<LoadedScreen>(
-      future: _screen,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return _loading(context);
-        }
-        if (snapshot.hasError) {
-          return _error(context, snapshot.error!);
-        }
-        return EngineRunner(
-          screenId: widget.screenId,
-          rootData: widget.params,
-          template: snapshot.data!.template,
-          modalTemplates: snapshot.data!.modals,
-          navigate: _navigateHandle(router),
-          toast: _toastHandle(),
-          errorBuilder: (context, error) => _error(context, error),
-        );
-      },
+    return EngineRunner(
+      screenId: widget.screenId,
+      screenViewId: _screenViewId,
+      rootData: widget.params,
+      template: loaded.template,
+      modalTemplates: loaded.modals,
+      navigate: _navigateHandle(router),
+      toast: _toastHandle(),
+      errorBuilder: (context, error) => _errorView(context, error),
     );
   }
 }

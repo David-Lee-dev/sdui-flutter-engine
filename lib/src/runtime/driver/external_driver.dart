@@ -5,8 +5,8 @@ import 'driver_error.dart';
 
 /// Adapts an app-registered [ExternalCommand] to the internal [Driver] surface.
 ///
-/// Builds a narrowed [CommandInvocation] from the [DriverContext] (params,
-/// event, cancellation only — never state/host/registries) and maps the
+/// Builds a narrowed [CommandInvocation] from the [DriverContext] (params, event,
+/// cancellation, and scope-lifetime cleanup — never state/host/registries) and maps the
 /// command's contract-level signals onto [DriverError]: [CommandDismissed] →
 /// [DriverError.dismissed], [CommandFailure] → a coded [DriverError]. Any other
 /// throw propagates unchanged for the action host to report.
@@ -25,6 +25,7 @@ class ExternalDriver extends Driver {
       event: ctx.event,
       isCancelled: () => ctx.isCancelled,
       correlationId: ctx.correlationId,
+      onDispose: ctx.onOwnerDispose,
     );
     try {
       return await _command.run(invocation);

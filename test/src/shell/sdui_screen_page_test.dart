@@ -4,7 +4,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sdui_engine/src/dependency/screen_loader.dart';
+import 'package:sdui_engine/src/dependency/telemetry_sink.dart';
+import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
 import 'package:sdui_engine/src/shell/screen_page.dart';
+
+final class _FakeSink implements TelemetrySink {
+  final List<TelemetryEvent> recorded = [];
+
+  @override
+  void record(TelemetryEvent event) => recorded.add(event);
+
+  @override
+  Future<TelemetryReservation> reserve(TelemetryEvent event) async =>
+      _FakeReservation();
+}
+
+final class _FakeReservation implements TelemetryReservation {
+  @override
+  void complete({Map<String, Object?> properties = const {}}) {}
+}
 
 final class _FakeLoader implements ScreenLoader {
   _FakeLoader(this._results);
@@ -49,6 +67,40 @@ Future<void> _pumpPage(
 void main() {
   group('SduiScreenPage', () {
     group('build', () {
+      testWidgets('issues a screen_view per successful load and renews on retry', (
+        tester,
+      ) async {
+        final sink = _FakeSink();
+        Telemetry.install(sink);
+        addTearDown(Telemetry.reset);
+
+        var fail = true;
+        await _pumpPage(
+          tester,
+          _FakeLoader([
+            () async => fail ? throw StateError('down') : _screen('ok'),
+            () async => _screen('ok'),
+          ]),
+        );
+        await tester.pumpAndSettle();
+
+        // Failed load: no visit issued.
+        final views = () => sink.recorded.where((e) => e.event == 'screen_view');
+        expect(views(), isEmpty);
+
+        fail = false;
+        await tester.tap(find.byType(TextButton));
+        await tester.pumpAndSettle();
+
+        // The visit is owned by the page: screen_view carries the screen id
+        // and a fresh view id, before the engine mounts.
+        final view = views().single;
+        expect(view.screenId, 's');
+        expect(view.screenViewId, isNotNull);
+        expect(view.properties['surface_type'], 'screen');
+        expect(find.text('ok'), findsOneWidget);
+      });
+
       testWidgets('renders the loaded template', (tester) async {
         await _pumpPage(tester, _FakeLoader([() async => _screen('hello')]));
         await tester.pumpAndSettle();

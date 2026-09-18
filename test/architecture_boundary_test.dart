@@ -2,33 +2,38 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// Enforces the compile/runtime engine boundary at the import level.
+/// Enforces the engine's layer architecture at the import level.
 ///
-/// The engine is layered: `ir/` is the pure compiled artifact, `compile/`
-/// turns templates into it, `runtime/` interprets it into a live Flutter tree.
-/// The dependency rule is one-directional:
-///   - `ir/`      must import none of `compile/`, `runtime/`, or `contract/`.
-///   - `compile/` must import neither `runtime/` nor `contract/` (it may import `ir/`).
-///   - `runtime/` may import `compile/` and `ir/` (it compiles on device).
+/// Two guarantees, both over the *complete* resolved import graph of
+/// `lib/` (not a sampled subset — a rule that scans nothing passes nothing):
+///
+/// 1. **No import cycles anywhere.** Every strongly connected component of
+///    more than one file fails the suite, whatever layers it spans.
+/// 2. **Layer edges only in the allowed direction** (see [allowed] below).
 ///
 /// This keeps the compile stage free of the widget runtime so compilation can
-/// move to build time or the server. A violation here means the boundary the
-/// split established is leaking again — fix the dependency, do not relax this.
+/// move to build time or the server, and keeps low-level runtime modules from
+/// reaching up into the top-level runner. A violation here means a boundary
+/// is leaking again — fix the dependency, do not relax this file.
 void main() {
-  const root = 'lib/src';
+  const libRoot = 'lib';
 
-  /// Returns the engine-relative segment an [import] in [file] points to, or
-  /// null when it leaves the engine (dart:, third-party, or a sibling layer's
-  /// concern). Resolves both `package:sdui_engine/src/…` and relative forms.
-  String? engineSegment(String import, File file) {
+  final importRe = RegExp(
+    r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
+    multiLine: true,
+  );
+
+  /// Repo-relative path of the engine file [import] resolves to, or null for
+  /// dart:/third-party imports.
+  String? resolve(String import, File from) {
     String abs;
-    if (import.startsWith('package:sdui_engine/src/')) {
-      abs = 'lib/src/${import.substring('package:sdui_engine/src/'.length)}';
+    if (import.startsWith('package:sdui_engine/')) {
+      abs = 'lib/${import.substring('package:sdui_engine/'.length)}';
     } else if (import.startsWith('dart:') || import.startsWith('package:')) {
       return null;
     } else {
       final parts = <String>[
-        ...file.parent.path.split('/'),
+        ...from.parent.path.split('/'),
         ...import.split('/'),
       ];
       final stack = <String>[];
@@ -42,58 +47,179 @@ void main() {
       }
       abs = stack.join('/');
     }
-    const prefix = '$root/';
-    return abs.startsWith(prefix) ? abs.substring(prefix.length) : null;
+    return abs.startsWith('$libRoot/') ? abs : null;
   }
 
-  final importRe = RegExp(
-    r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
-    multiLine: true,
-  );
-
-  Iterable<String> importsOf(File f) =>
-      importRe.allMatches(f.readAsStringSync()).map((m) => m.group(1)!);
-
-  List<File> dartFilesUnder(String layer) {
-    final dir = Directory('$root/$layer');
-    // A missing layer means the scan root is wrong — never pass vacuously.
-    expect(dir.existsSync(), isTrue, reason: 'missing layer dir: $root/$layer');
-    return dir
+  // ── Build the full graph (lazily, inside the test zone) ──────────────────
+  Map<String, Set<String>> buildGraph() {
+    final files = Directory(libRoot)
         .listSync(recursive: true)
         .whereType<File>()
         .where((f) => f.path.endsWith('.dart'))
         .toList();
+    expect(files.length, greaterThan(100), reason: 'scan found too few files');
+
+    final graph = <String, Set<String>>{};
+    for (final file in files) {
+      graph[file.path] = importRe
+          .allMatches(file.readAsStringSync())
+          .map((m) => resolve(m.group(1)!, file))
+          .whereType<String>()
+          .toSet();
+    }
+    return graph;
   }
 
-  /// Fails if any file under [layer] imports a file under one of [forbidden].
-  void assertNoDependency(String layer, Set<String> forbidden) {
-    final violations = <String>[];
-    for (final file in dartFilesUnder(layer)) {
-      for (final import in importsOf(file)) {
-        final seg = engineSegment(import, file);
-        if (seg == null) continue;
-        final top = seg.split('/').first;
-        if (forbidden.contains(top)) {
-          violations.add('${file.path}  →  $import');
+  group('architecture', () {
+    test('no cross-module import cycles anywhere in lib/', () {
+      // One deliberate exception: `interpreter/building/**` is a single
+      // recursive-descent builder — NodeBuilder and its observers are
+      // mutually recursive over a recursive IR, which is the algorithm, not
+      // a boundary leak. Files there collapse into one graph node; every
+      // OTHER cycle (across modules) still fails.
+      const cohesiveModules = ['lib/src/runtime/interpreter/building/'];
+      String node(String path) {
+        for (final module in cohesiveModules) {
+          if (path.startsWith(module)) return module;
+        }
+        return path;
+      }
+
+      final fileGraph = buildGraph();
+      final graph = <String, Set<String>>{};
+      fileGraph.forEach((path, imports) {
+        final from = node(path);
+        final targets = graph.putIfAbsent(from, () => <String>{});
+        for (final target in imports) {
+          final to = node(target);
+          if (to != from) targets.add(to);
+        }
+      });
+      // Tarjan SCC over the module-collapsed graph.
+      var index = 0;
+      final indices = <String, int>{};
+      final lowlink = <String, int>{};
+      final onStack = <String>{};
+      final stack = <String>[];
+      final cycles = <List<String>>[];
+
+      void strongconnect(String v) {
+        indices[v] = index;
+        lowlink[v] = index;
+        index += 1;
+        stack.add(v);
+        onStack.add(v);
+        for (final w in graph[v] ?? const <String>{}) {
+          if (!graph.containsKey(w)) continue;
+          if (!indices.containsKey(w)) {
+            strongconnect(w);
+            if (lowlink[w]! < lowlink[v]!) lowlink[v] = lowlink[w]!;
+          } else if (onStack.contains(w)) {
+            if (indices[w]! < lowlink[v]!) lowlink[v] = indices[w]!;
+          }
+        }
+        if (lowlink[v] == indices[v]) {
+          final component = <String>[];
+          String w;
+          do {
+            w = stack.removeLast();
+            onStack.remove(w);
+            component.add(w);
+          } while (w != v);
+          if (component.length > 1) cycles.add(component);
         }
       }
-    }
-    expect(
-      violations,
-      isEmpty,
-      reason:
-          '$layer/ must not depend on ${forbidden.join('/')}:\n'
-          '${violations.join('\n')}',
-    );
-  }
 
-  group('engine compile/runtime boundary', () {
-    test('ir/ depends on neither compile/, runtime/, nor contract/', () {
-      assertNoDependency('ir', {'compile', 'runtime', 'contract'});
+      for (final v in graph.keys) {
+        if (!indices.containsKey(v)) strongconnect(v);
+      }
+
+      expect(
+        cycles,
+        isEmpty,
+        reason:
+            'import cycles found:\n${cycles.map((c) => c.join(' <-> ')).join('\n')}',
+      );
     });
 
-    test('compile/ does not depend on runtime/ or contract/', () {
-      assertNoDependency('compile', {'runtime', 'contract'});
+    test('layer edges only point in the allowed direction', () {
+      final graph = buildGraph();
+      /// First matching prefix wins; files outside every entry (barrels,
+      /// engine root) are unrestricted importers but still valid targets.
+      String? layerOf(String path) {
+        const layers = [
+          'lib/src/shell/',
+          'lib/src/impl/',
+          'lib/src/compile/',
+          'lib/src/runtime/',
+          'lib/src/ir/',
+          'lib/src/dependency/',
+          'lib/src/contract/',
+        ];
+        for (final layer in layers) {
+          if (path.startsWith(layer)) return layer;
+        }
+        if (path == 'lib/src/engine.dart' || path == 'lib/src/engine_runner.dart') {
+          return 'root';
+        }
+        return null;
+      }
+
+      /// What each layer may import (its own layer is always allowed).
+      /// `root` = engine.dart / engine_runner.dart, the top-level assemblers.
+      const allowed = <String, Set<String>>{
+        'lib/src/shell/': {
+          'root',
+          'lib/src/runtime/',
+          'lib/src/compile/',
+          'lib/src/ir/',
+          'lib/src/dependency/',
+          'lib/src/contract/',
+          'lib/src/impl/',
+        },
+        'lib/src/impl/': {'lib/src/dependency/'},
+        'root': {
+          'lib/src/compile/',
+          'lib/src/runtime/',
+          'lib/src/ir/',
+          'lib/src/dependency/',
+          'lib/src/contract/',
+        },
+        // runtime compiles on device today; engine_subtree keeps it from
+        // importing the root runner. TODO(catalog-split): drop compile/ here
+        // once nested templates are compiled ahead of widget construction.
+        'lib/src/runtime/': {
+          'lib/src/compile/',
+          'lib/src/ir/',
+          'lib/src/dependency/',
+          'lib/src/contract/',
+        },
+        'lib/src/compile/': {'lib/src/ir/'},
+        'lib/src/ir/': <String>{},
+        'lib/src/dependency/': <String>{},
+        'lib/src/contract/': <String>{},
+      };
+
+      final violations = <String>[];
+      graph.forEach((path, imports) {
+        final from = layerOf(path);
+        if (from == null) return; // barrels: unrestricted importers
+        final permitted = allowed[from];
+        expect(permitted, isNotNull, reason: 'no rule for layer $from');
+        for (final target in imports) {
+          final to = layerOf(target);
+          if (to == null || to == from) continue;
+          if (!permitted!.contains(to)) {
+            violations.add('$path -> $target  ($from may not import $to)');
+          }
+        }
+      });
+
+      expect(
+        violations,
+        isEmpty,
+        reason: 'forbidden layer edges:\n${violations.join('\n')}',
+      );
     });
   });
 }

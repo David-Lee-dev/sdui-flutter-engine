@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
+import 'package:sdui_engine/src/runtime/widget/factory.dart';
 import 'package:sdui_engine/src/runtime/engine_registries.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/anchor_scope_widget.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/anchor_widget.dart';
@@ -25,6 +27,11 @@ Widget _scoped(
 );
 
 void main() {
+  // Direct construction bypasses the factory, so seed the catalogs the
+  // engine would have seeded before any template compiled.
+  WidgetFactory.ensureRegistered();
+  DriverRegistry.ensureRegistered();
+
   group('AnchorScopeWidget', () {
     group('레이아웃 투명성', () {
       testWidgets('감싸도 안 감싸도 같은 크기로 측정된다', (tester) async {

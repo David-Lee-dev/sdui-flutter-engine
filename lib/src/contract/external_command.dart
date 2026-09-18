@@ -10,7 +10,9 @@ class CommandInvocation {
     required this.event,
     required bool Function() isCancelled,
     this.correlationId,
-  }) : _isCancelled = isCancelled;
+    void Function() Function(void Function())? onDispose,
+  }) : _isCancelled = isCancelled,
+       _onDispose = onDispose;
 
   /// The command's resolved parameters.
   final Map<String, Object?> params;
@@ -29,6 +31,18 @@ class CommandInvocation {
   /// Commands should check this before irreversible external work; it cannot
   /// cancel work that already crossed a platform or network boundary.
   bool get isCancelled => _isCancelled();
+
+  final void Function() Function(void Function())? _onDispose;
+
+  /// Registers [cleanup] to run when the scope that started this command is
+  /// disposed — the release point for subscriptions, listeners, or platform
+  /// sessions a command opens.
+  ///
+  /// Returns a deregistration callback for normal resource closure. When the
+  /// engine supplied no lifetime (bare test invocations), registration is a
+  /// no-op and the command must manage its resource itself.
+  void Function() onDispose(void Function() cleanup) =>
+      _onDispose?.call(cleanup) ?? () {};
 }
 
 /// Signals the user dismissed or cancelled the operation.

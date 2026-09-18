@@ -48,9 +48,37 @@ The grammar is `[expression for name in listExpression]` with an optional `if pr
 
 `null`, `false`, numeric zero, empty strings, empty iterables, and empty maps are false. Other values are true.
 
-## Built-in function registry
+## Function registry
 
-Wrong types or excess fixed-arity arguments generally return `null`; omitted arguments are read as `null`. Apps may register additional names before the registry freezes.
+Wrong types or excess fixed-arity arguments generally return `null`; omitted arguments are read as `null`.
+
+### Application functions
+
+Pass application functions to `Sdui.initialize(functions: ...)` or `Engine.initialize(functions: ...)`. Each function receives its evaluated positional arguments as a `List<Object?>` and may return any expression value:
+
+```dart
+Sdui.initialize(
+  // Required dependencies omitted.
+  functions: {
+    'app_slug': (args) {
+      final value = args.isEmpty ? null : args[0];
+      return value is String
+          ? value.trim().toLowerCase().replaceAll(' ', '-')
+          : null;
+    },
+  },
+);
+```
+
+Templates can then call the registered name like a built-in:
+
+```yaml
+value: '${app_slug(article.title)}'
+```
+
+Initialization registers these functions before the catalog freezes; later registration fails. Function names are currently resolved at evaluation time, not during template validation, so evaluating an unknown name raises an `unknown function` expression error at the node or action boundary.
+
+### Built-ins
 
 | Function | Signature | Result |
 | --- | --- | --- |

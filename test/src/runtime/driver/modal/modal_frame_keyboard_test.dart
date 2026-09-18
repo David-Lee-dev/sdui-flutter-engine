@@ -4,7 +4,9 @@ import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/driver/modal/modal_driver.dart';
 import 'package:sdui_engine/src/runtime/driver/modal/modal_frame.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
+import 'package:sdui_engine/src/engine_runner.dart';
 import 'package:sdui_engine/src/runtime/engine_host.dart';
+import 'package:sdui_engine/src/runtime/engine_subtree.dart';
 import 'package:sdui_engine/src/runtime/environment/state_writer.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
 
@@ -70,6 +72,17 @@ void _captureHost(WidgetTester tester) {
 }
 
 void main() {
+  // Bare frame mounts (no runner above) need the subtree seam installed.
+  EngineSubtree.builder ??= (request) => EngineRunner(
+    template: request.template,
+    rootData: request.rootData,
+    host: request.host,
+    screenId: request.screenId,
+    screenViewId: request.screenViewId,
+    surfaceType: request.surfaceType,
+    modalId: request.modalId,
+    resolveExitReason: request.resolveExitReason,
+  );
   WidgetFactory.ensureRegistered();
   DriverRegistry.ensureRegistered();
 

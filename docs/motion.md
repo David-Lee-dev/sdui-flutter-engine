@@ -75,3 +75,59 @@ _motion:
 | `tada` | `scale(1→1.1, ease_in_out, repeat, reverse, 400ms)` + `rotate(-.05→.05, repeat, reverse, 200ms)` |
 
 Unknown preset names fall through as atom names and must be registered in `MotionFactory` or resolution throws at runtime.
+
+## Custom motion atoms
+
+`Motion`, `MotionParams`, and `MotionPlan` are exported by `package:sdui_engine/sdui_engine.dart`. Implement the three-part atom contract:
+
+- `type` is the non-empty template-facing name used by `_motion`.
+- `plan(params)` returns the duration, curve, delay, repeat/reverse behavior, and optional restart trigger. `MotionPlan.from(params)` applies the standard scheduling parameters while allowing atom-specific defaults.
+- `frame(context, t, child, params)` returns the child wrapped in the visual state for normalized, curve-adjusted progress `t` from 0 to 1. Read atom-specific values through `MotionParams` so malformed dynamic input falls back safely.
+
+```dart
+import 'package:flutter/widgets.dart';
+import 'package:sdui_engine/sdui_engine.dart';
+
+final class LiftMotion extends Motion {
+  const LiftMotion();
+
+  @override
+  String get type => 'app_lift';
+
+  @override
+  MotionPlan plan(MotionParams params) => MotionPlan.from(
+    params,
+    duration: const Duration(milliseconds: 240),
+    curve: Curves.easeOut,
+  );
+
+  @override
+  Widget frame(
+    BuildContext context,
+    double t,
+    Widget child,
+    MotionParams params,
+  ) {
+    final distance = params.number('distance', 16).toDouble();
+    return Transform.translate(
+      offset: Offset(0, distance * (1 - t)),
+      child: child,
+    );
+  }
+}
+```
+
+Register atoms during initialization, before the catalog freezes:
+
+```dart
+Sdui.initialize(
+  // Required dependencies omitted.
+  motions: const [LiftMotion()],
+);
+```
+
+The atom is then available by name or map declaration:
+
+```yaml
+_motion: { type: app_lift, distance: 24, duration: 320 }
+```

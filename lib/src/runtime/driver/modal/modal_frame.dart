@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:sdui_engine/src/engine_runner.dart';
 
 import '../../engine_host.dart';
+import '../../engine_subtree.dart';
+import '../../util/props_resolver.dart';
 import '../../motion/_base.dart';
 import '../../motion/composite/presets.dart';
 import '../../motion/motion_factory.dart';
@@ -37,6 +38,7 @@ class ModalFrame extends StatefulWidget {
     this.align,
     this.motion,
     this.dismissible = true,
+    this.background,
     required this.controller,
     required this.onClosed,
   });
@@ -62,6 +64,14 @@ class ModalFrame extends StatefulWidget {
 
   final String? motion;
   final bool dismissible;
+
+  /// The body's surface color, from the command's `background` param.
+  ///
+  /// `null` (param absent) → the theme's surface color: a modal always has an
+  /// opaque backing by default, so templates need not paint one. `'none'` →
+  /// transparent, for fully custom bodies (image popups). Any other value is
+  /// parsed as a color and used verbatim.
+  final Object? background;
   final ModalCloseController controller;
   final void Function(Object? result, bool dismissed) onClosed;
 
@@ -231,21 +241,42 @@ class _ModalFrameState extends State<ModalFrame>
   // parent screen. A modal body that fails to compile leaves the opening
   // screen live underneath, so it stays on EngineRunner's bare-text default,
   // which never crashes and degrades gracefully inside any box size.
-  Widget _content() => Material(
-    type: MaterialType.transparency,
-    child: EngineRunner(
-      template: _template,
-      rootData: widget.data ?? const {},
-      host: widget.host,
-      // All-or-nothing: a partially identified surface would have the body
-      // reporting dwell against a visit id nobody issued.
-      screenId: _observable ? widget.screenId : null,
-      screenViewId: _surfaceViewId,
-      surfaceType: _observable ? 'modal' : null,
-      modalId: _observable ? widget.modalId : null,
-      resolveExitReason: () => _exitReason,
-    ),
-  );
+  /// Resolves the body's backing color; see [ModalFrame.background].
+  Color? _backgroundColor(BuildContext context) {
+    final raw = widget.background;
+    if (raw == null) return Theme.of(context).colorScheme.surface;
+    if (raw == 'none' || raw == false) return null;
+    return PropsResolver.color(raw) ?? Theme.of(context).colorScheme.surface;
+  }
+
+  Widget _content() {
+    final color = _backgroundColor(context);
+    // Sheets round their top edge, dialogs every corner — applied here (not
+    // in the template) so the default surface never bleeds past the box.
+    final shape = widget.variant == ModalVariant.dialog
+        ? const BorderRadius.all(Radius.circular(16))
+        : const BorderRadius.vertical(top: Radius.circular(16));
+    return Material(
+      type: color == null ? MaterialType.transparency : MaterialType.canvas,
+      color: color,
+      borderRadius: shape,
+      clipBehavior: color == null ? Clip.none : Clip.antiAlias,
+      child: EngineSubtree.mount(
+        EngineSubtreeRequest(
+          template: _template,
+          rootData: widget.data ?? const {},
+          host: widget.host,
+          // All-or-nothing: a partially identified surface would have the body
+          // reporting dwell against a visit id nobody issued.
+          screenId: _observable ? widget.screenId : null,
+          screenViewId: _surfaceViewId,
+          surfaceType: _observable ? 'modal' : null,
+          modalId: _observable ? widget.modalId : null,
+          resolveExitReason: () => _exitReason,
+        ),
+      ),
+    );
+  }
 
   Widget _entrance(Widget child) {
     final name = _motionName;

@@ -8,6 +8,9 @@ import 'runtime/driver/app_storage_driver.dart';
 import 'runtime/driver/secure_storage_driver.dart';
 import 'dependency/network_client.dart';
 import 'runtime/driver/net_driver.dart';
+import 'runtime/motion/_base.dart';
+import 'runtime/motion/motion_factory.dart';
+import 'runtime/util/function_registry.dart';
 import 'runtime/driver/driver_registry.dart';
 import 'runtime/driver/external_driver.dart';
 import 'runtime/engine_catalog.dart';
@@ -47,11 +50,15 @@ final class Engine {
     List<ExternalCommand> externalCommands = const [],
     TelemetrySink? telemetry,
     Map<String, WidgetSpec> widgets = const {},
+    List<Motion> motions = const [],
+    Map<String, Object? Function(List<Object?>)> functions = const {},
     LogLevel? debugLogLevel,
+    void Function(String line)? logOutput,
   }) {
     if (debugLogLevel != null) {
       EngineLog.configure(minLevel: debugLogLevel, colors: true);
     }
+    if (logOutput != null) EngineLog.configure(output: logOutput);
     ImageSourceRegistry.install(imageSource);
     VideoSourceRegistry.install(videoSource);
     DriverRegistry.installEngineOwned(
@@ -64,6 +71,8 @@ final class Engine {
     }
     if (telemetry != null) Telemetry.install(telemetry);
     WidgetFactory.registerAll(widgets);
+    MotionFactory.registerAll(motions);
+    FunctionRegistry.registerAll(functions);
     EngineCatalog.freeze();
   }
 }

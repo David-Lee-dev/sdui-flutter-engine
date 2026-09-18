@@ -3,6 +3,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/log/engine_log.dart';
 
 void main() {
+  test('configure(output:)가 로그 라인을 앱 소유 sink로 보낸다', () {
+    final lines = <String>[];
+    EngineLog.configure(minLevel: LogLevel.debug, colors: false, output: lines.add);
+    addTearDown(
+      // A closure, not `debugPrint` itself: the global is swappable and must
+      // be read at call time by later capture-style tests.
+      () => EngineLog.configure(
+        minLevel: LogLevel.debug,
+        colors: true,
+        output: (line) => debugPrint(line),
+      ),
+    );
+
+    EngineLog.net('hello');
+
+    expect(lines, hasLength(1));
+    expect(lines.single, contains('hello'));
+  });
+
   late DebugPrintCallback originalDebugPrint;
   late List<String> lines;
 

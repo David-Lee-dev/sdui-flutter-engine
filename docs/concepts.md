@@ -29,6 +29,21 @@ Widget property values, command parameters, `_motion` parameters, `_on.*.event`,
 
 Unknown registered types, unknown reserved keys, undeclared binding roots, incompatible child forms, and protocol mismatches fail before mounting. Registries are seeded from runtime catalogs and frozen during engine initialization; applications may add widgets, functions, motions, and external commands before that freeze.
 
+## Initialization and logging
+
+`Sdui.initialize` installs application extensions before freezing the process-wide catalogs. The low-level `Engine.initialize` accepts the same catalog extensions, with `externalCommands` in place of the facade's `services`:
+
+| Parameter | Purpose |
+| --- | --- |
+| `services` / `externalCommands` | Register app-owned command types. |
+| `widgets` | Register app-owned widget specifications by template `_type`. |
+| `motions` | Register [`Motion`](motion.md#custom-motion-atoms) implementations by their `type`. |
+| `functions` | Register [expression functions](expressions.md#application-functions) by call name. |
+| `debugLogLevel` | Set the minimum engine diagnostic level. |
+| `logOutput` | Receive each formatted engine log line in an app-owned sink. |
+
+Engine diagnostics remain debug-only. Their default output is Flutter's `debugPrint`; pass `logOutput: (line) => appLogger.debug(line)` to either initializer to redirect them. Internally this is the same output hook exposed by `EngineLog.configure(output: ...)`; changing the destination does not enable logs in release mode.
+
 ## Structural contracts
 
 The runtime has five widget specification kinds:
@@ -70,4 +85,3 @@ The parser always consumes `_type`, `_child`, `_children`, `_slots`, and `_key`.
 Inside `_scope`, the allowed keys are `_state`, `_action`, `_lifecycle`, and `_skeleton`. Inside a command, the metadata keys are `_type`, `_then`, `_error`, `_dismiss`, `_always`, `_background`, `_when`, plus action-level `_dedupe` on the single-command form. Other underscore-prefixed names are rejected; widget/driver properties must not begin with `_`.
 
 See [control flow](control-flow.md), [loops](loops.md), [state](state.md), [actions](actions.md), and [widgets](widgets/README.md).
-

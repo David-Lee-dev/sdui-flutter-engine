@@ -4,7 +4,9 @@ import 'package:sdui_engine/src/dependency/telemetry_sink.dart';
 import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_error.dart';
 import 'package:sdui_engine/src/runtime/driver/modal/modal_driver.dart';
+import 'package:sdui_engine/src/engine_runner.dart';
 import 'package:sdui_engine/src/runtime/engine_host.dart';
+import 'package:sdui_engine/src/runtime/engine_subtree.dart';
 import 'package:sdui_engine/src/runtime/environment/state_writer.dart';
 import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
 import 'package:sdui_engine/src/runtime/wrapper/motion.dart';
@@ -79,6 +81,17 @@ const _templates = <String, Object?>{
 const _open = <String, Object?>{'modal': 'sample', 'variant': 'dialog'};
 
 void main() {
+  // Bare frame mounts (no runner above) need the subtree seam installed.
+  EngineSubtree.builder ??= (request) => EngineRunner(
+    template: request.template,
+    rootData: request.rootData,
+    host: request.host,
+    screenId: request.screenId,
+    screenViewId: request.screenViewId,
+    surfaceType: request.surfaceType,
+    modalId: request.modalId,
+    resolveExitReason: request.resolveExitReason,
+  );
   group('ModalDriver', () {
     tearDown(() {
       _host?.overlay?.dispose();

@@ -72,6 +72,7 @@ class ModalDriver extends Driver {
         align: _str(params['align']),
         motion: _str(params['motion']),
         dismissible: params['dismissible'] != false,
+        background: params['background'],
         controller: open.controller,
         onClosed: (result, dismissed) => _finish(open, result, dismissed),
       ),

@@ -9,6 +9,7 @@ import '../dependency/screen_loader.dart';
 import '../dependency/secure_storage.dart';
 import '../dependency/telemetry_sink.dart';
 import '../dependency/video_source.dart';
+import '../runtime/motion/_base.dart';
 import '../impl/noop_telemetry_sink.dart';
 import '../engine.dart';
 import '../runtime/log/engine_log.dart';
@@ -69,7 +70,10 @@ final class Sdui {
     List<SduiService> services = const [],
     TelemetrySink? telemetry,
     Map<String, WidgetSpec> widgets = const {},
+    List<Motion> motions = const [],
+    Map<String, Object? Function(List<Object?>)> functions = const {},
     LogLevel? debugLogLevel,
+    void Function(String line)? logOutput,
   }) {
     for (final service in services) {
       service.onRegister();
@@ -85,7 +89,10 @@ final class Sdui {
       externalCommands: [for (final service in services) ...service.commands],
       telemetry: telemetry ?? const NoopTelemetrySink(),
       widgets: widgets,
+      motions: motions,
+      functions: functions,
       debugLogLevel: debugLogLevel,
+      logOutput: logOutput,
     );
   }
 
