@@ -32,6 +32,9 @@ final class WidgetSchemaRegistry {
   /// Returns the schema registered for [type], if any.
   static WidgetSchema? schemaFor(String type) => _schemas[type];
 
+  /// An immutable snapshot of every registered schema.
+  static Map<String, WidgetSchema> all() => Map.unmodifiable(_schemas);
+
   /// Associates [type] with [schema], replacing an existing entry.
   static void register(String type, WidgetSchema schema) {
     if (_frozen) {

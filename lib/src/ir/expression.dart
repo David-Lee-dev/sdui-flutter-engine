@@ -23,6 +23,76 @@ final class Expression {
     return Expression._(source, ast, Set.unmodifiable(roots));
   }
 
+  /// Every function name this expression calls (registered-function lookups).
+  Set<String> get calls {
+    final out = <String>{};
+    _collectCalls(ast, out);
+    return out;
+  }
+
+  /// One exhaustive walk instead of a per-variant method: the sealed
+  /// hierarchy makes this switch total, so a new variant fails to compile
+  /// here rather than silently skipping call collection.
+  static void _collectCalls(Expr expr, Set<String> out) {
+    switch (expr) {
+      case LiteralExpr():
+        break;
+      case BindingExpr():
+        break;
+      case PropertyExpr(:final target):
+        _collectCalls(target, out);
+      case IndexExpr(:final target, :final index):
+        _collectCalls(target, out);
+        _collectCalls(index, out);
+      case UnaryExpr(:final operand):
+        _collectCalls(operand, out);
+      case BinaryExpr(:final left, :final right):
+        _collectCalls(left, out);
+        _collectCalls(right, out);
+      case LogicalExpr(:final left, :final right):
+        _collectCalls(left, out);
+        _collectCalls(right, out);
+      case ComparisonExpr(:final first, :final rest):
+        _collectCalls(first, out);
+        for (final link in rest) {
+          _collectCalls(link.operand, out);
+        }
+      case TernaryExpr(:final cond, :final then, :final orElse):
+        _collectCalls(cond, out);
+        _collectCalls(then, out);
+        _collectCalls(orElse, out);
+      case NullCoalesceExpr(:final left, :final right):
+        _collectCalls(left, out);
+        _collectCalls(right, out);
+      case InExpr(:final left, :final right):
+        _collectCalls(left, out);
+        _collectCalls(right, out);
+      case ListLiteralExpr(:final elements):
+        for (final element in elements) {
+          _collectCalls(element, out);
+        }
+      case MapLiteralExpr(:final entries):
+        for (final entry in entries) {
+          _collectCalls(entry.$1, out);
+          _collectCalls(entry.$2, out);
+        }
+      case SliceExpr(:final target, :final start, :final stop, :final step):
+        _collectCalls(target, out);
+        if (start != null) _collectCalls(start, out);
+        if (stop != null) _collectCalls(stop, out);
+        if (step != null) _collectCalls(step, out);
+      case CallExpr(:final name, :final args):
+        out.add(name);
+        for (final arg in args) {
+          _collectCalls(arg, out);
+        }
+      case ComprehensionExpr(:final iter, :final expr, :final cond):
+        _collectCalls(iter, out);
+        _collectCalls(expr, out);
+        if (cond != null) _collectCalls(cond, out);
+    }
+  }
+
   /// Returns the root only when the entire expression is a bare binding.
   ///
   /// This stricter test prevents write-back features from overwriting a root with
@@ -46,6 +116,15 @@ final class Interpolation {
     final out = <String>{};
     for (final part in parts) {
       if (part is Expression) out.addAll(part.roots);
+    }
+    return out;
+  }
+
+  /// Every function name any fragment calls.
+  Set<String> get calls {
+    final out = <String>{};
+    for (final part in parts) {
+      if (part is Expression) out.addAll(part.calls);
     }
     return out;
   }

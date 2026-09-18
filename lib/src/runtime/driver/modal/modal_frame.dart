@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../engine_host.dart';
 import '../../engine_subtree.dart';
+import '../../presentation.dart';
 import '../../util/props_resolver.dart';
 import '../../motion/_base.dart';
 import '../../motion/composite/presets.dart';
@@ -171,7 +172,7 @@ class _ModalFrameState extends State<ModalFrame>
             child: GestureDetector(
               onTap: _onBackdrop,
               behavior: HitTestBehavior.opaque,
-              child: const ColoredBox(color: Color(0x8A000000)),
+              child: ColoredBox(color: EnginePresentation.value.modal.barrierColor),
             ),
           ),
         ),
@@ -182,12 +183,16 @@ class _ModalFrameState extends State<ModalFrame>
 
   Widget _positioned(Size size, double keyboard) {
     // Height budget is measured against what the keyboard leaves visible.
+    final style = EnginePresentation.value.modal;
     final available = size.height - keyboard;
     final maxHeight =
-        available * (widget.variant == ModalVariant.dialog ? 0.9 : 0.8);
+        available *
+        (widget.variant == ModalVariant.dialog
+            ? style.dialogMaxHeightFactor
+            : style.sheetMaxHeightFactor);
     if (widget.variant == ModalVariant.dialog) {
       final box = SizedBox(
-        width: size.width * 0.9,
+        width: size.width * style.dialogWidthFactor,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
           child: SingleChildScrollView(child: _content()),
@@ -253,9 +258,10 @@ class _ModalFrameState extends State<ModalFrame>
     final color = _backgroundColor(context);
     // Sheets round their top edge, dialogs every corner — applied here (not
     // in the template) so the default surface never bleeds past the box.
+    final radius = Radius.circular(EnginePresentation.value.modal.borderRadius);
     final shape = widget.variant == ModalVariant.dialog
-        ? const BorderRadius.all(Radius.circular(16))
-        : const BorderRadius.vertical(top: Radius.circular(16));
+        ? BorderRadius.all(radius)
+        : BorderRadius.vertical(top: radius);
     return Material(
       type: color == null ? MaterialType.transparency : MaterialType.canvas,
       color: color,

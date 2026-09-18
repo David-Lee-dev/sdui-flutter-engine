@@ -4,7 +4,7 @@ import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
-import 'schema/command_schema.dart';
+import 'schema/language_catalog.dart';
 import 'schema/widget_schema.dart';
 import 'package:sdui_engine/src/ir/compiled_value.dart';
 import 'invalid_template_exception.dart';
@@ -56,10 +56,24 @@ final class TemplateValidator {
   ///
   /// Throws [InvalidTemplateException] for undeclared references, invalid action
   /// references, unknown catalog entries, or incompatible structural contracts.
-  static void validate(Directive root, Set<String> declared) =>
-      // Root data is writable through the root scope. An engine root is mounted
-      // under a box parent, so a bare sliver is structurally invalid.
-      _walk(root, declared, declared, const {}, LayoutProtocol.box);
+  /// The catalog for the current [validate] call. Compilation is synchronous
+  /// and single-isolate, so a call-scoped static avoids threading the catalog
+  /// through every private helper.
+  static LanguageCatalog _catalog = LanguageCatalog(
+    widgets: const {},
+    commands: const {},
+  );
+
+  static void validate(
+    Directive root,
+    Set<String> declared, {
+    LanguageCatalog? catalog,
+  }) {
+    _catalog = catalog ?? LanguageCatalog.fromRegistries();
+    // Root data is writable through the root scope. An engine root is mounted
+    // under a box parent, so a bare sliver is structurally invalid.
+    _walk(root, declared, declared, const {}, LayoutProtocol.box);
+  }
 
   /// Validates one directive within its lexical environment.
   ///
@@ -76,7 +90,7 @@ final class TemplateValidator {
     switch (directive) {
       case PlainDirective node:
         // Resolve widget types before any branch can defer the failure to runtime.
-        final schema = WidgetSchemaRegistry.schemaFor(node.type);
+        final schema = _catalog.widgets[node.type];
         if (schema == null) {
           throw InvalidTemplateException(
             node.path,
@@ -89,7 +103,9 @@ final class TemplateValidator {
         // Bound inputs write directly, so their keys must be validated before a
         // user interaction can throw outside node isolation.
         if (schema.kind == WidgetKind.bound) _checkBind(node, writable);
+        _checkMotions(node);
         _check(node.roots, declared, node.path);
+        _checkCalls(CompiledValue.callsOf(node.props), node.path);
         _checkInteractions(node.on, actions, node.path, schema);
         // Builder-provided variables are declarations only for descendants.
         final childDeclared = node.provides.isEmpty
@@ -316,6 +332,35 @@ final class TemplateValidator {
     }
   }
 
+  /// Rejects `_motion` names absent from the catalog (when it enumerates them).
+  static void _checkMotions(PlainDirective node) {
+    final known = _catalog.motions;
+    if (known == null) return;
+    for (final motion in node.motions) {
+      if (!known.contains(motion.type)) {
+        throw InvalidTemplateException(
+          node.path,
+          'unknown motion "${motion.type}" — not a registered motion or preset (typo?).',
+        );
+      }
+    }
+  }
+
+  /// Rejects expression function calls absent from the catalog (when it
+  /// enumerates them).
+  static void _checkCalls(Set<String> calls, String path) {
+    final known = _catalog.functions;
+    if (known == null) return;
+    for (final name in calls) {
+      if (!known.contains(name)) {
+        throw InvalidTemplateException(
+          path,
+          'unknown function "$name(...)" — not a registered expression function (typo?).',
+        );
+      }
+    }
+  }
+
   static void _checkCommand(
     Command command,
     Set<String> declared,
@@ -323,15 +368,19 @@ final class TemplateValidator {
     String path,
   ) {
     // Resolve driver types before interaction can defer the failure to runtime.
-    if (!CommandSchemaRegistry.knows(command.type)) {
+    if (!_catalog.commands.contains(command.type)) {
       throw InvalidTemplateException(
         path,
         'unknown driver type "${command.type}" — not a registered driver (typo?).',
       );
     }
     _check(CompiledValue.rootsOf(command.params), declared, path);
+    _checkCalls(CompiledValue.callsOf(command.params), path);
     final when = command.when;
-    if (when != null) _check(when.roots, declared, path);
+    if (when != null) {
+      _check(when.roots, declared, path);
+      _checkCalls(when.calls, path);
+    }
     if (command.type == 'set') {
       for (final key in command.params.keys) {
         if (!writable.contains(key)) {

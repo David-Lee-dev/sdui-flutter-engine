@@ -277,6 +277,9 @@ final class MotionPresets {
     ],
   };
 
+  /// Every composite preset name (`_motion` accepts these next to atoms).
+  static Set<String> names() => Set.unmodifiable(_table.keys);
+
   static List<({String type, Map<String, Object?> params})> expand(
     String type,
     Map<String, Object?> userParams,

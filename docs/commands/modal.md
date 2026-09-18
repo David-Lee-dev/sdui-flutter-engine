@@ -14,9 +14,34 @@ The `modal` command opens or closes engine-rendered modal templates on the host 
 | `background` | color string | engine color syntax, `none` | theme `colorScheme.surface` | Yes | Body background for `open`; `none` makes it transparent. |
 | `return` | any | — | `null` | Yes | `close` result returned to the pending `open` command. |
 
-Modal bodies are opaque by default, using the theme's `colorScheme.surface`. Bottom sheets round their top corners to radius 16; dialogs round all corners to radius 16. Set `background` on each `open` command to override the body color, or use `background: 'none'` when the template paints a fully custom transparent body.
+Modal bodies are opaque by default, using the theme's `colorScheme.surface`. Set `background` on each `open` command to override the body color, or use `background: 'none'` when the template paints a fully custom transparent body.
 
-Dialogs are capped at 90% of keyboard-adjusted height and scroll their content; bottom sheets are capped at 80% and let their template own scrolling. Missing template throws `MODAL_NOT_FOUND`; missing host/overlay throws `NO_OVERLAY`. Backdrop dismissal emits reserved `DISMISSED` and routes to `_dismiss`. `close` affects the top modal and is a no-op for an empty stack.
+The app owns the surrounding chrome through `SduiPresentation.modal`, installed by `Sdui.initialize` or `Engine.initialize`:
+
+```dart
+Sdui.initialize(
+  // Required dependencies omitted.
+  presentation: const SduiPresentation(
+    modal: ModalStyle(
+      barrierColor: Color(0x99000000),
+      borderRadius: 24,
+      sheetMaxHeightFactor: 0.85,
+      dialogMaxHeightFactor: 0.88,
+      dialogWidthFactor: 0.92,
+    ),
+  ),
+);
+```
+
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `barrierColor` | `Color(0x8A000000)` | Backdrop color. |
+| `borderRadius` | `16` | Body radius: top corners for sheets, all corners for dialogs. |
+| `sheetMaxHeightFactor` | `0.8` | Sheet height cap as a fraction of keyboard-adjusted height. |
+| `dialogMaxHeightFactor` | `0.9` | Dialog height cap as a fraction of keyboard-adjusted height. |
+| `dialogWidthFactor` | `0.9` | Dialog width as a fraction of viewport width. |
+
+Dialogs scroll their content within their configured height cap; bottom sheets let their template own scrolling. The command-level `background` still controls the body surface independently of the injected chrome. Missing template throws `MODAL_NOT_FOUND`; missing host/overlay throws `NO_OVERLAY`. Backdrop dismissal emits reserved `DISMISSED` and routes to `_dismiss`. `close` affects the top modal and is a no-op for an empty stack.
 
 ```yaml
 _type: modal

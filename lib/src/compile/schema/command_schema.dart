@@ -8,6 +8,9 @@ final class CommandSchemaRegistry {
   /// Returns whether [type] is registered.
   static bool knows(String type) => _types.contains(type);
 
+  /// An immutable snapshot of every registered command type.
+  static Set<String> all() => Set.unmodifiable(_types);
+
   /// Registers [type].
   static void register(String type) {
     if (_frozen) {

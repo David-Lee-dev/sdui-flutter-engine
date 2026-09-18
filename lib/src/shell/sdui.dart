@@ -10,12 +10,13 @@ import '../dependency/secure_storage.dart';
 import '../dependency/telemetry_sink.dart';
 import '../dependency/video_source.dart';
 import '../runtime/motion/_base.dart';
+import '../runtime/presentation.dart';
+import 'screen_page.dart';
 import '../impl/noop_telemetry_sink.dart';
 import '../engine.dart';
 import '../runtime/log/engine_log.dart';
 import '../runtime/telemetry/telemetry.dart';
 import '../runtime/widget/factory.dart';
-import 'screen_page.dart';
 import 'sdui_state.dart';
 
 /// Batteries-included entry point for an SDUI app.
@@ -72,13 +73,24 @@ final class Sdui {
     Map<String, WidgetSpec> widgets = const {},
     List<Motion> motions = const [],
     Map<String, Object? Function(List<Object?>)> functions = const {},
+    SduiPresentation presentation = const SduiPresentation(),
+    SduiToastPresenter? toastPresenter,
     LogLevel? debugLogLevel,
     void Function(String line)? logOutput,
   }) {
+    // Reject re-initialization before any side effect (service hooks, loader
+    // swap) — Engine.initialize would only fail after those mutations.
+    if (Engine.catalog != null) {
+      throw StateError(
+        'Sdui.initialize was already called — engine configuration is '
+        'process-wide and freezes at first boot.',
+      );
+    }
     for (final service in services) {
       service.onRegister();
     }
     SduiState.screenLoader = screenLoader;
+    SduiState.toastPresenter = toastPresenter;
     Engine.initialize(
       imageSource: imageSource,
       videoSource: videoSource,
@@ -91,6 +103,7 @@ final class Sdui {
       widgets: widgets,
       motions: motions,
       functions: functions,
+      presentation: presentation,
       debugLogLevel: debugLogLevel,
       logOutput: logOutput,
     );

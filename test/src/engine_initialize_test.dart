@@ -88,8 +88,10 @@ class _NetworkClient implements NetworkClient {
 void main() {
   group('Engine', () {
     tearDown(() {
-      WidgetFactory.reset();
+      Engine.resetForTest();
+      // Schema registry first — WidgetFactory.reset() re-seeds it.
       WidgetSchemaRegistry.reset();
+      WidgetFactory.reset();
       DriverRegistry.reset();
       FunctionRegistry.reset();
       MotionFactory.reset();
@@ -143,6 +145,36 @@ void main() {
 
         expect(MotionFactory.resolve('app_glow'), isA<_AppMotion>());
         expect(FunctionRegistry.resolve('appUpper')!(['hi']), 'HI');
+      });
+
+      test('부팅 카탈로그를 조립한다 — 위젯·커맨드·모션(프리셋 포함)·함수 전부 열거', () {
+        Engine.initialize(
+          networkClient: const _NetworkClient(),
+          imageSource: const _ImageSource(),
+          videoSource: const _VideoSource(),
+          appStorage: _AppStorage(),
+          secureStorage: _SecureStorage(),
+          motions: [const _AppMotion()],
+          functions: {'appUpper': (args) => args.first},
+        );
+
+        final catalog = Engine.catalog!;
+        expect(catalog.widgets.containsKey('column'), isTrue);
+        expect(catalog.commands.contains('net'), isTrue);
+        expect(catalog.motions, containsAll(['fade', 'fade_in', 'app_glow']));
+        expect(catalog.functions, contains('appUpper'));
+      });
+
+      test('두 번째 initialize는 어떤 부수효과도 없이 즉시 거부된다', () {
+        void boot() => Engine.initialize(
+          networkClient: const _NetworkClient(),
+          imageSource: const _ImageSource(),
+          videoSource: const _VideoSource(),
+          appStorage: _AppStorage(),
+          secureStorage: _SecureStorage(),
+        );
+        boot();
+        expect(boot, throwsStateError);
       });
     });
   });

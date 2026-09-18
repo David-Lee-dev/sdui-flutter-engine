@@ -8,6 +8,7 @@ import 'runtime/driver/driver_registry.dart';
 import 'runtime/engine_host.dart';
 import 'runtime/engine_subtree.dart';
 import 'runtime/engine_registries.dart';
+import 'engine.dart';
 import 'runtime/directive_subtree.dart';
 import 'runtime/interpreter/building/node_builder.dart';
 import 'runtime/log/engine_log.dart';
@@ -365,7 +366,13 @@ class _EngineRunnerState extends State<EngineRunner>
     // validating: the validator reads them but no longer touches the factory.
     WidgetFactory.ensureRegistered();
     DriverRegistry.ensureRegistered();
-    final result = Compile.build(widget.template, widget.rootData.keys.toSet());
+    final result = Compile.build(
+      widget.template,
+      widget.rootData.keys.toSet(),
+      // The boot-time catalog also validates motion/function names; a bare
+      // test mount (no Engine.initialize) falls back to a registry snapshot.
+      catalog: Engine.catalog,
+    );
     if (kDebugMode) EngineLog.screen.compiled(result.nodeCount, sw!.elapsed);
     return result.directive;
   }

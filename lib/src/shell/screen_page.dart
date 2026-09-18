@@ -5,6 +5,7 @@ import '../dependency/screen_loader.dart';
 import '../engine_runner.dart';
 import '../runtime/engine_host.dart';
 import '../runtime/telemetry/telemetry.dart';
+import 'sdui_state.dart';
 
 /// Builds the widget shown while a screen's template is loading.
 typedef SduiLoadingBuilder = Widget Function(BuildContext context);
@@ -109,11 +110,16 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     },
   );
 
-  ToastHandle _toastHandle() => ToastHandle(
-    (message, variant) => ScaffoldMessenger.of(
+  ToastHandle _toastHandle() => ToastHandle((message, variant) {
+    final presenter = SduiState.toastPresenter;
+    if (presenter != null) {
+      presenter(context, message, variant);
+      return;
+    }
+    ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message))),
-  );
+    ).showSnackBar(SnackBar(content: Text(message)));
+  });
 
   Widget _loading(BuildContext context) =>
       widget.loadingBuilder?.call(context) ??

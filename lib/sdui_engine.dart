@@ -42,6 +42,10 @@ export 'src/impl/noop_telemetry_sink.dart' show NoopTelemetrySink;
 
 // ── Extension points: services (commands), custom widgets, motions, functions
 export 'src/runtime/motion/_base.dart' show Motion, MotionParams, MotionPlan;
+export 'src/runtime/presentation.dart'
+    show ModalStyle, SduiPresentation, SduiToastPresenter, TapEffectStyle;
+export 'src/compile/schema/language_catalog.dart' show LanguageCatalog;
+export 'src/compile/schema/widget_schema.dart' show WidgetSchema, WidgetKind;
 export 'src/ir/model/layout_protocol.dart' show LayoutProtocol;
 export 'src/runtime/widget/contract/action_sink.dart'
     show ActionInvocation, ActionNode, ActionSink;

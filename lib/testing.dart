@@ -23,6 +23,8 @@ import 'src/runtime/motion/motion_factory.dart';
 import 'src/runtime/telemetry/telemetry.dart';
 import 'src/runtime/util/function_registry.dart';
 import 'src/runtime/widget/factory.dart';
+import 'src/engine.dart';
+import 'src/runtime/presentation.dart';
 import 'src/shell/sdui_state.dart';
 
 export 'sdui_engine.dart';
@@ -40,6 +42,8 @@ void installTestNetworkClient(NetworkClient client) {
 /// Call from `tearDown` in any test that ran `Sdui.initialize` or
 /// `Engine.initialize`, so the next case can initialize again.
 void resetEngineForTest() {
+  Engine.resetForTest();
+  EnginePresentation.reset();
   SduiState.reset();
   Telemetry.reset();
   // Schema registry first — WidgetFactory.reset() re-seeds it.

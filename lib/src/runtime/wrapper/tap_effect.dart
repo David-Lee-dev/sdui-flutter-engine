@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../presentation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
@@ -239,18 +240,16 @@ class TapEffect extends StatefulWidget {
     this.onTap,
     this.onLongPress,
     this.onDoubleTap,
-    this.tint = PressSpec.tint,
-    this.tintOpacity = PressSpec.tintOpacity,
-    this.pressInset = PressSpec.inset,
+    this.style,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onDoubleTap;
-  final Color tint;
-  final double tintOpacity;
-  final double pressInset;
+
+  /// Style override; `null` reads the boot-installed [EnginePresentation].
+  final TapEffectStyle? style;
 
   @override
   State<TapEffect> createState() => _TapEffectState();
@@ -258,10 +257,12 @@ class TapEffect extends StatefulWidget {
 
 class _TapEffectState extends State<TapEffect>
     with SingleTickerProviderStateMixin {
+  TapEffectStyle get _style => widget.style ?? EnginePresentation.value.tapEffect;
+
   late final AnimationController _press = AnimationController(
     vsync: this,
-    duration: PressSpec.inDuration,
-    reverseDuration: PressSpec.outDuration,
+    duration: _style.inDuration,
+    reverseDuration: _style.outDuration,
   );
 
   late final CurvedAnimation _amount = CurvedAnimation(
@@ -278,7 +279,7 @@ class _TapEffectState extends State<TapEffect>
   }
 
   // animateBack의 곡선은 linear로 둔다 — 곡선은 _amount가 이미 입힌다.
-  void _cancel() => _press.animateBack(0, duration: PressSpec.inDuration);
+  void _cancel() => _press.animateBack(0, duration: _style.inDuration);
 
   @override
   Widget build(BuildContext context) {
@@ -294,9 +295,9 @@ class _TapEffectState extends State<TapEffect>
         animation: _amount,
         builder: (context, child) => PressFeedback(
           amount: _amount.value,
-          tint: widget.tint,
-          tintOpacity: widget.tintOpacity,
-          inset: widget.pressInset,
+          tint: _style.tint,
+          tintOpacity: _style.tintOpacity,
+          inset: _style.inset,
           child: child,
         ),
         child: widget.child,

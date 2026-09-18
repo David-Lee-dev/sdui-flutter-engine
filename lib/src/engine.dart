@@ -9,6 +9,11 @@ import 'runtime/driver/secure_storage_driver.dart';
 import 'dependency/network_client.dart';
 import 'runtime/driver/net_driver.dart';
 import 'runtime/motion/_base.dart';
+import 'runtime/presentation.dart';
+import 'package:sdui_engine/src/compile/schema/command_schema.dart';
+import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
+import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
+import 'runtime/motion/composite/presets.dart';
 import 'runtime/motion/motion_factory.dart';
 import 'runtime/util/function_registry.dart';
 import 'runtime/driver/driver_registry.dart';
@@ -52,13 +57,24 @@ final class Engine {
     Map<String, WidgetSpec> widgets = const {},
     List<Motion> motions = const [],
     Map<String, Object? Function(List<Object?>)> functions = const {},
+    SduiPresentation presentation = const SduiPresentation(),
     LogLevel? debugLogLevel,
     void Function(String line)? logOutput,
   }) {
+    // Single-shot: a second initialize would partially mutate frozen global
+    // state (services registered, loader swapped) before failing — reject it
+    // atomically, before any side effect.
+    if (_catalog != null) {
+      throw StateError(
+        'Engine.initialize was already called — engine configuration is '
+        'process-wide and freezes at first boot.',
+      );
+    }
     if (debugLogLevel != null) {
       EngineLog.configure(minLevel: debugLogLevel, colors: true);
     }
     if (logOutput != null) EngineLog.configure(output: logOutput);
+    EnginePresentation.value = presentation;
     ImageSourceRegistry.install(imageSource);
     VideoSourceRegistry.install(videoSource);
     DriverRegistry.installEngineOwned(
@@ -73,6 +89,26 @@ final class Engine {
     WidgetFactory.registerAll(widgets);
     MotionFactory.registerAll(motions);
     FunctionRegistry.registerAll(functions);
+    // Built-in catalogs are lazily seeded — force them before the freeze and
+    // the snapshot, or a boot with no custom widgets would assemble an empty
+    // catalog (or throw on post-freeze seeding).
+    WidgetFactory.ensureRegistered();
+    DriverRegistry.ensureRegistered();
     EngineCatalog.freeze();
+    _catalog = LanguageCatalog(
+      widgets: WidgetSchemaRegistry.all(),
+      commands: CommandSchemaRegistry.all(),
+      motions: {...MotionFactory.types(), ...MotionPresets.names()},
+      functions: FunctionRegistry.names(),
+    );
   }
+
+  /// The frozen language catalog assembled at [initialize], or `null` before
+  /// boot (bare test mounts compile against a registry snapshot instead).
+  static LanguageCatalog? get catalog => _catalog;
+
+  static LanguageCatalog? _catalog;
+
+  /// Clears the boot-time catalog so tests can initialize again.
+  static void resetForTest() => _catalog = null;
 }

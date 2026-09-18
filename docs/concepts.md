@@ -24,10 +24,14 @@ Widget property values, command parameters, `_motion` parameters, `_on.*.event`,
 
 1. **Parse** — `TemplateParser` requires `_type`, parses child forms, splits bare props from reserved keys, and attaches diagnostic paths.
 2. **Compile** — `TemplateCompiler` turns values into literals/expressions and wraps plain widgets with morph, scope, condition, and loop directives. Wrapper order from inner to outer is morph → scope → condition → loop.
-3. **Validate** — `TemplateValidator` checks widget and command registration, binding roots, action references, child shapes, writable bindings, loop wrappers, and box/sliver protocols, including inactive branches.
+3. **Validate** — `TemplateValidator` checks the compiled tree against a `LanguageCatalog`: widget and command registration, motion names, function calls in widget properties and command parameters/guards, binding roots, action references, child shapes, writable bindings, loop wrappers, and box/sliver protocols, including inactive branches.
 4. **Interpret** — observers evaluate against the current environment, subscribe only to referenced roots, and rebuild the affected directive.
 
-Unknown registered types, unknown reserved keys, undeclared binding roots, incompatible child forms, and protocol mismatches fail before mounting. Registries are seeded from runtime catalogs and frozen during engine initialization; applications may add widgets, functions, motions, and external commands before that freeze.
+`LanguageCatalog` is an immutable snapshot of the accepted widget schemas, command types, motion atoms/presets, and expression function names. `Compile.build(template, keys, catalog: ...)` validates against the supplied snapshot. `Engine.initialize` registers the built-ins and application extensions, freezes the registries, and assembles the boot snapshot exposed as `Engine.catalog`; `EngineRunner` passes that catalog to every compile.
+
+With the boot catalog, unknown widget or command types, unknown `_motion` names, unknown function calls in those validated expression positions, unknown reserved keys, undeclared binding roots, incompatible child forms, and protocol mismatches all fail before mounting. Motion failures contain `unknown motion`; function failures contain `unknown function`.
+
+`Compile.build` without a catalog, including a bare `EngineRunner` mount before initialization, falls back to a snapshot of the compile-side widget and command registries. That fallback cannot enumerate runtime-owned motions or functions, so only those two name checks are skipped; runtime resolution can still reject an unknown name if execution reaches it.
 
 ## Initialization and logging
 
@@ -39,8 +43,12 @@ Unknown registered types, unknown reserved keys, undeclared binding roots, incom
 | `widgets` | Register app-owned widget specifications by template `_type`. |
 | `motions` | Register [`Motion`](motion.md#custom-motion-atoms) implementations by their `type`. |
 | `functions` | Register [expression functions](expressions.md#application-functions) by call name. |
+| `presentation` | Install an app-owned `SduiPresentation` for built-in [tap feedback](interaction.md#tap-feedback) and [`modal`](commands/modal.md) chrome. |
+| `toastPresenter` (`Sdui.initialize` only) | Replace the facade's default `SnackBar` presentation for [`toast`](commands/toast.md). |
 | `debugLogLevel` | Set the minimum engine diagnostic level. |
 | `logOutput` | Receive each formatted engine log line in an app-owned sink. |
+
+Initialization is process-wide and single-shot. A second call to either `Sdui.initialize` or `Engine.initialize` throws `StateError` before changing services, loaders, presentation, logging, or any registry.
 
 Engine diagnostics remain debug-only. Their default output is Flutter's `debugPrint`; pass `logOutput: (line) => appLogger.debug(line)` to either initializer to redirect them. Internally this is the same output hook exposed by `EngineLog.configure(output: ...)`; changing the destination does not enable logs in release mode.
 

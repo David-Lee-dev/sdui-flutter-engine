@@ -58,6 +58,9 @@ final class MotionFactory {
   /// Returns the motion registered for [type].
   ///
   /// Throws [StateError] when [type] is unknown.
+  /// An immutable snapshot of every registered motion type name.
+  static Set<String> types() => Set.unmodifiable(_motions.keys);
+
   static Motion resolve(String type) {
     final motion = _motions[type];
     if (motion == null) {

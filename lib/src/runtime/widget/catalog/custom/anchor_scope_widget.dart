@@ -211,6 +211,8 @@ class _AnchorScopeHostState extends State<_AnchorScopeHost>
       // both catalogs are seeded by construction. Not importing the factory
       // keeps factory -> catalog -> factory from becoming an import cycle.
       DriverRegistry.ensureRegistered();
+      // Registry-snapshot catalog: this runtime module cannot reach the
+      // engine root for the boot catalog without re-creating an import cycle.
       return Compile.build(
         Map<String, Object?>.from(template),
         const {},

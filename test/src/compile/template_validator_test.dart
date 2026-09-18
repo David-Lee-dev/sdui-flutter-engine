@@ -5,6 +5,9 @@ import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/compile/invalid_template_exception.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
+import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
+import 'package:sdui_engine/src/compile/schema/command_schema.dart';
+import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
 import 'package:sdui_engine/src/compile/template_validator.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
 
@@ -21,11 +24,26 @@ class _Dummy extends Driver {
 }
 
 /// 템플릿을 파싱·컴파일한 뒤 [declared] 선언 아래서 검사한다.
-void validate(Map<String, Object?> template, Set<String> declared) {
+void validate(
+  Map<String, Object?> template,
+  Set<String> declared, {
+  LanguageCatalog? catalog,
+}) {
   final node = TemplateParser.buildUiTree(template);
   final directive = TemplateCompiler.buildDirectiveTree(node);
-  TemplateValidator.validate(directive, declared);
+  TemplateValidator.validate(directive, declared, catalog: catalog);
 }
+
+/// 레지스트리 스냅샷에 모션·함수 열거를 더한 풀 카탈로그.
+LanguageCatalog fullCatalog({
+  Set<String> motions = const {'fade'},
+  Set<String> functions = const {'upper'},
+}) => LanguageCatalog(
+  widgets: WidgetSchemaRegistry.all(),
+  commands: CommandSchemaRegistry.all(),
+  motions: motions,
+  functions: functions,
+);
 
 void main() {
   group('TemplateValidator', () {
@@ -45,6 +63,49 @@ void main() {
     tearDown(() {
       WidgetFactory.reset();
       DriverRegistry.reset();
+    });
+
+    group('catalog 검증 (모션·함수 — 기기 아닌 컴파일에서 죽인다)', () {
+      test('카탈로그가 모르는 _motion 이름은 컴파일에서 거부한다', () {
+        expect(
+          () => validate(
+            {'_type': 'text', 'value': 'x', '_motion': 'sparkle_nope'},
+            const {},
+            catalog: fullCatalog(),
+          ),
+          throwsInvalidTemplate,
+        );
+        // 아는 이름은 통과.
+        validate(
+          {'_type': 'text', 'value': 'x', '_motion': 'fade'},
+          const {},
+          catalog: fullCatalog(),
+        );
+      });
+
+      test('카탈로그가 모르는 함수 호출은 컴파일에서 거부한다', () {
+        expect(
+          () => validate(
+            {'_type': 'text', 'value': r'${nope(name)}'},
+            {'name'},
+            catalog: fullCatalog(),
+          ),
+          throwsInvalidTemplate,
+        );
+        validate(
+          {'_type': 'text', 'value': r'${upper(name)}'},
+          {'name'},
+          catalog: fullCatalog(),
+        );
+      });
+
+      test('카탈로그가 모션·함수를 열거하지 않으면(레지스트리 스냅샷) 그 검사는 건너뛴다', () {
+        // 기본 경로(catalog 생략) — 지금까지의 동작 보존.
+        validate(
+          {'_type': 'text', 'value': r'${nope(name)}', '_motion': 'sparkle_nope'},
+          {'name'},
+        );
+      });
     });
 
     group('type 검증 (⑥)', () {

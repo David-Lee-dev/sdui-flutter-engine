@@ -109,6 +109,9 @@ final class FunctionRegistry {
   }
 
   /// Returns the function registered as [name], or `null` if none exists.
+  /// An immutable snapshot of every registered function name.
+  static Set<String> names() => Set.unmodifiable(_functions.keys);
+
   static Object? Function(List<Object?>)? resolve(String name) =>
       _functions[name];
 }

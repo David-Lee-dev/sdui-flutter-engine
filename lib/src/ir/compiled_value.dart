@@ -23,4 +23,23 @@ final class CompiledValue {
     values.values.forEach(walk);
     return roots;
   }
+
+  /// Collects every function name called anywhere in [values].
+  static Set<String> callsOf(Map<String, Object?> values) {
+    final calls = <String>{};
+    void walk(Object? value) {
+      if (value is Expression) {
+        calls.addAll(value.calls);
+      } else if (value is Interpolation) {
+        calls.addAll(value.calls);
+      } else if (value is Map) {
+        value.values.forEach(walk);
+      } else if (value is List) {
+        value.forEach(walk);
+      }
+    }
+
+    values.values.forEach(walk);
+    return calls;
+  }
 }
