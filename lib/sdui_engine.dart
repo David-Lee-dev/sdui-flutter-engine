@@ -17,8 +17,6 @@ library;
 // ── Dependencies: the app implements and injects ALL of these ──────────────
 export 'src/dependency/network_client.dart'
     show NetworkClient, NetworkRequest, NetworkResult;
-export 'src/shell/sdui_service.dart'
-    show CommandDismissed, CommandFailure, CommandInvocation, ExternalCommand;
 export 'src/dependency/image_source.dart'
     show
         ImageRequest,
