@@ -33,3 +33,7 @@ _error:
 ```
 
 External commands use all common flow metadata from [Actions](../actions.md), including `_when`, handlers, `_background`, and action deduplication.
+
+## Telemetry
+
+Override `ExternalCommand.measured` (default `false`) to opt into a reserved, latency-measured `command` telemetry span — the same observability the engine's own [`net`](net.md) command gets. Worth `true` for long-running work (SDK calls, uploads); the default records failures only, with no duration. `CommandObserver` reads this flag through the command's driver, so the distinction is declared by the command, never inferred from its type name.

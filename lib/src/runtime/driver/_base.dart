@@ -70,6 +70,12 @@ abstract class Driver {
   /// Returns the command type resolved by [DriverRegistry].
   String get type;
 
+  /// Whether runs of this driver get a reserved, latency-measured telemetry
+  /// span. Declared here — never inferred from the type name — so the
+  /// executor stays blind to which command it is running. Un-measured
+  /// commands record failures only.
+  bool get measured => false;
+
   /// Executes a command and returns data exposed to its success flow.
   ///
   /// Expected domain failures should be reported as [DriverError] so actions can

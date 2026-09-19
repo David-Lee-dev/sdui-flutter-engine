@@ -1,13 +1,13 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
-import 'package:sdui_engine/src/dependency/image_source.dart';
-import 'package:sdui_engine/src/dependency/app_storage.dart';
-import 'package:sdui_engine/src/dependency/secure_storage.dart';
-import 'package:sdui_engine/src/dependency/video_source.dart';
+import 'package:sdui_engine/src/contract/image_source.dart';
+import 'package:sdui_engine/src/contract/app_storage.dart';
+import 'package:sdui_engine/src/contract/secure_storage.dart';
+import 'package:sdui_engine/src/contract/video_source.dart';
 import 'package:sdui_engine/src/contract/external_command.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
-import 'package:sdui_engine/src/dependency/network_client.dart';
+import 'package:sdui_engine/src/contract/network_client.dart';
 import 'package:sdui_engine/src/engine.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
@@ -53,7 +53,7 @@ class _SecureStorage implements SecureStorage {
   Future<void> write(String key, String value) async {}
 }
 
-class _InjectedCommand implements ExternalCommand {
+class _InjectedCommand extends ExternalCommand {
   @override
   String get type => 'injected';
 

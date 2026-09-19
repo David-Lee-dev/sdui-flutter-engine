@@ -4,9 +4,13 @@ import 'package:sdui_engine/src/engine_runner.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/runtime/driver/modal/modal_frame.dart';
 import 'package:sdui_engine/src/runtime/engine_subtree.dart';
-import 'package:sdui_engine/src/runtime/presentation.dart';
+import 'package:sdui_engine/src/contract/tap_feedback.dart';
+import 'package:sdui_engine/src/presentation/modal_style.dart';
+import 'package:sdui_engine/src/presentation/presentation.dart';
+import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
-import 'package:sdui_engine/src/runtime/wrapper/tap_effect.dart';
+import 'package:sdui_engine/src/runtime/wrapper/interaction.dart';
+import 'package:sdui_engine/src/ir/model/interaction_events.dart';
 
 void main() {
   WidgetFactory.ensureRegistered();
@@ -17,26 +21,43 @@ void main() {
   tearDown(EnginePresentation.reset);
 
   group('EnginePresentation', () {
-    group('tapEffect', () {
-      testWidgets('주입한 스타일이 피드백 렌더러에 반영된다', (tester) async {
+    group('tapFeedback', () {
+      testWidgets('주입한 구현이 기본 리플을 대체한다', (tester) async {
         EnginePresentation.value = const SduiPresentation(
-          tapEffect: TapEffectStyle(tint: Color(0xFF123456), tintOpacity: 0.5),
+          tapFeedback: _MarkerFeedback(),
         );
 
         await tester.pumpWidget(
           Directionality(
             textDirection: TextDirection.ltr,
-            child: TapEffect(onTap: () {}, child: const SizedBox(width: 10)),
+            child: Builder(
+              builder: (context) => EnginePresentation.tapFeedback.wrap(
+                context,
+                const SizedBox(width: 10),
+                onTap: () {},
+              ),
+            ),
           ),
         );
-        await tester.press(find.byType(TapEffect));
-        await tester.pump(const Duration(milliseconds: 200));
 
-        final feedback = tester.widget<PressFeedback>(
-          find.byType(PressFeedback),
+        expect(find.byKey(const Key('marker-feedback')), findsOneWidget);
+        expect(find.byType(InkWell), findsNothing);
+      });
+
+      testWidgets('미주입 시 기본은 잉크 리플이다', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => EnginePresentation.tapFeedback.wrap(
+                context,
+                const SizedBox(width: 10),
+                onTap: () {},
+              ),
+            ),
+          ),
         );
-        expect(feedback.tint, const Color(0xFF123456));
-        expect(feedback.tintOpacity, 0.5);
+
+        expect(find.byType(InkWell), findsOneWidget);
       });
     });
 
@@ -77,4 +98,16 @@ void main() {
       });
     });
   });
+}
+
+final class _MarkerFeedback extends TapFeedback {
+  const _MarkerFeedback();
+  @override
+  Widget wrap(
+    BuildContext context,
+    Widget child, {
+    required VoidCallback onTap,
+    VoidCallback? onLongPress,
+    VoidCallback? onDoubleTap,
+  }) => KeyedSubtree(key: const Key('marker-feedback'), child: child);
 }

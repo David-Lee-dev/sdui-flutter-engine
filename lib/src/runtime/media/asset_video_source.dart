@@ -1,6 +1,6 @@
 import 'package:video_player/video_player.dart';
 
-import '../../dependency/video_source.dart';
+import '../../contract/video_source.dart';
 
 /// Default [VideoSource] — bundled asset videos, the bare minimum.
 ///

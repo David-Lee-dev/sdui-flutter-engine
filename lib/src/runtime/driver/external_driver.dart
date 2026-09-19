@@ -19,6 +19,9 @@ class ExternalDriver extends Driver {
   String get type => _command.type;
 
   @override
+  bool get measured => _command.measured;
+
+  @override
   Future<Object?> run(DriverContext ctx) async {
     final invocation = CommandInvocation(
       params: ctx.params,

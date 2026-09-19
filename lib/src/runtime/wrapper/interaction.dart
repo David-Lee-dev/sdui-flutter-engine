@@ -8,7 +8,7 @@ import 'event_timing_controller.dart';
 import '../telemetry/telemetry.dart';
 import '../widget/contract/action_sink.dart';
 import 'scope/scope.dart';
-import 'tap_effect.dart';
+import '../engine_presentation.dart';
 
 /// Dispatches discrete gestures, adding press feedback and button semantics to taps.
 ///
@@ -156,11 +156,15 @@ class _InteractionWrapperState extends State<InteractionWrapper> {
     if (onTap != null && widget.feedback) {
       return Semantics(
         button: true,
-        child: TapEffect(
+        // Look is implementation-owned (contract/tap_feedback.dart): the
+        // package default is the stock ink ripple; apps inject their own via
+        // SduiPresentation(tapFeedback: ...).
+        child: EnginePresentation.tapFeedback.wrap(
+          context,
+          widget.child,
           onTap: onTap,
           onDoubleTap: onDoubleTap,
           onLongPress: onLongPress,
-          child: widget.child,
         ),
       );
     }

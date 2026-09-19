@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/dependency/telemetry_sink.dart';
+import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/engine_runner.dart';
 import 'package:sdui_engine/src/compile/invalid_template_exception.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
@@ -63,7 +63,7 @@ void main() {
         ),
       );
       // build가 안 터지고(빨간 화면 방지) fallback이 뜬다 — compile-fatal은 로그로 보고됨.
-      expect(find.text('화면을 불러올 수 없어요.'), findsOneWidget);
+      expect(find.text('This screen could not be loaded.'), findsOneWidget);
       expect(tester.takeException(), isA<InvalidTemplateException>());
     });
 
@@ -79,7 +79,7 @@ void main() {
         ),
       );
 
-      expect(find.text('화면을 불러올 수 없어요.'), findsNothing);
+      expect(find.text('This screen could not be loaded.'), findsNothing);
       expect(
         find.text('custom-fallback:InvalidTemplateException'),
         findsOneWidget,
@@ -94,7 +94,7 @@ void main() {
         tester,
         const EngineRunner(template: {'_type': 'text', 'value': r'${bad}'}),
       );
-      expect(find.text('화면을 불러올 수 없어요.'), findsOneWidget);
+      expect(find.text('This screen could not be loaded.'), findsOneWidget);
       expect(tester.takeException(), isA<InvalidTemplateException>());
 
       // 같은 위치에 유효 template로 재pump → didUpdateWidget이 재컴파일, 경계 해제·내용 렌더.
@@ -102,7 +102,7 @@ void main() {
         tester,
         const EngineRunner(template: {'_type': 'text', 'value': '정상'}),
       );
-      expect(find.text('화면을 불러올 수 없어요.'), findsNothing);
+      expect(find.text('This screen could not be loaded.'), findsNothing);
       expect(find.text('정상'), findsOneWidget);
     });
 

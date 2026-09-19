@@ -1,4 +1,4 @@
-import 'package:sdui_engine/src/dependency/network_client.dart';
+import 'package:sdui_engine/src/contract/network_client.dart';
 
 import '_base.dart';
 import 'driver_error.dart';
@@ -34,6 +34,10 @@ class NetDriver extends Driver {
 
   @override
   String get type => 'net';
+
+  // Network calls are the long-running commands worth latency spans.
+  @override
+  bool get measured => true;
 
   @override
   Future<Object?> run(DriverContext ctx) async {

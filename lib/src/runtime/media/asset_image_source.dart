@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import '../../dependency/image_source.dart';
+import '../../contract/image_source.dart';
 
 /// Default [ImageSource] — bundled asset images, the bare minimum.
 ///

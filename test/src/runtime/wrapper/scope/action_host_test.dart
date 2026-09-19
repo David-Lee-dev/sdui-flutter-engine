@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/dependency/telemetry_sink.dart';
+import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/runtime/environment/scope/scope_environment.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
@@ -86,6 +86,10 @@ class _TelemetryDriver extends Driver {
 
   @override
   String get type => driverType;
+
+  // 실제 NetDriver처럼 net 만 예약-측정 스팬을 선언한다.
+  @override
+  bool get measured => driverType == 'net';
 
   @override
   Future<Object?> run(DriverContext ctx) async {

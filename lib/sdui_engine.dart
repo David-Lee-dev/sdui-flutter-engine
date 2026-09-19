@@ -5,8 +5,8 @@
 /// Sdui.initialize(screenLoader: MyScreenLoader(), networkClient: MyNetworkClient());
 /// runApp(MaterialApp.router(routerConfig: Sdui.router()));
 /// ```
-/// The app implements and injects every dependency seam (telemetry alone
-/// falls back to a no-op sink) — see [Sdui].
+/// The app implements and injects every required contract seam; optional
+/// seams (telemetry, tap feedback) carry package defaults — see [Sdui].
 ///
 /// This barrel is the package's entire public API; implementation lives under
 /// `src/` and is not part of the contract (importing `src/` paths is
@@ -14,10 +14,10 @@
 /// Explicit `show` lists keep the surface from growing by accident.
 library;
 
-// ── Dependencies: the app implements and injects ALL of these ──────────────
-export 'src/dependency/network_client.dart'
+// ── Contracts: required seams the app implements and injects ────────────────
+export 'src/contract/network_client.dart'
     show NetworkClient, NetworkRequest, NetworkResult;
-export 'src/dependency/image_source.dart'
+export 'src/contract/image_source.dart'
     show
         ImageRequest,
         ImageResult,
@@ -25,25 +25,30 @@ export 'src/dependency/image_source.dart'
         NoImage,
         PendingImage,
         ReadyImage;
-export 'src/dependency/app_storage.dart' show AppStorage;
-export 'src/dependency/screen_loader.dart' show LoadedScreen, ScreenLoader;
+export 'src/contract/app_storage.dart' show AppStorage;
+export 'src/contract/screen_loader.dart' show LoadedScreen, ScreenLoader;
 export 'src/contract/external_command.dart'
     show CommandDismissed, CommandFailure, CommandInvocation, ExternalCommand;
 export 'src/shell/sdui_service.dart' show SduiService;
-export 'src/dependency/secure_storage.dart' show SecureStorage;
-export 'src/dependency/telemetry_sink.dart'
+export 'src/contract/secure_storage.dart' show SecureStorage;
+export 'src/contract/telemetry_sink.dart'
     show TelemetryEvent, TelemetryReservation, TelemetrySink;
-export 'src/dependency/video_source.dart' show VideoRequest, VideoSource;
+export 'src/contract/video_source.dart' show VideoRequest, VideoSource;
 
-// ── Swappable default implementations ───────────────────────────────────────
+// ── Optional-seam contracts and their package defaults ──────────────────────
 export 'src/runtime/media/asset_image_source.dart' show AssetImageSource;
 export 'src/runtime/media/asset_video_source.dart' show AssetVideoSource;
 export 'src/impl/noop_telemetry_sink.dart' show NoopTelemetrySink;
 
 // ── Extension points: services (commands), custom widgets, motions, functions
 export 'src/runtime/motion/_base.dart' show Motion, MotionParams, MotionPlan;
-export 'src/runtime/presentation.dart'
-    show ModalStyle, SduiPresentation, SduiToastPresenter, TapEffectStyle;
+export 'src/contract/tap_feedback.dart' show TapFeedback;
+export 'src/impl/ink_tap_feedback.dart' show InkTapFeedback;
+export 'src/presentation/modal_style.dart' show ModalStyle;
+export 'src/presentation/presentation.dart'
+    show SduiPresentation, SduiScreenErrorBuilder, SduiToastPresenter;
+export 'src/presentation/scaling.dart' show SduiScaling;
+export 'src/presentation/typography.dart' show SduiTypography;
 export 'src/compile/schema/language_catalog.dart' show LanguageCatalog;
 export 'src/compile/schema/widget_schema.dart' show WidgetSchema, WidgetKind;
 export 'src/ir/model/layout_protocol.dart' show LayoutProtocol;
@@ -71,6 +76,7 @@ export 'src/runtime/engine_host.dart'
     show EngineHost, NavigateHandle, ToastHandle;
 export 'src/runtime/log/engine_log.dart' show LogLevel;
 // Loading polish reusable by app ImageSource implementations.
+export 'src/runtime/telemetry/screen_visit.dart' show ScreenVisit;
 export 'src/runtime/media/loading_image.dart'
     show fadeInImageFrame, loadingImageTransition, shimmerPlaceholder;
 

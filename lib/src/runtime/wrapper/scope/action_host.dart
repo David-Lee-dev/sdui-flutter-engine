@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:sdui_engine/src/dependency/telemetry_sink.dart';
+import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import '../../environment/_base.dart';
 import '../../environment/map_environment.dart';
@@ -13,6 +13,7 @@ import '../../driver/driver_error.dart';
 import '../../driver/driver_registry.dart';
 import '../../engine_host.dart';
 import '../../log/engine_log.dart';
+import '../../telemetry/command_observer.dart';
 import '../../telemetry/telemetry.dart';
 import '../../widget/contract/action_sink.dart';
 
@@ -34,9 +35,17 @@ final class ActionHost implements ActionSink {
 
   EngineHost? host;
 
-  String? screenId;
+  String? get screenId => _observer.screenId;
+  set screenId(String? value) => _observer.screenId = value;
 
-  String? screenViewId;
+  String? get screenViewId => _observer.screenViewId;
+  set screenViewId(String? value) => _observer.screenViewId = value;
+
+  /// Telemetry is the observer's job — the executor only marks start/end.
+  final CommandObserver _observer = CommandObserver(
+    screenId: null,
+    screenViewId: null,
+  );
 
   final Set<String> _inflight = {};
 
@@ -208,9 +217,12 @@ final class ActionHost implements ActionSink {
         var ok = true;
         final params = ExpressionEvaluator.resolveMap(command.params, readEnv);
         final ctx = _context(params, invocation, branchOrigin);
-        final measurement = command.type == 'net'
-            ? await _startMeasurement(command, params, invocation, branchOrigin)
-            : _failureMeasurement(command, params, invocation, branchOrigin);
+        final pending = _observer.begin(command, params, invocation, branchOrigin);
+        // Await only when measurement is async (reserved span) — an
+        // unconditional await would break synchronous `set` semantics.
+        final measurement = pending is CommandMeasurement
+            ? pending
+            : await pending;
         try {
           data = await DriverRegistry.resolve(command.type).run(ctx);
           measurement.complete(outcome: _disposed ? 'cancelled' : 'success');
@@ -283,22 +295,16 @@ final class ActionHost implements ActionSink {
     Environment readEnv,
     ActionInvocation invocation,
   ) async {
-    _CommandMeasurement? measurement;
+    CommandMeasurement? measurement;
     try {
       final params = ExpressionEvaluator.resolveMap(command.params, readEnv);
-      measurement = command.type == 'net'
-          ? await _startMeasurement(
-              command,
-              params,
-              invocation,
-              ActionOrigin.background,
-            )
-          : _failureMeasurement(
-              command,
-              params,
-              invocation,
-              ActionOrigin.background,
-            );
+      final pending = _observer.begin(
+        command,
+        params,
+        invocation,
+        ActionOrigin.background,
+      );
+      measurement = pending is CommandMeasurement ? pending : await pending;
       final ctx = _context(params, invocation, ActionOrigin.background);
       await DriverRegistry.resolve(command.type).run(ctx);
       measurement.complete(outcome: _disposed ? 'cancelled' : 'success');
@@ -309,52 +315,6 @@ final class ActionHost implements ActionSink {
       );
       _reportBackground(error, stack);
     }
-  }
-
-  Future<_CommandMeasurement> _startMeasurement(
-    Command command,
-    Map<String, Object?> params,
-    ActionInvocation invocation,
-    String? branchOrigin,
-  ) async {
-    final properties = CommandTelemetry.properties(
-      type: command.type,
-      params: params,
-      invocation: invocation,
-      branchOrigin: branchOrigin,
-    );
-    final reservation = await Telemetry.reserve(
-      'command',
-      screenId: screenId,
-      screenViewId: screenViewId,
-      correlationId: invocation.invocationId,
-      properties: properties,
-    );
-    return _CommandMeasurement(reservation: reservation, recordFailure: null);
-  }
-
-  _CommandMeasurement _failureMeasurement(
-    Command command,
-    Map<String, Object?> params,
-    ActionInvocation invocation,
-    String? branchOrigin,
-  ) {
-    final properties = CommandTelemetry.properties(
-      type: command.type,
-      params: params,
-      invocation: invocation,
-      branchOrigin: branchOrigin,
-    );
-    return _CommandMeasurement(
-      reservation: null,
-      recordFailure: (completion) => Telemetry.record(
-        'command',
-        screenId: screenId,
-        screenViewId: screenViewId,
-        correlationId: invocation.invocationId,
-        properties: {...properties, ...completion},
-      ),
-    );
   }
 
   static String _outcome(Object error) {
@@ -427,55 +387,3 @@ final class ActionHost implements ActionSink {
   }
 }
 
-/// Extracts command telemetry without exposing parameter values.
-///
-/// Command vocabulary is implementation-owned (the `net` command's request
-/// fields belong to the app's [NetworkClient]), so the engine records only
-/// shapes — the sorted parameter key list — never values. Apps that want
-/// richer request telemetry own the place to add it: their client.
-abstract final class CommandTelemetry {
-  /// Builds command properties from engine-known structure only.
-  static Map<String, Object?> properties({
-    required String type,
-    required Map<String, Object?> params,
-    required ActionInvocation invocation,
-    required String? branchOrigin,
-  }) {
-    return {
-      'type': type,
-      'origin': invocation.origin,
-      if (branchOrigin != null) 'branch_origin': branchOrigin,
-      'invocation_id': invocation.invocationId,
-      'param_keys': params.keys.toList()..sort(),
-    };
-  }
-}
-
-final class _CommandMeasurement {
-  _CommandMeasurement({required this.reservation, required this.recordFailure})
-    : _stopwatch = Stopwatch()..start();
-
-  final TelemetryReservation? reservation;
-  final void Function(Map<String, Object?> completion)? recordFailure;
-  final Stopwatch _stopwatch;
-  bool _completed = false;
-
-  void complete({required String outcome, String? errorCode}) {
-    if (_completed) return;
-    _completed = true;
-    _stopwatch.stop();
-    final completion = <String, Object?>{
-      'outcome': outcome,
-      if (errorCode != null) 'error_code': errorCode,
-      'duration_ms': _stopwatch.elapsedMilliseconds,
-    };
-    try {
-      reservation?.complete(properties: completion);
-      if (reservation == null && outcome != 'success') {
-        recordFailure?.call(completion);
-      }
-    } catch (_) {
-      // Telemetry is observational and may never alter driver control flow.
-    }
-  }
-}

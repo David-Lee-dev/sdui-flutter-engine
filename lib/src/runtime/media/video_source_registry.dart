@@ -1,4 +1,4 @@
-import 'package:sdui_engine/src/dependency/video_source.dart';
+import 'package:sdui_engine/src/contract/video_source.dart';
 
 import '../../runtime/media/asset_video_source.dart';
 

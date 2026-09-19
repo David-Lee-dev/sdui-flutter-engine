@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/dependency/telemetry_sink.dart';
+import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/bound_builder.dart';
 

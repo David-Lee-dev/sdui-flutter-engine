@@ -1,4 +1,4 @@
-import '../dependency/telemetry_sink.dart';
+import '../contract/telemetry_sink.dart';
 
 /// Default [TelemetrySink] — the bare minimum: observe nothing.
 ///

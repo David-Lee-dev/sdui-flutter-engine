@@ -48,7 +48,7 @@ final class _FakeService extends SduiService {
   void onRegister() => registered += 1;
 }
 
-final class _FakeServiceCommand implements ExternalCommand {
+final class _FakeServiceCommand extends ExternalCommand {
   @override
   String get type => 'fake_service_cmd';
 

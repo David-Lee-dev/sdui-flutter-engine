@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/dependency/secure_storage.dart';
+import 'package:sdui_engine/src/contract/secure_storage.dart';
 import 'package:sdui_engine/src/runtime/driver/secure_storage_driver.dart';
 import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/environment/state_writer.dart';

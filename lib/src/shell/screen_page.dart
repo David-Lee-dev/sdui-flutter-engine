@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../dependency/screen_loader.dart';
+import '../contract/screen_loader.dart';
 import '../engine_runner.dart';
 import '../runtime/engine_host.dart';
-import '../runtime/telemetry/telemetry.dart';
+import '../runtime/engine_presentation.dart';
+import '../runtime/telemetry/screen_visit.dart';
 import 'sdui_state.dart';
 
 /// Builds the widget shown while a screen's template is loading.
@@ -71,17 +72,11 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     future.then(
       (screen) {
         if (!mounted || !identical(future, _pending)) return;
-        final viewId = Telemetry.newId();
-        Telemetry.record(
-          'screen_view',
-          screenId: widget.screenId,
-          screenViewId: viewId,
-          properties: {'surface_type': 'screen'},
-        );
+        final visit = ScreenVisit.begin(widget.screenId);
         setState(() {
           _loaded = screen;
           _error = null;
-          _screenViewId = viewId;
+          _screenViewId = visit.id;
         });
       },
       onError: (Object error, StackTrace stack) {
@@ -123,6 +118,7 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
 
   Widget _loading(BuildContext context) =>
       widget.loadingBuilder?.call(context) ??
+      EnginePresentation.value.loadingBuilder?.call(context) ??
       const Scaffold(body: Center(child: CircularProgressIndicator()));
 
   Widget _errorView(BuildContext context, Object error) =>

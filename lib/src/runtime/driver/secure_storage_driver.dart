@@ -1,4 +1,4 @@
-import 'package:sdui_engine/src/dependency/secure_storage.dart';
+import 'package:sdui_engine/src/contract/secure_storage.dart';
 
 import '_base.dart';
 

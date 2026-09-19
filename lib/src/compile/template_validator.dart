@@ -16,7 +16,6 @@ import 'invalid_template_exception.dart';
 /// properties remain nullable at runtime. Validation covers inactive branches so
 /// template defects cannot remain hidden until a branch is selected.
 final class TemplateValidator {
-  const TemplateValidator._();
 
   /// The recognized `_loop._wrap` strategies.
   static const Set<String> _knownWraps = {
@@ -56,23 +55,22 @@ final class TemplateValidator {
   ///
   /// Throws [InvalidTemplateException] for undeclared references, invalid action
   /// references, unknown catalog entries, or incompatible structural contracts.
-  /// The catalog for the current [validate] call. Compilation is synchronous
-  /// and single-isolate, so a call-scoped static avoids threading the catalog
-  /// through every private helper.
-  static LanguageCatalog _catalog = LanguageCatalog(
-    widgets: const {},
-    commands: const {},
-  );
+  /// One validation run's catalog — an instance per [validate] call, so
+  /// there is no mutable static and no reentrancy assumption.
+  const TemplateValidator._(this._catalog);
+
+  final LanguageCatalog _catalog;
 
   static void validate(
     Directive root,
     Set<String> declared, {
     LanguageCatalog? catalog,
   }) {
-    _catalog = catalog ?? LanguageCatalog.fromRegistries();
     // Root data is writable through the root scope. An engine root is mounted
     // under a box parent, so a bare sliver is structurally invalid.
-    _walk(root, declared, declared, const {}, LayoutProtocol.box);
+    TemplateValidator._(
+      catalog ?? LanguageCatalog.fromRegistries(),
+    )._walk(root, declared, declared, const {}, LayoutProtocol.box);
   }
 
   /// Validates one directive within its lexical environment.
@@ -80,7 +78,7 @@ final class TemplateValidator {
   /// [declared] controls reads, [writable] controls direct bindings, [actions]
   /// contains visible named actions, and [expected] is the parent's required
   /// layout protocol. Frame variables are readable but not writable.
-  static void _walk(
+  void _walk(
     Directive directive,
     Set<String> declared,
     Set<String> writable,
@@ -197,7 +195,7 @@ final class TemplateValidator {
   /// A `null` expectation permits mixed protocols. Mismatches throw before
   /// Flutter can raise a render assertion outside node isolation. [what]
   /// identifies the producer in diagnostics.
-  static void _checkProtocol(
+  void _checkProtocol(
     String path,
     String what,
     LayoutProtocol produced,
@@ -219,7 +217,7 @@ final class TemplateValidator {
   /// Input callbacks write directly and execute outside node error isolation, so
   /// invalid literal keys must fail at mount time. Nonliteral bind values cannot
   /// be checked statically and are skipped.
-  static void _checkBind(PlainDirective node, Set<String> writable) {
+  void _checkBind(PlainDirective node, Set<String> writable) {
     final bind = node.props['bind'];
     if (bind is! String || bind.isEmpty) return;
     if (!writable.contains(bind)) {
@@ -235,7 +233,7 @@ final class TemplateValidator {
   ///
   /// The building layer reads only the child form supported by the specification;
   /// rejecting mismatches prevents unsupported children from being discarded.
-  static void _checkChildShape(WidgetSchema schema, PlainDirective node) {
+  void _checkChildShape(WidgetSchema schema, PlainDirective node) {
     final hasChildren = node.children.isNotEmpty;
     final hasSlots = node.slots.isNotEmpty;
     // Exhaustiveness requires every new widget specification to define its child
@@ -274,7 +272,7 @@ final class TemplateValidator {
   ///
   /// Resolving references before mount prevents misspelled actions from failing
   /// only when the user triggers an interaction.
-  static void _checkInteractions(
+  void _checkInteractions(
     Map<String, String> on,
     Set<String> actions,
     String path,
@@ -306,7 +304,7 @@ final class TemplateValidator {
   /// The built-in `set` command may write only the defining scope's state. Handler
   /// shadows mirror runtime exactly: `_then` adds `$data`, `_error` adds
   /// `$error`, and `_always` adds neither; all are read-only.
-  static void _checkActions(
+  void _checkActions(
     Map<String, Action> actions,
     Set<String> declared,
     Set<String> writable,
@@ -319,7 +317,7 @@ final class TemplateValidator {
     }
   }
 
-  static void _checkFlow(
+  void _checkFlow(
     Flow flow,
     Set<String> declared,
     Set<String> writable,
@@ -333,7 +331,7 @@ final class TemplateValidator {
   }
 
   /// Rejects `_motion` names absent from the catalog (when it enumerates them).
-  static void _checkMotions(PlainDirective node) {
+  void _checkMotions(PlainDirective node) {
     final known = _catalog.motions;
     if (known == null) return;
     for (final motion in node.motions) {
@@ -348,7 +346,7 @@ final class TemplateValidator {
 
   /// Rejects expression function calls absent from the catalog (when it
   /// enumerates them).
-  static void _checkCalls(Set<String> calls, String path) {
+  void _checkCalls(Set<String> calls, String path) {
     final known = _catalog.functions;
     if (known == null) return;
     for (final name in calls) {
@@ -361,7 +359,7 @@ final class TemplateValidator {
     }
   }
 
-  static void _checkCommand(
+  void _checkCommand(
     Command command,
     Set<String> declared,
     Set<String> writable,
@@ -408,7 +406,7 @@ final class TemplateValidator {
   }
 
   /// Throws for any root in [refs] that is absent from [declared].
-  static void _check(Set<String> refs, Set<String> declared, String path) {
+  void _check(Set<String> refs, Set<String> declared, String path) {
     for (final root in refs) {
       if (!declared.contains(root)) {
         throw InvalidTemplateException(

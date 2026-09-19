@@ -144,46 +144,63 @@ void main() {
 
     test('layer edges only point in the allowed direction', () {
       final graph = buildGraph();
-      /// First matching prefix wins; files outside every entry (barrels,
-      /// engine root) are unrestricted importers but still valid targets.
-      String? layerOf(String path) {
+
+      /// First matching prefix wins. Fail-closed: every file under lib/ must
+      /// resolve to a known layer or the explicit barrel allowlist — a new
+      /// directory or a rename fails the suite instead of silently leaving
+      /// enforcement.
+      const barrels = {'lib/sdui_engine.dart', 'lib/testing.dart'};
+      String layerOf(String path) {
         const layers = [
           'lib/src/shell/',
           'lib/src/impl/',
           'lib/src/compile/',
           'lib/src/runtime/',
           'lib/src/ir/',
-          'lib/src/dependency/',
           'lib/src/contract/',
+          'lib/src/presentation/',
         ];
         for (final layer in layers) {
           if (path.startsWith(layer)) return layer;
         }
-        if (path == 'lib/src/engine.dart' || path == 'lib/src/engine_runner.dart') {
+        if (path == 'lib/src/engine.dart' ||
+            path == 'lib/src/engine_runner.dart') {
           return 'root';
         }
-        return null;
+        if (barrels.contains(path)) return 'barrel';
+        fail('unclassified file (add it to a layer or the allowlist): $path');
       }
 
       /// What each layer may import (its own layer is always allowed).
-      /// `root` = engine.dart / engine_runner.dart, the top-level assemblers.
+      /// `root` = engine.dart / engine_runner.dart, the top-level assemblers;
+      /// `barrel` = the two public entry points, unrestricted importers.
       const allowed = <String, Set<String>>{
+        'barrel': {
+          'root',
+          'lib/src/shell/',
+          'lib/src/impl/',
+          'lib/src/compile/',
+          'lib/src/runtime/',
+          'lib/src/ir/',
+          'lib/src/contract/',
+          'lib/src/presentation/',
+        },
         'lib/src/shell/': {
           'root',
           'lib/src/runtime/',
           'lib/src/compile/',
           'lib/src/ir/',
-          'lib/src/dependency/',
           'lib/src/contract/',
+          'lib/src/presentation/',
           'lib/src/impl/',
         },
-        'lib/src/impl/': {'lib/src/dependency/'},
+        'lib/src/impl/': {'lib/src/contract/', 'lib/src/presentation/'},
         'root': {
           'lib/src/compile/',
           'lib/src/runtime/',
           'lib/src/ir/',
-          'lib/src/dependency/',
           'lib/src/contract/',
+          'lib/src/presentation/',
         },
         // runtime compiles on device today; engine_subtree keeps it from
         // importing the root runner. TODO(catalog-split): drop compile/ here
@@ -191,24 +208,27 @@ void main() {
         'lib/src/runtime/': {
           'lib/src/compile/',
           'lib/src/ir/',
-          'lib/src/dependency/',
           'lib/src/contract/',
+          'lib/src/presentation/',
+          'lib/src/impl/',
         },
         'lib/src/compile/': {'lib/src/ir/'},
         'lib/src/ir/': <String>{},
-        'lib/src/dependency/': <String>{},
         'lib/src/contract/': <String>{},
+        // Presentation values may *name* contract types (which TapFeedback
+        // to use) — pointing at a contract is a value, not a dependency
+        // inversion. The reverse stays forbidden.
+        'lib/src/presentation/': {'lib/src/contract/'},
       };
 
       final violations = <String>[];
       graph.forEach((path, imports) {
         final from = layerOf(path);
-        if (from == null) return; // barrels: unrestricted importers
         final permitted = allowed[from];
         expect(permitted, isNotNull, reason: 'no rule for layer $from');
         for (final target in imports) {
           final to = layerOf(target);
-          if (to == null || to == from) continue;
+          if (to == from) continue;
           if (!permitted!.contains(to)) {
             violations.add('$path -> $target  ($from may not import $to)');
           }

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/dependency/network_client.dart';
+import 'package:sdui_engine/src/contract/network_client.dart';
 import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_error.dart';
 import 'package:sdui_engine/src/runtime/driver/net_driver.dart';

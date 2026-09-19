@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../engine_presentation.dart';
 import 'engine_metrics.dart';
 import 'styled_border.dart';
 import '../widget/util/icon_catalog.dart';
@@ -329,9 +330,19 @@ final class PropsResolver {
     return matrix;
   }
 
+  /// Resolves a template `style` map, merged over the boot-injected
+  /// typography defaults ([SduiTypography]) — template values win field by
+  /// field, so the server keeps full authority while the app supplies its
+  /// brand font and baseline once.
   static TextStyle? textStyle(BuildContext context, Object? raw) {
-    if (raw is! Map) return null;
-    return TextStyle(
+    final typography = EnginePresentation.value.typography;
+    final base = (typography.baseStyle ?? const TextStyle()).copyWith(
+      fontFamily: typography.fontFamily,
+    );
+    final hasDefaults =
+        typography.baseStyle != null || typography.fontFamily != null;
+    if (raw is! Map) return hasDefaults ? base : null;
+    return base.merge(TextStyle(
       fontSize: size(context, raw['font_size']),
       color: color(raw['color']),
       fontWeight: fontWeight(raw['font_weight']),
@@ -347,7 +358,7 @@ final class PropsResolver {
       backgroundColor: color(raw['background_color']),
       shadows: textShadows(context, raw['shadows']),
       fontFamily: text(raw['font_family']),
-    );
+    ));
   }
 
   static InputBorder? inputBorder(BuildContext context, Object? raw) {

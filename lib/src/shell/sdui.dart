@@ -1,16 +1,16 @@
 import 'package:flutter/foundation.dart' show ValueKey;
 import 'package:go_router/go_router.dart';
 
-import '../dependency/network_client.dart';
+import '../contract/network_client.dart';
 import '../shell/sdui_service.dart';
-import '../dependency/image_source.dart';
-import '../dependency/app_storage.dart';
-import '../dependency/screen_loader.dart';
-import '../dependency/secure_storage.dart';
-import '../dependency/telemetry_sink.dart';
-import '../dependency/video_source.dart';
+import '../contract/image_source.dart';
+import '../contract/app_storage.dart';
+import '../contract/screen_loader.dart';
+import '../contract/secure_storage.dart';
+import '../contract/telemetry_sink.dart';
+import '../contract/video_source.dart';
 import '../runtime/motion/_base.dart';
-import '../runtime/presentation.dart';
+import '../presentation/presentation.dart';
 import 'screen_page.dart';
 import '../impl/noop_telemetry_sink.dart';
 import '../engine.dart';
@@ -50,16 +50,22 @@ final class Sdui {
     return loader;
   }
 
-  /// Initializes the engine with the app's dependency implementations.
+  /// Initializes the engine with the app's contract implementations.
   ///
-  /// Every `dependency/` seam is required — where templates, data, storage,
-  /// and media come from is the app's to define, and the engine refuses to
-  /// guess it. Without them the app does not start. [telemetry] alone is
-  /// optional: omitted, the [NoopTelemetrySink] observes nothing.
+  /// Every required seam ([ScreenLoader], [NetworkClient], media sources,
+  /// storage) must be injected — where templates, data, storage, and media
+  /// come from is the app's to define, and the engine refuses to guess it.
+  /// Without them the app does not start. Optional seams carry package
+  /// defaults: [telemetry] falls back to the no-op sink,
+  /// [presentation]'s tap feedback to the stock ink ripple.
   ///
-  /// The engine's default system drivers ([HapticDriver] for `sys_haptic`)
-  /// register automatically, so [drivers] is only for *additional* app-owned
-  /// drivers (a driver with the same type replaces the default).
+  /// **Drivers are sealed.** They are the engine's internal execution tools
+  /// — they move with the engine, and apps cannot register or replace them.
+  /// Needing a new driver means proposing a new engine capability for every
+  /// consumer of this package (a contribution), not an app-side extension.
+  /// App-specific capability ships as [services] ([SduiService] bundling
+  /// [ExternalCommand]s): each command `type` becomes a template-callable
+  /// `{ _type: ... }` and the engine routes to it knowing nothing else.
   static void initialize({
     required ScreenLoader screenLoader,
     required NetworkClient networkClient,

@@ -1,15 +1,16 @@
 import 'contract/external_command.dart';
-import 'dependency/image_source.dart';
-import 'dependency/app_storage.dart';
-import 'dependency/secure_storage.dart';
-import 'dependency/telemetry_sink.dart';
-import 'dependency/video_source.dart';
+import 'contract/image_source.dart';
+import 'contract/app_storage.dart';
+import 'contract/secure_storage.dart';
+import 'contract/telemetry_sink.dart';
+import 'contract/video_source.dart';
 import 'runtime/driver/app_storage_driver.dart';
 import 'runtime/driver/secure_storage_driver.dart';
-import 'dependency/network_client.dart';
+import 'contract/network_client.dart';
 import 'runtime/driver/net_driver.dart';
 import 'runtime/motion/_base.dart';
-import 'runtime/presentation.dart';
+import 'presentation/presentation.dart';
+import 'runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/compile/schema/command_schema.dart';
 import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
@@ -36,10 +37,10 @@ final class Engine {
 
   /// Installs application services and freezes the process-wide engine state.
   ///
-  /// App-configured drivers keep platform services outside the engine's
-  /// dependency surface.
+  /// Drivers are sealed engine internals — apps extend the template language
+  /// through [externalCommands]/services, custom [widgets], [motions], and
+  /// [functions], never by registering drivers.
   ///
-  /// @param drivers Drivers to install before the engine catalog is frozen.
   /// @param telemetry Optional app-owned telemetry delivery boundary.
   /// @param widgets App-owned widget specs keyed by their template `_type`.
   ///   Use this for widgets that need an SDK the engine must not depend on —

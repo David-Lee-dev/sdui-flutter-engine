@@ -10,7 +10,7 @@ import 'package:sdui_engine/src/ir/expression.dart';
 import 'package:sdui_engine/src/runtime/wrapper/interaction.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scroll_event_wrapper.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/bound_builder.dart';
-import 'package:sdui_engine/src/runtime/wrapper/tap_effect.dart';
+import 'package:flutter/material.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
 
@@ -146,7 +146,7 @@ void main() {
         expect(interaction.node.path, '');
       });
 
-      testWidgets('tap은 기본으로 리플(TapEffect)을 보인다', (tester) async {
+      testWidgets('tap은 기본으로 잉크 리플(InkWell)을 보인다', (tester) async {
         await tester.pumpWidget(
           Directionality(
             textDirection: TextDirection.ltr,
@@ -161,7 +161,7 @@ void main() {
             ),
           ),
         );
-        expect(find.byType(TapEffect), findsOneWidget);
+        expect(find.byType(InkWell), findsOneWidget);
       });
 
       testWidgets('_on tap ripple:false 면 피드백 없이 탭만 동작한다', (tester) async {
@@ -181,7 +181,7 @@ void main() {
             ),
           ),
         );
-        expect(find.byType(TapEffect), findsNothing);
+        expect(find.byType(InkWell), findsNothing);
         expect(find.byType(GestureDetector), findsWidgets);
       });
 

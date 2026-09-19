@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/dependency/video_source.dart';
+import 'package:sdui_engine/src/contract/video_source.dart';
 import 'package:sdui_engine/src/runtime/media/asset_video_source.dart';
 import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
 import 'package:video_player/video_player.dart';

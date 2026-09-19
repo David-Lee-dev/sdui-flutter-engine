@@ -5,7 +5,7 @@ import 'package:sdui_engine/src/runtime/driver/driver_error.dart';
 import 'package:sdui_engine/src/runtime/driver/external_driver.dart';
 import 'package:sdui_engine/src/runtime/environment/state_writer.dart';
 
-class _FakeCommand implements ExternalCommand {
+class _FakeCommand extends ExternalCommand {
   _FakeCommand({this.type = 'external', this.result, this.error});
 
   @override
@@ -138,7 +138,7 @@ void main() {
   });
 }
 
-final class _HookCommand implements ExternalCommand {
+final class _HookCommand extends ExternalCommand {
   const _HookCommand(this._run);
   final Future<Object?> Function(CommandInvocation) _run;
   @override

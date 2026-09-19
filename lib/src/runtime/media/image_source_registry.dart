@@ -1,4 +1,4 @@
-import 'package:sdui_engine/src/dependency/image_source.dart';
+import 'package:sdui_engine/src/contract/image_source.dart';
 
 import '../../runtime/media/asset_image_source.dart';
 

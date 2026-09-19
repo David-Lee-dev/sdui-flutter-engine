@@ -117,6 +117,9 @@ final class DriverRegistry {
   /// Returns the driver for [type].
   ///
   /// Throws [StateError] when no driver is registered for [type].
+  /// Returns the driver for [type], or `null` when none is registered.
+  static Driver? resolveOrNull(String type) => _drivers[type];
+
   static Driver resolve(String type) {
     final driver = _drivers[type];
     if (driver == null) {

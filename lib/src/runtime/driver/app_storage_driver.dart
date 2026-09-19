@@ -1,4 +1,4 @@
-import 'package:sdui_engine/src/dependency/app_storage.dart';
+import 'package:sdui_engine/src/contract/app_storage.dart';
 
 import '_base.dart';
 

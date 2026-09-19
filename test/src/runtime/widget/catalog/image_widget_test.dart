@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/primitive/image_widget.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
-import 'package:sdui_engine/src/dependency/image_source.dart';
+import 'package:sdui_engine/src/contract/image_source.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
 
 class _CaptureImageSource implements ImageSource {

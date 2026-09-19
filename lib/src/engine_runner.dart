@@ -6,6 +6,7 @@ import 'package:sdui_engine/src/ir/model/scope_config.dart';
 
 import 'runtime/driver/driver_registry.dart';
 import 'runtime/engine_host.dart';
+import 'runtime/engine_presentation.dart';
 import 'runtime/engine_subtree.dart';
 import 'runtime/engine_registries.dart';
 import 'engine.dart';
@@ -366,12 +367,14 @@ class _EngineRunnerState extends State<EngineRunner>
     // validating: the validator reads them but no longer touches the factory.
     WidgetFactory.ensureRegistered();
     DriverRegistry.ensureRegistered();
+    final catalog = Engine.catalog;
+    if (catalog == null) _warnUninitialized();
     final result = Compile.build(
       widget.template,
       widget.rootData.keys.toSet(),
       // The boot-time catalog also validates motion/function names; a bare
       // test mount (no Engine.initialize) falls back to a registry snapshot.
-      catalog: Engine.catalog,
+      catalog: catalog,
     );
     if (kDebugMode) EngineLog.screen.compiled(result.nodeCount, sw!.elapsed);
     return result.directive;
@@ -491,16 +494,34 @@ class _EngineRunnerState extends State<EngineRunner>
 
   /// Builds the user-facing fallback for a mount-level compilation failure.
   ///
-  /// Detailed diagnostics are reported by [_tryCompile]. Defers to
-  /// [EngineRunner.errorBuilder] when the app supplied one; otherwise falls
-  /// back to bare text so the engine still renders standalone.
+  /// Warned once per process: compiling without [Engine.initialize] means a
+  /// registry-snapshot catalog — motion/function validation is off and the
+  /// `net` command has no client. Intended only for bare test mounts; in an
+  /// app this is a boot-order bug, so it must not stay silent.
+  static bool _warnedUninitialized = false;
+
+  static void _warnUninitialized() {
+    if (_warnedUninitialized) return;
+    _warnedUninitialized = true;
+    EngineLog.warn(
+      'EngineRunner mounted without Engine.initialize — motion/function '
+      'validation is skipped and no NetworkClient is configured. Call '
+      'Sdui.initialize (or Engine.initialize) before mounting screens.',
+    );
+  }
+
+  /// Detailed diagnostics are reported by [_tryCompile]. Precedence:
+  /// mount-local [EngineRunner.errorBuilder], then the boot-injected
+  /// [SduiPresentation.screenErrorBuilder], then a neutral text fallback so
+  /// the engine still renders standalone.
   Widget _errorBoundary(BuildContext context) {
-    final builder = widget.errorBuilder;
+    final builder =
+        widget.errorBuilder ?? EnginePresentation.value.screenErrorBuilder;
     if (builder != null) return builder(context, _compileError!);
     return const Center(
       child: Padding(
         padding: EdgeInsets.all(16),
-        child: Text('화면을 불러올 수 없어요.', textAlign: TextAlign.center),
+        child: Text('This screen could not be loaded.', textAlign: TextAlign.center),
       ),
     );
   }

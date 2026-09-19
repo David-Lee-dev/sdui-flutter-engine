@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:sdui_engine/src/dependency/video_source.dart';
+import 'package:sdui_engine/src/contract/video_source.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../util/props_resolver.dart';

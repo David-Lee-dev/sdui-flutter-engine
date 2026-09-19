@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:sdui_engine/src/dependency/image_source.dart';
+import 'package:sdui_engine/src/contract/image_source.dart';
 
 import '../../../util/props_resolver.dart';
 import '../../../media/image_source_registry.dart';

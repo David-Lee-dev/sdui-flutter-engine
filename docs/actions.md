@@ -68,6 +68,8 @@ The request fields in these examples (`op`, `params`, `path`, ...) are applicati
 
 ## Command telemetry
 
-When the action host emits a `command` telemetry event, it records engine-known structure only: `type`, `origin`, optional `branch_origin`, `invocation_id`, and a sorted `param_keys` list. Completion adds `outcome`, `duration_ms`, and optional `error_code`. Parameter values are never included, and there are no special `query_id` or network-variable fields; richer request telemetry belongs in the application `NetworkClient`.
+`CommandObserver` records engine-known structure only: `type`, `origin`, optional `branch_origin`, `invocation_id`, and a sorted `param_keys` list. Parameter values are never included, and there are no special `query_id` or network-variable fields; richer request telemetry belongs in the application `NetworkClient`.
+
+Whether a command gets a *reserved, latency-measured* span is declared, not type-checked: `Driver.measured` (the engine's `net` command is `true`) or, for app commands, `ExternalCommand.measured` opt-in. A measured command reserves the event before it runs and completes it with `outcome`, `duration_ms`, and optional `error_code` once it settles. An unmeasured command records only on failure — no duration, no success record — so a `command` event in a sink is never proof a command ran unless it was measured.
 
 See [interaction](interaction.md), [lifecycle](lifecycle.md), and [external commands](commands/external.md).

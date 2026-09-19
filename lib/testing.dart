@@ -14,7 +14,7 @@
 library;
 
 import 'src/compile/schema/widget_schema.dart';
-import 'src/dependency/network_client.dart';
+import 'src/contract/network_client.dart';
 import 'src/runtime/driver/net_driver.dart';
 import 'src/runtime/driver/driver_registry.dart';
 import 'src/runtime/media/image_source_registry.dart';
@@ -24,7 +24,7 @@ import 'src/runtime/telemetry/telemetry.dart';
 import 'src/runtime/util/function_registry.dart';
 import 'src/runtime/widget/factory.dart';
 import 'src/engine.dart';
-import 'src/runtime/presentation.dart';
+import 'src/runtime/engine_presentation.dart';
 import 'src/shell/sdui_state.dart';
 
 export 'sdui_engine.dart';

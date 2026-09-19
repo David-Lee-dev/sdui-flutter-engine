@@ -68,6 +68,11 @@ final class EngineLog {
     _tags = tags == null ? null : Set<String>.unmodifiable(tags);
   }
 
+  /// Writes a warning outside any tagged subsystem.
+  static void warn(String message, {String tag = 'engine'}) {
+    _emit(LogLevel.warn, tag, () => message);
+  }
+
   /// Writes a network diagnostic.
   static void net(String message) {
     _emit(LogLevel.debug, 'net', () => message);

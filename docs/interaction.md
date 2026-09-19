@@ -37,33 +37,19 @@ The short form is a non-empty action name. The object form allows exactly `do`, 
 
 ## Tap feedback
 
-A configured `tap` uses button semantics and a combined press-inset/tint effect unless `ripple: false`. Despite the option name, the effect is not a Material ripple: it blends a tint with `srcATop` and scales toward a fixed logical-pixel inset, clamped to 0.94–0.985. Double-tap and long-press share the detector. Without a tap handler, other gestures use a plain opaque `GestureDetector` and no button semantics.
+A configured `tap` uses button semantics and renders press feedback through the app's `TapFeedback` implementation unless `ripple: false`. Double-tap and long-press share the detector. Without a tap handler, other gestures use a plain opaque `GestureDetector` and no button semantics.
 
-The app can inject the effect's look and timing once at initialization:
+The engine owns *when* feedback applies (which nodes are tappable, the `ripple: false` opt-out, semantics); the app owns *how it looks*, through the [`TapFeedback`](../lib/src/contract/tap_feedback.dart) contract. The package default is `InkTapFeedback` — Flutter's stock ink ripple, wrapped in a transparent `Material` so it works without a Material ancestor. Replace it once at initialization:
 
 ```dart
 Sdui.initialize(
   // Required dependencies omitted.
   presentation: const SduiPresentation(
-    tapEffect: TapEffectStyle(
-      tint: Color(0xFF7C4DFF),
-      tintOpacity: 0.12,
-      inset: 4,
-      inDuration: Duration(milliseconds: 90),
-      outDuration: Duration(milliseconds: 200),
-    ),
+    tapFeedback: MyTapFeedback(),
   ),
 );
 ```
 
-`TapEffectStyle` defaults preserve the original engine behavior:
-
-| Field | Default | Purpose |
-| --- | --- | --- |
-| `tint` | `Color(0xFFEDEDED)` | Color blended over painted child pixels. |
-| `tintOpacity` | `0.10` | Tint strength at full press. |
-| `inset` | `3.5` | Target inset in logical pixels along the longest side. |
-| `inDuration` | `110 ms` | Press-in duration and cancellation return duration. |
-| `outDuration` | `240 ms` | Release duration. |
+`MyTapFeedback` implements `TapFeedback.wrap(context, child, {onTap, onLongPress, onDoubleTap})`, invoking the callbacks and rendering whatever press effect the app wants — the starter kit ships an advanced tint + press-inset implementation as a reference.
 
 Input events are rejected on non-bound widget specifications. Every referenced action must exist in the enclosing lexical action chain. See [actions](actions.md) and [state](state.md).

@@ -73,6 +73,14 @@ class CommandFailure implements Exception {
 /// to run the `_dismiss` flow, or [CommandFailure] to select a coded `_error`
 /// branch; any other thrown object is reported as an unexpected engine error.
 abstract class ExternalCommand {
+  const ExternalCommand();
+
+  /// Opt into a reserved, latency-measured telemetry span per run — the same
+  /// observability the engine's `net` command gets. Worth `true` for
+  /// long-running work (SDK calls, uploads); the default records failures
+  /// only.
+  bool get measured => false;
+
   /// The template-facing command type resolved by the driver registry.
   String get type;
 

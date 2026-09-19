@@ -1,5 +1,5 @@
-import '../dependency/screen_loader.dart';
-import '../runtime/presentation.dart';
+import '../contract/screen_loader.dart';
+import '../presentation/presentation.dart';
 
 /// Mutable facade state, held outside [Sdui] so that resetting it stays out
 /// of the app-facing API (`testing.dart` reaches it; the app barrel does not).
