@@ -27,7 +27,7 @@ _slots:
 
 ## Video
 
-See the full [`video` widget reference](widgets/custom/video.md). `VideoSource.controllerFor(VideoRequest(src))` returns an uninitialized `VideoPlayerController`; the widget initializes it, applies `loop` (default true), volume from `muted` (default false), and `autoplay` (default true).
+See the full [`video` widget reference](widgets/custom/video.md). `VideoSource.controllerFor(VideoRequest(src))` returns an uninitialized `SduiVideoController` — a plugin-free contract; the package's `PlayerVideoController` wraps `video_player` for sources that don't bring their own player. The widget initializes it, applies `loop` (default true), volume from `muted` (default false), and `autoplay` (default true).
 
 Until initialization succeeds, and after initialization failure, video renders an empty box. `aspect_ratio` overrides the controller ratio; `fit` defaults to `cover`. `show_controls: true` adds an opaque tap target that toggles play/pause. When looping is false, reaching the end dispatches `on_end` once per source/playback reset. Changing `src` disposes and replaces the controller; changing `loop` or `muted` updates the existing controller.
 

@@ -3,24 +3,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/contract/video_source.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/video_widget.dart';
 import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
-import 'package:video_player/video_player.dart';
 
-final class _FakeController extends VideoPlayerController {
-  _FakeController()
-    : super.networkUrl(Uri.parse('https://example.com/video.mp4'));
-
+/// Pure fake — the contract no longer forces a plugin type into tests.
+final class _FakeController implements SduiVideoController {
   bool? looping;
   double? volume;
   int playCalls = 0;
+  bool _playing = false;
 
   @override
-  Future<void> initialize() async {
-    value = value.copyWith(
-      duration: const Duration(seconds: 2),
-      size: const Size(320, 180),
-      isInitialized: true,
-    );
-  }
+  Future<void> initialize() async {}
 
   @override
   Future<void> setLooping(bool looping) async => this.looping = looping;
@@ -31,7 +23,32 @@ final class _FakeController extends VideoPlayerController {
   @override
   Future<void> play() async {
     playCalls++;
+    _playing = true;
   }
+
+  @override
+  Future<void> pause() async => _playing = false;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+
+  @override
+  VideoPlayback get playback => VideoPlayback(
+    width: 320,
+    height: 180,
+    duration: const Duration(seconds: 2),
+    position: Duration.zero,
+    isPlaying: _playing,
+  );
+
+  @override
+  Widget buildView() => const SizedBox.expand();
+
+  @override
+  Future<void> dispose() async {}
 }
 
 final class _RecordingVideoSource implements VideoSource {
@@ -39,7 +56,7 @@ final class _RecordingVideoSource implements VideoSource {
   final controllers = <_FakeController>[];
 
   @override
-  Future<VideoPlayerController> controllerFor(VideoRequest request) async {
+  Future<SduiVideoController> controllerFor(VideoRequest request) async {
     requests.add(request);
     final controller = _FakeController();
     controllers.add(controller);

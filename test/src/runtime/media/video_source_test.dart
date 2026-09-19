@@ -1,15 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/contract/video_source.dart';
+import 'package:sdui_engine/src/impl/player_video_controller.dart';
 import 'package:sdui_engine/src/runtime/media/asset_video_source.dart';
 import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
-import 'package:video_player/video_player.dart';
 
 final class _TestVideoSource implements VideoSource {
   const _TestVideoSource();
 
   @override
-  Future<VideoPlayerController> controllerFor(VideoRequest request) async =>
-      VideoPlayerController.networkUrl(Uri.parse(request.src));
+  Future<SduiVideoController> controllerFor(VideoRequest request) async =>
+      PlayerVideoController.network(Uri.parse(request.src));
 }
 
 void main() {

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:sdui_engine/src/contract/video_source.dart';
-import 'package:video_player/video_player.dart';
 
 import '../../../util/props_resolver.dart';
 import '../../contract/action_sink.dart';
@@ -82,7 +81,7 @@ class _VideoView extends StatefulWidget {
 }
 
 class _VideoViewState extends State<_VideoView> {
-  VideoPlayerController? _controller;
+  SduiVideoController? _controller;
   bool _initialized = false;
   bool _endDispatched = false;
   int _generation = 0;
@@ -134,7 +133,7 @@ class _VideoViewState extends State<_VideoView> {
     if (controller == null || widget.loop || onEnd == null || _endDispatched) {
       return;
     }
-    final value = controller.value;
+    final value = controller.playback;
     if (value.duration > Duration.zero &&
         value.position >= value.duration &&
         !value.isPlaying) {
@@ -175,7 +174,7 @@ class _VideoViewState extends State<_VideoView> {
   void _togglePlayback() {
     final controller = _controller;
     if (controller == null) return;
-    if (controller.value.isPlaying) {
+    if (controller.playback.isPlaying) {
       unawaited(controller.pause());
     } else {
       unawaited(controller.play());
@@ -192,15 +191,15 @@ class _VideoViewState extends State<_VideoView> {
   Widget build(BuildContext context) {
     final controller = _controller;
     if (!_initialized || controller == null) return const SizedBox.shrink();
-    final size = controller.value.size;
+    final playback = controller.playback;
     final video = AspectRatio(
-      aspectRatio: widget.aspectRatio ?? controller.value.aspectRatio,
+      aspectRatio: widget.aspectRatio ?? playback.aspectRatio,
       child: FittedBox(
         fit: widget.fit,
         child: SizedBox(
-          width: size.width,
-          height: size.height,
-          child: VideoPlayer(controller),
+          width: playback.width,
+          height: playback.height,
+          child: controller.buildView(),
         ),
       ),
     );

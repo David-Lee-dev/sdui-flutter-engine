@@ -173,6 +173,35 @@ void main() {
       expect(graph, isNotEmpty);
     });
 
+    test('contract stays free of third-party plugin types', () {
+      // A contract that names a plugin's concrete type couples every
+      // implementor to that plugin — carriers only. Allowed imports: dart:*,
+      // Flutter itself (Widget/VoidCallback are carriers), and contract
+      // siblings.
+      final files = Directory('lib/src/contract')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'));
+      final violations = <String>[];
+      for (final file in files) {
+        for (final match in importRe.allMatches(file.readAsStringSync())) {
+          final import = match.group(1)!;
+          final allowed =
+              import.startsWith('dart:') ||
+              import.startsWith('package:flutter/') ||
+              import.startsWith('package:sdui_engine/src/contract/') ||
+              !import.startsWith('package:') && !import.contains('../');
+          if (!allowed) violations.add('${file.path} -> $import');
+        }
+      }
+      expect(
+        violations,
+        isEmpty,
+        reason: 'plugin/implementation imports in contract/:\n'
+            '${violations.join('\n')}',
+      );
+    });
+
     test('layer edges only point in the allowed direction', () {
       final graph = buildGraph();
 

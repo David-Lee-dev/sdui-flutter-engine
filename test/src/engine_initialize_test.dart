@@ -15,7 +15,6 @@ import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
 import 'package:sdui_engine/src/runtime/motion/motion_factory.dart';
 import 'package:sdui_engine/src/runtime/util/function_registry.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
-import 'package:video_player/video_player.dart';
 
 class _ImageSource implements ImageSource {
   const _ImageSource();
@@ -28,7 +27,7 @@ class _VideoSource implements VideoSource {
   const _VideoSource();
 
   @override
-  Future<VideoPlayerController> controllerFor(VideoRequest request) =>
+  Future<SduiVideoController> controllerFor(VideoRequest request) =>
       throw UnimplementedError();
 }
 

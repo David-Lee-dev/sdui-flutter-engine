@@ -33,11 +33,13 @@ export 'src/shell/sdui_service.dart' show SduiService;
 export 'src/contract/secure_storage.dart' show SecureStorage;
 export 'src/contract/telemetry_sink.dart'
     show TelemetryEvent, TelemetryReservation, TelemetrySink;
-export 'src/contract/video_source.dart' show VideoRequest, VideoSource;
+export 'src/contract/video_source.dart'
+    show SduiVideoController, VideoPlayback, VideoRequest, VideoSource;
 
 // ── Optional-seam contracts and their package defaults ──────────────────────
 export 'src/runtime/media/asset_image_source.dart' show AssetImageSource;
 export 'src/runtime/media/asset_video_source.dart' show AssetVideoSource;
+export 'src/impl/player_video_controller.dart' show PlayerVideoController;
 export 'src/impl/noop_telemetry_sink.dart' show NoopTelemetrySink;
 
 // ── Extension points: services (commands), custom widgets, motions, functions

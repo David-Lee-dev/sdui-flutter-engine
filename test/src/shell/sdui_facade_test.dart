@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sdui_engine/testing.dart';
-import 'package:video_player/video_player.dart';
 
 final class _FakeImageSource implements ImageSource {
   @override
@@ -11,7 +10,7 @@ final class _FakeImageSource implements ImageSource {
 
 final class _FakeVideoSource implements VideoSource {
   @override
-  Future<VideoPlayerController> controllerFor(VideoRequest request) =>
+  Future<SduiVideoController> controllerFor(VideoRequest request) =>
       throw UnimplementedError();
 }
 
