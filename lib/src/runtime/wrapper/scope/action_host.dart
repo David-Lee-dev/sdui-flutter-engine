@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/contract/error_observer.dart';
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import '../../environment/_base.dart';

@@ -11,7 +11,6 @@ import 'package:sdui_engine/src/runtime/environment/scope/scope_environment.dart
 import 'package:sdui_engine/src/runtime/interpreter/building/node_guard.dart';
 import 'package:sdui_engine/src/runtime/log/engine_log.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/action_host.dart';
-import 'package:sdui_engine/src/runtime/widget/contract/action_sink.dart';
 
 final class _CollectingObserver extends SduiErrorObserver {
   final List<SduiError> errors = [];

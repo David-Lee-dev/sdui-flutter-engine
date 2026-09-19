@@ -9,8 +9,6 @@ import 'package:sdui_engine/src/presentation/modal_style.dart';
 import 'package:sdui_engine/src/presentation/presentation.dart';
 import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
-import 'package:sdui_engine/src/runtime/wrapper/interaction.dart';
-import 'package:sdui_engine/src/ir/model/interaction_events.dart';
 
 void main() {
   WidgetFactory.ensureRegistered();

@@ -1,6 +1,5 @@
-import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kDebugMode, setEquals;
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/widgets.dart' hide Action;
 
 import 'package:sdui_engine/src/ir/model/action/command.dart';
@@ -12,10 +11,9 @@ import '../../environment/scope/scope_environment.dart';
 import 'package:sdui_engine/src/contract/error_observer.dart';
 import '../../engine_errors.dart';
 import '../../engine_host.dart';
-import '../../log/engine_log.dart';
 import '../../telemetry/telemetry.dart';
-import '../../widget/contract/action_sink.dart';
 import 'action_host.dart';
+import 'lifecycle_runner.dart';
 import 'skeleton_scope.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
 
@@ -91,18 +89,11 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   late final ScopeEnvironment _env;
   late final ActionHost _host;
   late final ValueNotifier<bool> _loading;
+  late final LifecycleRunner _lifecycle;
 
   late Map<String, Object?> _acceptedSeed;
 
-  final List<Timer> _lifecycleTimers = [];
-
-  bool _lifecycleStarted = false;
-
   bool _observerRegistered = false;
-
-  bool _wasObscured = false;
-
-  bool _inBackground = false;
 
   @override
   void initState() {
@@ -117,6 +108,13 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
             (hook) => hook.trigger == LifecycleTrigger.mount,
           ),
     );
+    _lifecycle = LifecycleRunner(
+      host: _host,
+      isMounted: () => mounted,
+      onMountSettled: () => _loading.value = false,
+    )
+      ..hooks = widget.lifecycle
+      ..deferMountForSkeleton = widget.skeleton != null;
     if (widget.lifecycle.isNotEmpty) {
       WidgetsBinding.instance.addObserver(this);
       _observerRegistered = true;
@@ -136,164 +134,8 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
     );
 
     if (widget.lifecycle.isEmpty) return;
-    final visible = _isVisible();
-    if (!_lifecycleStarted) {
-      _lifecycleStarted = true;
-      _wasObscured = !visible;
-      _startLifecycle();
-      return;
-    }
-    if (!visible) {
-      _wasObscured = true;
-    } else if (_wasObscured) {
-      _wasObscured = false;
-      _fireByTrigger(LifecycleTrigger.remount);
-    }
+    _lifecycle.visibilityChanged(_isVisible());
   }
-
-  void _startLifecycle() {
-    final mountFutures = <Future<void>>[];
-    for (final hook in widget.lifecycle) {
-      if (kDebugMode &&
-          (hook.trigger == LifecycleTrigger.mount ||
-              hook.trigger == LifecycleTrigger.render)) {
-        EngineLog.scope.lifecycle(
-          hook.trigger.name,
-          hook.action,
-          delay: hook.delay > Duration.zero ? hook.delay : null,
-        );
-      }
-      switch (hook.trigger) {
-        case LifecycleTrigger.mount:
-          if (widget.skeleton == null) {
-            _fire(hook);
-          } else if (hook.delay > Duration.zero) {
-            // A delayed mount fire uses a cancellable timer (tracked for dispose)
-            // rather than Future.delayed, whose timer cannot be cancelled and
-            // would outlive a scope torn down before the delay elapses.
-            final completer = Completer<void>();
-            mountFutures.add(completer.future);
-            _lifecycleTimers.add(
-              Timer(hook.delay, () {
-                if (!mounted) {
-                  completer.complete();
-                  return;
-                }
-                _host
-                    .handleAwaitable(
-                      hook.action,
-                      invocation: _invocation(hook.trigger),
-                    )
-                    .whenComplete(completer.complete);
-              }),
-            );
-          } else {
-            mountFutures.add(
-              mounted
-                  ? _host.handleAwaitable(
-                      hook.action,
-                      invocation: _invocation(hook.trigger),
-                    )
-                  : Future.value(),
-            );
-          }
-        case LifecycleTrigger.render:
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _fire(hook);
-          });
-        case LifecycleTrigger.interval:
-          _startInterval(hook);
-        case LifecycleTrigger.remount:
-        case LifecycleTrigger.dispose:
-          break;
-      }
-    }
-    if (mountFutures.isNotEmpty) {
-      Future.wait(mountFutures).then((_) {
-        if (mounted) _loading.value = false;
-      });
-    }
-  }
-
-  void _reconcileLifecycle() {
-    for (final timer in _lifecycleTimers) {
-      timer.cancel();
-    }
-    _lifecycleTimers.clear();
-    _lifecycleStarted = false;
-    if (widget.lifecycle.isNotEmpty && !_observerRegistered) {
-      WidgetsBinding.instance.addObserver(this);
-      _observerRegistered = true;
-    } else if (widget.lifecycle.isEmpty && _observerRegistered) {
-      WidgetsBinding.instance.removeObserver(this);
-      _observerRegistered = false;
-    }
-    if (widget.lifecycle.isNotEmpty) {
-      _lifecycleStarted = true;
-      _startLifecycle();
-    }
-  }
-
-  void _fire(LifecycleHook hook) {
-    if (hook.delay > Duration.zero) {
-      _lifecycleTimers.add(
-        Timer(hook.delay, () {
-          if (mounted) {
-            _host.handle(hook.action, invocation: _invocation(hook.trigger));
-          }
-        }),
-      );
-    } else {
-      _host.handle(hook.action, invocation: _invocation(hook.trigger));
-    }
-  }
-
-  void _startInterval(LifecycleHook hook) {
-    final every = hook.every!;
-    // Interval ticks are high-frequency and low-signal, so each firing runs with
-    // engine logging suppressed — otherwise every tick floods the console with
-    // its action/state lines. Setup itself is not logged (see _startLifecycle).
-    _lifecycleTimers.add(
-      Timer(hook.delay, () {
-        if (!mounted) return;
-        EngineLog.runSilently(
-          () => _host.handle(
-            hook.action,
-            invocation: _invocation(LifecycleTrigger.interval),
-          ),
-        );
-        _lifecycleTimers.add(
-          Timer.periodic(every, (_) {
-            if (mounted) {
-              EngineLog.runSilently(
-                () => _host.handle(
-                  hook.action,
-                  invocation: _invocation(LifecycleTrigger.interval),
-                ),
-              );
-            }
-          }),
-        );
-      }),
-    );
-  }
-
-  void _fireByTrigger(LifecycleTrigger trigger) {
-    for (final hook in widget.lifecycle) {
-      if (hook.trigger == trigger) _fire(hook);
-    }
-  }
-
-  ActionInvocation _invocation(LifecycleTrigger trigger) => ActionInvocation(
-    invocationId: Telemetry.newId(),
-    origin: switch (trigger) {
-      LifecycleTrigger.mount => ActionOrigin.mount,
-      LifecycleTrigger.render => ActionOrigin.render,
-      LifecycleTrigger.remount => ActionOrigin.remount,
-      LifecycleTrigger.interval => ActionOrigin.interval,
-      LifecycleTrigger.dispose => ActionOrigin.dispose,
-    },
-  );
 
   bool _isVisible() {
     // ModalRoute also catches transparent routes; TickerMode catches nested
@@ -304,22 +146,25 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
-      _inBackground = true;
-    } else if (state == AppLifecycleState.resumed && _inBackground) {
-      _inBackground = false;
-      _fireByTrigger(LifecycleTrigger.remount);
-    }
-  }
+  void didChangeAppLifecycleState(AppLifecycleState state) =>
+      _lifecycle.appLifecycleChanged(state);
 
   @override
   void didUpdateWidget(Scope oldWidget) {
     super.didUpdateWidget(oldWidget);
     _host.actions = widget.actions;
     if (!identical(widget.lifecycle, oldWidget.lifecycle)) {
-      _reconcileLifecycle();
+      _lifecycle
+        ..hooks = widget.lifecycle
+        ..deferMountForSkeleton = widget.skeleton != null;
+      if (widget.lifecycle.isNotEmpty && !_observerRegistered) {
+        WidgetsBinding.instance.addObserver(this);
+        _observerRegistered = true;
+      } else if (widget.lifecycle.isEmpty && _observerRegistered) {
+        WidgetsBinding.instance.removeObserver(this);
+        _observerRegistered = false;
+      }
+      _lifecycle.reconcile();
     }
     final newSeed = widget.config.state;
     if (JsonValue.structurallyEqual(_acceptedSeed, newSeed)) return;
@@ -346,10 +191,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   @override
   void dispose() {
     // Dispose hooks need a live host; invalidation follows their dispatch.
-    _fireByTrigger(LifecycleTrigger.dispose);
-    for (final timer in _lifecycleTimers) {
-      timer.cancel();
-    }
+    _lifecycle.dispose();
     if (_observerRegistered) {
       WidgetsBinding.instance.removeObserver(this);
     }
