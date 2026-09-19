@@ -13,7 +13,7 @@
 /// app-facing API in `package:sdui_engine/sdui_engine.dart`.
 library;
 
-import 'src/compile/schema/widget_schema.dart';
+import 'src/compile/schema/widget_schema_registry.dart';
 import 'src/contract/network_client.dart';
 import 'src/runtime/driver/net_driver.dart';
 import 'src/runtime/driver/driver_registry.dart';

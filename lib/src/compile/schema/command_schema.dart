@@ -1,8 +1,14 @@
-/// Stores process-wide command types populated by the runtime driver registry.
+import 'builtin_language.dart';
+
+/// Stores process-wide command types.
+///
+/// Pre-seeded with [BuiltinLanguage.commands] — compilation needs no runtime
+/// to validate built-in commands. The runtime driver registry re-registers
+/// builtins (idempotent by parity) and adds app service command types.
 final class CommandSchemaRegistry {
   const CommandSchemaRegistry._();
 
-  static final Set<String> _types = {};
+  static final Set<String> _types = {...BuiltinLanguage.commands};
   static bool _frozen = false;
 
   /// Returns whether [type] is registered.
@@ -34,6 +40,8 @@ final class CommandSchemaRegistry {
   /// Clears every command type and unfreezes the registry.
   static void reset() {
     _frozen = false;
-    _types.clear();
+    _types
+      ..clear()
+      ..addAll(BuiltinLanguage.commands);
   }
 }

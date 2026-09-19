@@ -186,8 +186,9 @@ class _EngineRunnerState extends State<EngineRunner> {
   Directive _compile() {
     final sw = kDebugMode ? (Stopwatch()..start()) : null;
     if (kDebugMode) EngineLog.screen.compiling();
-    // Seed the compile-time schema registries from the runtime catalog before
-    // validating: the validator reads them but no longer touches the factory.
+    // Registries are pre-seeded with the built-in language; a mount still
+    // forces the runtime catalogs once so directly-registered customs (bare
+    // test mounts) are present in the snapshot below.
     WidgetFactory.ensureRegistered();
     DriverRegistry.ensureRegistered();
     final catalog = Engine.catalog;
@@ -195,9 +196,10 @@ class _EngineRunnerState extends State<EngineRunner> {
     final result = Compile.build(
       widget.template,
       widget.rootData.keys.toSet(),
-      // The boot-time catalog also validates motion/function names; a bare
-      // test mount (no Engine.initialize) falls back to a registry snapshot.
-      catalog: catalog,
+      // A bare mount (no Engine.initialize) validates against the live
+      // runtime snapshot, so directly-registered custom motions/functions
+      // still pass — only the frozen boot catalog is missing.
+      catalog: catalog ?? Engine.snapshotCatalog(),
     );
     if (kDebugMode) EngineLog.screen.compiled(result.nodeCount, sw!.elapsed);
     return result.directive;
@@ -301,8 +303,8 @@ class _EngineRunnerState extends State<EngineRunner> {
     if (_warnedUninitialized) return;
     _warnedUninitialized = true;
     EngineLog.warn(
-      'EngineRunner mounted without Engine.initialize — motion/function '
-      'validation is skipped and no NetworkClient is configured. Call '
+      'EngineRunner mounted without Engine.initialize — no NetworkClient is '
+      'configured and the catalog is an unfrozen snapshot. Call '
       'Sdui.initialize (or Engine.initialize) before mounting screens.',
     );
   }

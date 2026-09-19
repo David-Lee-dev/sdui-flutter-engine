@@ -74,7 +74,7 @@ _motion:
 | `spin` | `rotate(0→6.2832, linear, repeat, 1200ms)` |
 | `tada` | `scale(1→1.1, ease_in_out, repeat, reverse, 400ms)` + `rotate(-.05→.05, repeat, reverse, 200ms)` |
 
-When the app boots through `Sdui.initialize` or `Engine.initialize`, the boot catalog includes every registered atom and composite preset. `EngineRunner` validates `_motion` against that snapshot, so an unknown name is a compile-fatal `unknown motion` validator error before mounting. A bare mount without initialization uses the compile-registry fallback, which cannot enumerate motions and skips this check; an unresolved name can then fail during runtime resolution.
+When the app boots through `Sdui.initialize` or `Engine.initialize`, the boot catalog includes every registered atom and composite preset. `EngineRunner` validates `_motion` against that snapshot, so an unknown name is a compile-fatal `unknown motion` validator error before mounting. A bare mount without initialization falls back to `Engine.snapshotCatalog()`, a live enumeration of every registered motion name, so this check still applies — an unknown `_motion` fails the same way. A server-side or build-time compiler using `LanguageCatalog.builtin()` gets the built-in atom and preset names declared in `BuiltinLanguage`, with no runtime involved at all.
 
 ## Custom motion atoms
 

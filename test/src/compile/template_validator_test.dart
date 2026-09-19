@@ -8,6 +8,7 @@ import 'package:sdui_engine/src/compile/template_parser.dart';
 import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
 import 'package:sdui_engine/src/compile/schema/command_schema.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
+import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'package:sdui_engine/src/compile/template_validator.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
 
@@ -99,11 +100,27 @@ void main() {
         );
       });
 
-      test('카탈로그가 모션·함수를 열거하지 않으면(레지스트리 스냅샷) 그 검사는 건너뛴다', () {
-        // 기본 경로(catalog 생략) — 지금까지의 동작 보존.
+      test('catalog 생략(레지스트리 스냅샷)도 빌트인 모션·함수는 검증한다', () {
+        // 스냅샷 카탈로그가 BuiltinLanguage를 시드하므로 모르는 이름은 잡힌다.
+        expect(
+          () => validate(
+            {'_type': 'text', 'value': 'x', '_motion': 'sparkle_nope'},
+            const {},
+          ),
+          throwsInvalidTemplate,
+        );
+        // 빌트인은 통과.
+        validate({'_type': 'text', 'value': 'x', '_motion': 'fade'}, const {});
+      });
+
+      test('모션·함수 집합이 null인 카탈로그는 그 검사를 건너뛴다 (명시적 opt-out)', () {
         validate(
           {'_type': 'text', 'value': r'${nope(name)}', '_motion': 'sparkle_nope'},
           {'name'},
+          catalog: LanguageCatalog(
+            widgets: WidgetSchemaRegistry.all(),
+            commands: CommandSchemaRegistry.all(),
+          ),
         );
       });
     });

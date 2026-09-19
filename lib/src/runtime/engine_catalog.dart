@@ -1,5 +1,6 @@
 import 'package:sdui_engine/src/compile/schema/command_schema.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
+import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 
 import 'driver/driver_registry.dart';
 import 'media/image_source_registry.dart';

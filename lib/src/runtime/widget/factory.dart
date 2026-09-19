@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
+import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'contract/spec.dart';
 
 import 'catalog/primitive/absorb_pointer_widget.dart';
@@ -263,6 +264,15 @@ final class WidgetFactory {
       WidgetSchemaRegistry.register(entry.key, _schemaOf(entry.value));
     }
     return {..._builtins};
+  }
+
+  /// Every registered widget type — parity checks against [BuiltinLanguage].
+  static Set<String> types() => Set.unmodifiable(_specs.keys);
+
+  /// The structural schema the factory derives for [type], if registered.
+  static WidgetSchema? schemaOf(String type) {
+    final spec = _specs[type];
+    return spec == null ? null : _schemaOf(spec);
   }
 
   static WidgetSchema _schemaOf(WidgetSpec spec) => WidgetSchema(

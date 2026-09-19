@@ -142,6 +142,37 @@ void main() {
       );
     });
 
+    test('compile and ir stay Flutter-free (server-side compilability)', () {
+      // The compile stage's independence is only real if it can run where
+      // Flutter does not exist — a build-time or server-side compiler.
+      final graph = buildGraph();
+      final files = Directory(libRoot)
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where(
+            (f) =>
+                (f.path.startsWith('lib/src/compile/') ||
+                    f.path.startsWith('lib/src/ir/')) &&
+                f.path.endsWith('.dart'),
+          );
+      final violations = <String>[];
+      for (final file in files) {
+        for (final match in importRe.allMatches(file.readAsStringSync())) {
+          final import = match.group(1)!;
+          if (import.startsWith('package:flutter/') ||
+              import.startsWith('dart:ui')) {
+            violations.add('${file.path} -> $import');
+          }
+        }
+      }
+      expect(
+        violations,
+        isEmpty,
+        reason: 'Flutter imports in the compile stage:\n${violations.join('\n')}',
+      );
+      expect(graph, isNotEmpty);
+    });
+
     test('layer edges only point in the allowed direction', () {
       final graph = buildGraph();
 

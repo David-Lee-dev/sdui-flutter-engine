@@ -15,6 +15,7 @@ import 'runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/compile/schema/command_schema.dart';
 import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
+import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'runtime/motion/composite/presets.dart';
 import 'runtime/motion/motion_factory.dart';
 import 'runtime/util/function_registry.dart';
@@ -100,13 +101,19 @@ final class Engine {
     WidgetFactory.ensureRegistered();
     DriverRegistry.ensureRegistered();
     EngineCatalog.freeze();
-    _catalog = LanguageCatalog(
-      widgets: WidgetSchemaRegistry.all(),
-      commands: CommandSchemaRegistry.all(),
-      motions: {...MotionFactory.types(), ...MotionPresets.names()},
-      functions: FunctionRegistry.names(),
-    );
+    _catalog = snapshotCatalog();
   }
+
+  /// The language as the runtime currently stands: registry snapshots for
+  /// widgets/commands plus the live motion/function enumerations. Used to
+  /// assemble the boot catalog, and by bare mounts (no [initialize]) so
+  /// runtime-registered customs still validate.
+  static LanguageCatalog snapshotCatalog() => LanguageCatalog(
+    widgets: WidgetSchemaRegistry.all(),
+    commands: CommandSchemaRegistry.all(),
+    motions: {...MotionFactory.types(), ...MotionPresets.names()},
+    functions: FunctionRegistry.names(),
+  );
 
   /// The frozen language catalog assembled at [initialize], or `null` before
   /// boot (bare test mounts compile against a registry snapshot instead).

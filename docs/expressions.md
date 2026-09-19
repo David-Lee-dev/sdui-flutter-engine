@@ -76,7 +76,7 @@ Templates can then call the registered name like a built-in:
 value: '${app_slug(article.title)}'
 ```
 
-Initialization registers these functions before the catalog freezes, includes their names in `Engine.catalog`, and rejects later registration. When booted through `Sdui.initialize` or `Engine.initialize`, `EngineRunner` validates function calls in widget properties and command parameters/guards against that snapshot, so an unknown call there is a compile-fatal `unknown function` validator error before mounting. A bare mount without initialization uses the compile-registry fallback, which cannot enumerate functions and skips this check; evaluating an unresolved call can then raise the runtime expression error at the node or action boundary.
+Initialization registers these functions before the catalog freezes, includes their names in `Engine.catalog`, and rejects later registration. When booted through `Sdui.initialize` or `Engine.initialize`, `EngineRunner` validates function calls in widget properties and command parameters/guards against that snapshot, so an unknown call there is a compile-fatal `unknown function` validator error before mounting. A bare mount without initialization falls back to `Engine.snapshotCatalog()`, a live enumeration of every registered function name, so this check still applies to any call reachable at compile time. A server-side or build-time compiler using `LanguageCatalog.builtin()` validates only the built-in functions declared in `BuiltinLanguage`; an application function registered only at runtime is invisible to that offline catalog.
 
 ### Built-ins
 

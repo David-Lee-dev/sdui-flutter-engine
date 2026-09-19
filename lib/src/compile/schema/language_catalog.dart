@@ -1,5 +1,7 @@
+import 'builtin_language.dart';
 import 'command_schema.dart';
 import 'widget_schema.dart';
+import 'widget_schema_registry.dart';
 
 /// One immutable snapshot of every template-facing identifier the language
 /// accepts: widget types (with their schemas), command types, motion names,
@@ -36,14 +38,27 @@ final class LanguageCatalog {
   /// cannot enumerate them — validation of call names is skipped.
   final Set<String>? functions;
 
-  /// The catalog as the compile-side registries currently stand.
-  ///
-  /// Widget and command identifiers live in compile-owned registries (seeded
-  /// by the runtime before any compile), so this covers them; motion and
-  /// function names are runtime-owned and unknown here — pass a full catalog
-  /// (the engine's boot-time one) to validate those too.
+  /// The catalog as the compile-side registries currently stand — builtins
+  /// pre-seeded, plus whatever custom widgets/commands the runtime added.
   factory LanguageCatalog.fromRegistries() => LanguageCatalog(
     widgets: WidgetSchemaRegistry.all(),
     commands: CommandSchemaRegistry.all(),
+    // Motion and function *names* for the built-in language are declared
+    // compile-side; runtime-registered custom ones are only known to the
+    // engine's boot catalog. Registry snapshots therefore validate against
+    // the builtin sets — a mount configured through Engine.initialize gets
+    // the full catalog instead.
+    motions: BuiltinLanguage.motions,
+    functions: BuiltinLanguage.functions,
+  );
+
+  /// The engine's built-in language, with no registry or runtime involved —
+  /// what a build-time or server-side compiler validates against when the
+  /// app adds no custom widgets/commands/motions/functions.
+  factory LanguageCatalog.builtin() => LanguageCatalog(
+    widgets: BuiltinLanguage.widgets,
+    commands: BuiltinLanguage.commands,
+    motions: BuiltinLanguage.motions,
+    functions: BuiltinLanguage.functions,
   );
 }

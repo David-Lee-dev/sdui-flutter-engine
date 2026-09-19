@@ -33,6 +33,10 @@ final class DriverRegistry {
 
   static final Map<String, Driver> _drivers = _buildDrivers();
 
+  /// The engine-owned command types, for parity checks against the
+  /// compile-side builtin declaration.
+  static Set<String> get builtinTypes => _builtins.keys.toSet();
+
   static Map<String, Driver> _buildDrivers() {
     CommandSchemaRegistry.registerAll(_builtins.keys);
     return {..._builtins};

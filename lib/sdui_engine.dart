@@ -57,6 +57,7 @@ export 'src/presentation/presentation.dart'
         SduiToastPresenter;
 export 'src/presentation/scaling.dart' show SduiScaling;
 export 'src/presentation/typography.dart' show SduiTypography;
+export 'src/compile/schema/builtin_language.dart' show BuiltinLanguage;
 export 'src/compile/schema/language_catalog.dart' show LanguageCatalog;
 export 'src/compile/schema/widget_schema.dart' show WidgetSchema, WidgetKind;
 export 'src/ir/model/layout_protocol.dart' show LayoutProtocol;
