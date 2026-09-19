@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueKey;
 import 'package:go_router/go_router.dart';
 
+import '../contract/error_observer.dart';
 import '../contract/network_client.dart';
 import '../shell/sdui_service.dart';
 import '../contract/image_source.dart';
@@ -80,6 +81,7 @@ final class Sdui {
     List<Motion> motions = const [],
     Map<String, Object? Function(List<Object?>)> functions = const {},
     SduiPresentation presentation = const SduiPresentation(),
+    SduiErrorObserver? errorObserver,
     SduiToastPresenter? toastPresenter,
     LogLevel? debugLogLevel,
     void Function(String line)? logOutput,
@@ -110,6 +112,7 @@ final class Sdui {
       motions: motions,
       functions: functions,
       presentation: presentation,
+      errorObserver: errorObserver,
       debugLogLevel: debugLogLevel,
       logOutput: logOutput,
     );

@@ -9,6 +9,8 @@ import '../../environment/_base.dart';
 import '../../environment/scope/commit_scheduler.dart';
 import '../../environment/scope/json_value.dart';
 import '../../environment/scope/scope_environment.dart';
+import 'package:sdui_engine/src/contract/error_observer.dart';
+import '../../engine_errors.dart';
 import '../../engine_host.dart';
 import '../../log/engine_log.dart';
 import '../../telemetry/telemetry.dart';
@@ -125,12 +127,13 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _env.parent = _ScopeLayer.of(context);
-    _host.parent = _ActionLayer.of(context);
-    _host.host = EngineHostScope.of(context);
     final telemetry = TelemetryScope.maybeOf(context);
-    _host
-      ..screenId = telemetry?.screenId
-      ..screenViewId = telemetry?.screenViewId;
+    _host.wire(
+      parent: _ActionLayer.of(context),
+      host: EngineHostScope.of(context),
+      screenId: telemetry?.screenId,
+      screenViewId: telemetry?.screenViewId,
+    );
 
     if (widget.lifecycle.isEmpty) return;
     final visible = _isVisible();
@@ -293,8 +296,9 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   );
 
   bool _isVisible() {
-    // ModalRoute는 transparent route도 감지하고, TickerMode는 root overlay에
-    // 가려진 nested Navigator와 inactive go_router branch를 감지한다.
+    // ModalRoute also catches transparent routes; TickerMode catches nested
+    // Navigators hidden behind the root overlay and inactive go_router
+    // branches.
     final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
     return isCurrentRoute && TickerMode.of(context);
   }
@@ -321,16 +325,16 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
     if (JsonValue.structurallyEqual(_acceptedSeed, newSeed)) return;
     final declared = _env.declaredKeys.toSet();
     if (!setEquals(newSeed.keys.toSet(), declared)) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: StateError(
+      EngineErrors.report(
+        SduiError(
+          scope: SduiErrorScope.scopeReseed,
+          error: StateError(
             'Scope state keyset changed on reseed '
             '(declared: $declared, incoming: ${newSeed.keys.toSet()}). '
             'Schema changes need a remount — key the Scope/template by revision. '
             'Keeping the old state.',
           ),
-          library: 'engine',
-          context: ErrorDescription('reseeding a Scope'),
+          screenId: _host.screenId,
         ),
       );
       return;

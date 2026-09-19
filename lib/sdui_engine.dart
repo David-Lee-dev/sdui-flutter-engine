@@ -42,11 +42,19 @@ export 'src/impl/noop_telemetry_sink.dart' show NoopTelemetrySink;
 
 // ── Extension points: services (commands), custom widgets, motions, functions
 export 'src/runtime/motion/_base.dart' show Motion, MotionParams, MotionPlan;
+export 'src/contract/error_observer.dart'
+    show SduiError, SduiErrorObserver, SduiErrorScope;
 export 'src/contract/tap_feedback.dart' show TapFeedback;
+export 'src/impl/flutter_error_observer.dart' show FlutterErrorObserver;
 export 'src/impl/ink_tap_feedback.dart' show InkTapFeedback;
 export 'src/presentation/modal_style.dart' show ModalStyle;
 export 'src/presentation/presentation.dart'
-    show SduiPresentation, SduiScreenErrorBuilder, SduiToastPresenter;
+    show
+        SduiLoadErrorBuilder,
+        SduiNodeErrorBuilder,
+        SduiPresentation,
+        SduiScreenErrorBuilder,
+        SduiToastPresenter;
 export 'src/presentation/scaling.dart' show SduiScaling;
 export 'src/presentation/typography.dart' show SduiTypography;
 export 'src/compile/schema/language_catalog.dart' show LanguageCatalog;

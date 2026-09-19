@@ -6,6 +6,8 @@ import 'package:sdui_engine/src/ir/model/scope_config.dart';
 
 import 'runtime/driver/driver_registry.dart';
 import 'runtime/engine_host.dart';
+import 'contract/error_observer.dart';
+import 'runtime/engine_errors.dart';
 import 'runtime/engine_presentation.dart';
 import 'runtime/engine_subtree.dart';
 import 'runtime/engine_registries.dart';
@@ -346,12 +348,12 @@ class _EngineRunnerState extends State<EngineRunner>
     } catch (error, stack) {
       _compileError = error;
       if (kDebugMode) EngineLog.screen.compileFailed(error);
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
+      EngineErrors.report(
+        SduiError(
+          scope: SduiErrorScope.templateCompile,
+          error: error,
           stack: stack,
-          library: 'engine',
-          context: ErrorDescription('compiling an EngineRunner template'),
+          screenId: widget.screenId,
         ),
       );
     }

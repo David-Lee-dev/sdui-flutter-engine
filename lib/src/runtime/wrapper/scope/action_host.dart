@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:sdui_engine/src/contract/telemetry_sink.dart';
+import 'package:sdui_engine/src/contract/error_observer.dart';
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import '../../environment/_base.dart';
 import '../../environment/map_environment.dart';
@@ -11,6 +12,7 @@ import '../../interpreter/expression_evaluator.dart';
 import '../../driver/_base.dart';
 import '../../driver/driver_error.dart';
 import '../../driver/driver_registry.dart';
+import '../../engine_errors.dart';
 import '../../engine_host.dart';
 import '../../log/engine_log.dart';
 import '../../telemetry/command_observer.dart';
@@ -36,10 +38,27 @@ final class ActionHost implements ActionSink {
   EngineHost? host;
 
   String? get screenId => _observer.screenId;
-  set screenId(String? value) => _observer.screenId = value;
 
   String? get screenViewId => _observer.screenViewId;
-  set screenViewId(String? value) => _observer.screenViewId = value;
+
+  /// Establishes the host's context wiring in one call — parent chain, mount
+  /// capabilities, and telemetry attribution.
+  ///
+  /// The owning scope calls this from `didChangeDependencies` (and again on
+  /// dependency changes); one method instead of five field writes makes the
+  /// set-before-first-use ordering explicit rather than incidental.
+  void wire({
+    required ActionHost? parent,
+    required EngineHost? host,
+    required String? screenId,
+    required String? screenViewId,
+  }) {
+    this.parent = parent;
+    this.host = host;
+    _observer
+      ..screenId = screenId
+      ..screenViewId = screenViewId;
+  }
 
   /// Telemetry is the observer's job — the executor only marks start/end.
   final CommandObserver _observer = CommandObserver(
@@ -357,17 +376,14 @@ final class ActionHost implements ActionSink {
     _report(error, stack);
   }
 
-  void _report(Object error, StackTrace stack) {
-    EngineLog.error(error, stack);
-    FlutterError.reportError(
-      FlutterErrorDetails(
-        exception: error,
-        stack: stack,
-        library: 'engine',
-        context: ErrorDescription('running an action command'),
-      ),
-    );
-  }
+  void _report(Object error, StackTrace stack) => EngineErrors.report(
+    SduiError(
+      scope: SduiErrorScope.action,
+      error: error,
+      stack: stack,
+      screenId: screenId,
+    ),
+  );
 
   /// Invalidates future continuations and releases scope-owned resources.
   ///

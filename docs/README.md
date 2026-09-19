@@ -11,6 +11,7 @@ This reference documents the template language implemented by the engine, from s
 5. [Control flow](control-flow.md), [loops](loops.md), and [lifecycle](lifecycle.md).
 6. [Interaction](interaction.md), [motion](motion.md), and [media](media.md).
 7. [Widget catalog](widgets/README.md) — all 103 registered widget types and the internal catalog helper.
+8. [Errors](errors.md) — the domain-vs-engine-error split, error surfaces, and `SduiErrorObserver`.
 
 ## Language guides
 
@@ -25,6 +26,7 @@ This reference documents the template language implemented by the engine, from s
 - [Motion](motion.md) — nine atoms, every composite preset, curves, and scheduling parameters.
 - [Media](media.md) — image/video source policies, placeholders, cross-fades, and controls.
 - [Widget catalog](widgets/README.md) — categorized widget index with protocol and loop-wrapper status.
+- [Errors](errors.md) — load/compile/node/modal error surfaces, builder precedence, and the `SduiErrorObserver` seam.
 
 ## Built-in commands
 

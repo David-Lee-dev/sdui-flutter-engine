@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/runtime/log/engine_log.dart';
 import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/engine_runner.dart';
 import 'package:sdui_engine/src/compile/invalid_template_exception.dart';
@@ -46,6 +47,34 @@ class _MarkMotion extends Motion {
 }
 
 void main() {
+  testWidgets('Engine.initialize 없는 마운트는 강등 경고를 1회 남긴다 (조용한 강등 금지)', (
+    tester,
+  ) async {
+    final lines = <String>[];
+    EngineLog.configure(minLevel: LogLevel.warn, colors: false, output: lines.add);
+    addTearDown(
+      () => EngineLog.configure(
+        minLevel: LogLevel.debug,
+        colors: true,
+        output: (line) => debugPrint(line),
+      ),
+    );
+
+    await _pump(
+      tester,
+      const EngineRunner(template: {'_type': 'text', 'value': 'x'}),
+    );
+    await _pump(
+      tester,
+      const EngineRunner(template: {'_type': 'text', 'value': 'y'}),
+    );
+
+    expect(
+      lines.where((l) => l.contains('without Engine.initialize')),
+      hasLength(1), // 프로세스당 1회 — 반복 마운트에 도배하지 않는다
+    );
+  });
+
   group('EngineRunner', () {
     // 전역 static 레지스트리라 register 뒤엔 반드시 되돌린다.
     tearDown(WidgetFactory.reset);

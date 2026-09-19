@@ -1,3 +1,4 @@
+import 'contract/error_observer.dart';
 import 'contract/external_command.dart';
 import 'contract/image_source.dart';
 import 'contract/app_storage.dart';
@@ -20,6 +21,7 @@ import 'runtime/util/function_registry.dart';
 import 'runtime/driver/driver_registry.dart';
 import 'runtime/driver/external_driver.dart';
 import 'runtime/engine_catalog.dart';
+import 'runtime/engine_errors.dart';
 import 'runtime/log/engine_log.dart';
 import 'runtime/media/image_source_registry.dart';
 import 'runtime/media/video_source_registry.dart';
@@ -59,6 +61,7 @@ final class Engine {
     List<Motion> motions = const [],
     Map<String, Object? Function(List<Object?>)> functions = const {},
     SduiPresentation presentation = const SduiPresentation(),
+    SduiErrorObserver? errorObserver,
     LogLevel? debugLogLevel,
     void Function(String line)? logOutput,
   }) {
@@ -76,6 +79,7 @@ final class Engine {
     }
     if (logOutput != null) EngineLog.configure(output: logOutput);
     EnginePresentation.value = presentation;
+    if (errorObserver != null) EngineErrors.observer = errorObserver;
     ImageSourceRegistry.install(imageSource);
     VideoSourceRegistry.install(videoSource);
     DriverRegistry.installEngineOwned(

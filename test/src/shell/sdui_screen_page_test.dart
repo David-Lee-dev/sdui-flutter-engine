@@ -6,6 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:sdui_engine/src/contract/screen_loader.dart';
 import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
+import 'package:sdui_engine/src/contract/error_observer.dart';
+import 'package:sdui_engine/src/presentation/presentation.dart';
+import 'package:sdui_engine/src/runtime/engine_errors.dart';
+import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/shell/screen_page.dart';
 
 final class _FakeSink implements TelemetrySink {
@@ -67,6 +71,29 @@ Future<void> _pumpPage(
 void main() {
   group('SduiScreenPage', () {
     group('build', () {
+      testWidgets('load 실패는 전역 loadErrorBuilder로 떨어지고 옵저버에 보고된다', (
+        tester,
+      ) async {
+        final errors = <SduiError>[];
+        EngineErrors.observer = _RecordingObserver(errors.add);
+        EnginePresentation.value = SduiPresentation(
+          loadErrorBuilder: (context, error, retry) =>
+              Text('global:$error', textDirection: TextDirection.ltr),
+        );
+        addTearDown(EngineErrors.reset);
+        addTearDown(EnginePresentation.reset);
+
+        await _pumpPage(
+          tester,
+          _FakeLoader([() async => throw StateError('down')]),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('global:'), findsOneWidget);
+        expect(errors.single.scope, SduiErrorScope.screenLoad);
+        expect(errors.single.screenId, 's');
+      });
+
       testWidgets('issues a screen_view per successful load and renews on retry', (
         tester,
       ) async {
@@ -173,4 +200,11 @@ void main() {
       });
     });
   });
+}
+
+final class _RecordingObserver extends SduiErrorObserver {
+  const _RecordingObserver(this._add);
+  final void Function(SduiError) _add;
+  @override
+  void onError(SduiError error) => _add(error);
 }

@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../contract/screen_loader.dart';
 import '../engine_runner.dart';
 import '../runtime/engine_host.dart';
+import '../contract/error_observer.dart';
+import '../runtime/engine_errors.dart';
 import '../runtime/engine_presentation.dart';
 import '../runtime/telemetry/screen_visit.dart';
 import 'sdui_state.dart';
@@ -81,6 +83,14 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
       },
       onError: (Object error, StackTrace stack) {
         if (!mounted || !identical(future, _pending)) return;
+        EngineErrors.report(
+          SduiError(
+            scope: SduiErrorScope.screenLoad,
+            error: error,
+            stack: stack,
+            screenId: widget.screenId,
+          ),
+        );
         setState(() {
           _error = error;
           _loaded = null;
@@ -123,6 +133,7 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
 
   Widget _errorView(BuildContext context, Object error) =>
       widget.errorBuilder?.call(context, error, _retry) ??
+      EnginePresentation.value.loadErrorBuilder?.call(context, error, _retry) ??
       Scaffold(
         body: Center(
           child: TextButton(

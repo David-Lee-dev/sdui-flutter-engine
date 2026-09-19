@@ -44,6 +44,7 @@ With the boot catalog, unknown widget or command types, unknown `_motion` names,
 | `motions` | Register [`Motion`](motion.md#custom-motion-atoms) implementations by their `type`. |
 | `functions` | Register [expression functions](expressions.md#application-functions) by call name. |
 | `presentation` | Install an app-owned `SduiPresentation` — [tap feedback](interaction.md#tap-feedback), [`modal`](commands/modal.md) chrome, typography, scaling, and error/loading surfaces (see below). |
+| `errorObserver` (optional) | Install an `SduiErrorObserver`; defaults to `FlutterErrorObserver`, preserving the classic `FlutterError.reportError` behavior. See [errors](errors.md#sduierrorobserver). |
 | `telemetry` (optional) | Install a `TelemetrySink`; defaults to a no-op sink, so not observing is a valid choice. |
 | `toastPresenter` (`Sdui.initialize` only) | Replace the facade's default `SnackBar` presentation for [`toast`](commands/toast.md). |
 | `debugLogLevel` | Set the minimum engine diagnostic level. |
@@ -76,7 +77,11 @@ A contract never bundles a policy call; whether a seam is *required* is expresse
 - `typography` — `SduiTypography(fontFamily, baseStyle)`, merged *under* every template `style` (template fields win field by field; see `PropsResolver.textStyle`).
 - `scaling` — `SduiScaling(baseWidth: 390, minScale: 0.82, maxScale: 1.0)`, the width band `EngineMetrics.scaleForWidth` scales template dimensions against.
 - `screenErrorBuilder` — global fallback for a mount-level compile failure; a mount-local `EngineRunner.errorBuilder`/`SduiScreenPage.errorBuilder` still wins. The package default renders neutral English text ("This screen could not be loaded.").
+- `loadErrorBuilder` — global fallback for a retryable screen *load* failure (the app's `ScreenLoader` threw); a page-local `errorBuilder` still wins.
+- `nodeErrorBuilder` — global replacement for the degraded-node surface (`SduiErrorScope.nodeBuild` isolation); `null` keeps the classic policy of a compact debug-only tag / empty release box.
 - `loadingBuilder` — global default for the facade's loading surface; a page-local `loadingBuilder` still wins.
+
+The full error-surface map — which builder wins, what gets reported to `SduiErrorObserver`, and how domain failures (`_error[code]`) stay separate from engine errors — is in [errors.md](errors.md).
 
 ## Telemetry
 

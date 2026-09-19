@@ -24,6 +24,7 @@ import 'src/runtime/telemetry/telemetry.dart';
 import 'src/runtime/util/function_registry.dart';
 import 'src/runtime/widget/factory.dart';
 import 'src/engine.dart';
+import 'src/runtime/engine_errors.dart';
 import 'src/runtime/engine_presentation.dart';
 import 'src/shell/sdui_state.dart';
 
@@ -44,6 +45,7 @@ void installTestNetworkClient(NetworkClient client) {
 void resetEngineForTest() {
   Engine.resetForTest();
   EnginePresentation.reset();
+  EngineErrors.reset();
   SduiState.reset();
   Telemetry.reset();
   // Schema registry first — WidgetFactory.reset() re-seeds it.

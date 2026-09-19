@@ -20,7 +20,7 @@ Use `onDispose` for resources that must not outlive the template scope that open
 
 `isCancelled` is a live signal for code to check; it does not itself stop work that has already crossed a platform or network boundary. `onDispose` is the corresponding release hook for work the command can actively tear down. When the engine supplies no owner lifetime, such as a bare invocation in a test, registration and the returned deregistration callback are no-ops; the command remains responsible for closing the resource itself.
 
-It deliberately cannot access engine state, host, or registries. Return data becomes `$data` in `_then`. Throw `CommandFailure(code, message:, data:)` to select `_error[code]` (falling back to `_`) and expose `{code, message, data}` as `$error`. Throw `CommandDismissed` to run `_dismiss`. Other exceptions are unexpected and reported by the action host.
+It deliberately cannot access engine state, host, or registries. Return data becomes `$data` in `_then`. Throw `CommandFailure(code, message:, data:)` to select `_error[code]` (falling back to `_`) and expose `{code, message, data}` as `$error`. Throw `CommandDismissed` to run `_dismiss`. Other exceptions are unexpected and reported by the action host as `SduiErrorScope.action` — see [errors](../errors.md) for the domain-vs-engine-error split and the `SduiErrorObserver` seam.
 
 ```yaml
 _type: sys_share

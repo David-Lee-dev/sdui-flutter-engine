@@ -64,7 +64,7 @@ _always:
 
 The request fields in these examples (`op`, `params`, `path`, ...) are application vocabulary — the starter kit's `RestNetworkClient` reads `method`/`path`/`params`/`body` — not engine-defined command fields. See [`net`](commands/net.md) for the boundary between engine and application vocabulary.
 
-`DriverError(code, message?, data?)` represents expected failures. `DISMISSED` routes only to `_dismiss`. `BOUNDARY_HANDLED` means an application boundary already handled the failure: `_then` and `_error` are skipped and the error is not reported, but `_always` still runs. Built-in modal errors include `MODAL_NOT_FOUND` and `NO_OVERLAY`; `NetworkResult.errorCode` values pass through unchanged. Unhandled expected or unexpected failures are reported by the action host.
+`DriverError(code, message?, data?)` represents expected failures. `DISMISSED` routes only to `_dismiss`. `BOUNDARY_HANDLED` means an application boundary already handled the failure: `_then` and `_error` are skipped and the error is not reported, but `_always` still runs. Built-in modal errors include `MODAL_NOT_FOUND` and `NO_OVERLAY`; `NetworkResult.errorCode` values pass through unchanged. Unhandled expected or unexpected failures are reported by the action host: `DriverError`/`CommandFailure` stay domain failures and never leave `_error[code]`, while a genuinely unexpected exception is reported as `SduiErrorScope.action` — see [errors](errors.md) for the full split and the `SduiErrorObserver` seam.
 
 ## Command telemetry
 

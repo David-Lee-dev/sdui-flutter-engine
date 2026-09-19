@@ -16,6 +16,18 @@ typedef SduiToastPresenter =
 typedef SduiScreenErrorBuilder =
     Widget Function(BuildContext context, Object error);
 
+/// Builds the surface shown when a screen failed to *load* (the
+/// [ScreenLoader] threw) and the page supplied no local `errorBuilder`.
+/// Unlike a compile failure, a load failure is retryable.
+typedef SduiLoadErrorBuilder =
+    Widget Function(BuildContext context, Object error, VoidCallback retry);
+
+/// Builds the in-place surface for a degraded node ([SduiErrorScope.nodeBuild]
+/// isolation). `null` keeps the classic policy: compact diagnostic in debug,
+/// empty layout in release.
+typedef SduiNodeErrorBuilder =
+    Widget Function(BuildContext context, String nodePath, Object error);
+
 /// App-owned static configuration for the surfaces the engine draws itself.
 ///
 /// The engine owns the *behavior* (when feedback plays, how a modal mounts,
@@ -30,6 +42,8 @@ final class SduiPresentation {
     this.typography = const SduiTypography(),
     this.scaling = const SduiScaling(),
     this.screenErrorBuilder,
+    this.loadErrorBuilder,
+    this.nodeErrorBuilder,
     this.loadingBuilder,
   });
 
@@ -44,6 +58,13 @@ final class SduiPresentation {
   /// Global default for the compile-failure surface; a mount-local
   /// `errorBuilder` still wins.
   final SduiScreenErrorBuilder? screenErrorBuilder;
+
+  /// Global default for the facade's load-failure surface; a page-local
+  /// `errorBuilder` still wins.
+  final SduiLoadErrorBuilder? loadErrorBuilder;
+
+  /// Replaces the degraded-node surface (debug tag / release empty box).
+  final SduiNodeErrorBuilder? nodeErrorBuilder;
 
   /// Global default for the facade's loading surface; a page-local
   /// `loadingBuilder` still wins.
