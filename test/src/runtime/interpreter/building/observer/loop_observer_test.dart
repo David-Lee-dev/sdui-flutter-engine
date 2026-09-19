@@ -407,7 +407,7 @@ void main() {
           '_in': r'${items}',
           '_as': 'it',
           '_key': r'${it}',
-          if (wrap != null) '_wrap': wrap,
+          '_wrap': ?wrap,
         },
       };
 

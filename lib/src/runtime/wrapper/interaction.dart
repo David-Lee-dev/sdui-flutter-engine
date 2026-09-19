@@ -140,10 +140,10 @@ class _InteractionWrapperState extends State<InteractionWrapper> {
     'gesture': gesture,
     'action_id': action,
     'accepted': accepted,
-    if (invocationId != null) 'invocation_id': invocationId,
+    'invocation_id': ?invocationId,
     'node_type': widget.node.type,
     'node_path': widget.node.path,
-    if (widget.node.entity != null) 'entity': widget.node.entity,
+    'entity': ?widget.node.entity,
     if (widget.node.position.isNotEmpty) 'position': widget.node.position,
   };
 

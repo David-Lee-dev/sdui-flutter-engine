@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'package:sdui_engine/src/contract/image_source.dart';
 import 'package:sdui_engine/src/contract/app_storage.dart';

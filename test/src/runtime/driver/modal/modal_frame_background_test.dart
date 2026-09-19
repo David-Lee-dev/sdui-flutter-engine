@@ -19,7 +19,7 @@ Future<void> _pumpFrame(
       variant: variant,
       background: background,
       controller: ModalCloseController(),
-      onClosed: (_, __) {},
+      onClosed: (_, _) {},
     ),
   ),
 );

@@ -247,8 +247,7 @@ final class PropsResolver {
     final colorsRaw = raw['colors'];
     if (colorsRaw is! List) return null;
     final colors = [
-      for (final item in colorsRaw)
-        if (color(item) case final resolved?) resolved,
+      for (final item in colorsRaw) ?color(item),
     ];
     if (colors.length < 2) return null;
 

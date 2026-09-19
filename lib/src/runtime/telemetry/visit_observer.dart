@@ -182,9 +182,9 @@ final class _VisitObserverState extends State<VisitObserver>
         'max_depth': _depthBucket(_maxScrollPct),
         'reached_end': _reachedEnd,
         'scroll_sessions': _scrollSessions,
-        if (exitReason != null) 'exit_reason': exitReason,
-        if (widget.surfaceType != null) 'surface_type': widget.surfaceType,
-        if (widget.modalId != null) 'modal_id': widget.modalId,
+        'exit_reason': ?exitReason,
+        'surface_type': ?widget.surfaceType,
+        'modal_id': ?widget.modalId,
       },
     );
   }

@@ -71,7 +71,7 @@ void main() {
               content: const {'_type': 'text', 'value': 'body'},
               variant: ModalVariant.bottomSheet,
               controller: ModalCloseController(),
-              onClosed: (_, __) {},
+              onClosed: (_, _) {},
             ),
           ),
         );

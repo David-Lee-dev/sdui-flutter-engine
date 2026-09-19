@@ -112,7 +112,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // Failed load: no visit issued.
-        final views = () => sink.recorded.where((e) => e.event == 'screen_view');
+        Iterable<TelemetryEvent> views() =>
+            sink.recorded.where((e) => e.event == 'screen_view');
         expect(views(), isEmpty);
 
         fail = false;

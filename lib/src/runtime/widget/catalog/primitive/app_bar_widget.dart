@@ -53,9 +53,9 @@ final class AppBarWidget {
           Positioned.fill(
             child: Row(
               children: [
-                if (leading != null) leading,
+                ?leading,
                 const Spacer(),
-                if (actions != null) actions,
+                ?actions,
               ],
             ),
           ),
@@ -65,7 +65,7 @@ final class AppBarWidget {
     } else {
       content = Row(
         children: [
-          if (leading != null) leading,
+          ?leading,
           // Always claim the middle so actions stay right-aligned even when
           // there is no title to push them over.
           Expanded(
@@ -73,7 +73,7 @@ final class AppBarWidget {
                 ? const SizedBox.shrink()
                 : Align(alignment: Alignment.centerLeft, child: title),
           ),
-          if (actions != null) actions,
+          ?actions,
         ],
       );
     }

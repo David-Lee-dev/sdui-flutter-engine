@@ -187,7 +187,7 @@ final class ChartWidget {
             show: showDots || selectedIndex != null,
             checkToShowDot: (spot, _) =>
                 showDots || spot.x.toInt() == selectedIndex,
-            getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+            getDotPainter: (spot, _, _, _) => FlDotCirclePainter(
               radius: spot.x.toInt() == selectedIndex ? 4 : 2.5,
               color: line,
               strokeWidth: 0,

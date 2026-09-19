@@ -7,7 +7,6 @@ import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
 import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
 import 'package:sdui_engine/src/compile/schema/command_schema.dart';
-import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'package:sdui_engine/src/compile/template_validator.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';

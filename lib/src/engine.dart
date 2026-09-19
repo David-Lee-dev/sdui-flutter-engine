@@ -14,7 +14,6 @@ import 'presentation/presentation.dart';
 import 'runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/compile/schema/command_schema.dart';
 import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
-import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'runtime/motion/composite/presets.dart';
 import 'runtime/motion/motion_factory.dart';

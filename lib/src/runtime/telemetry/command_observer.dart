@@ -87,7 +87,7 @@ abstract final class CommandTelemetry {
     return {
       'type': type,
       'origin': invocation.origin,
-      if (branchOrigin != null) 'branch_origin': branchOrigin,
+      'branch_origin': ?branchOrigin,
       'invocation_id': invocation.invocationId,
       'param_keys': params.keys.toList()..sort(),
     };
@@ -112,7 +112,7 @@ final class CommandMeasurement {
     _stopwatch.stop();
     final completion = <String, Object?>{
       'outcome': outcome,
-      if (errorCode != null) 'error_code': errorCode,
+      'error_code': ?errorCode,
       'duration_ms': _stopwatch.elapsedMilliseconds,
     };
     try {
