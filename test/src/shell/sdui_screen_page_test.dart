@@ -200,7 +200,68 @@ void main() {
         expect(find.text('recovered'), findsOneWidget);
       });
     });
+
+    group('navigate', () {
+      testWidgets('push한 페이지를 go가 치워도 원래 화면의 같은 액션을 다시 탭할 수 있다', (
+        tester,
+      ) async {
+        final router = GoRouter(
+          initialLocation: '/screens/home',
+          routes: [
+            GoRoute(
+              path: '/screens/:id',
+              builder: (context, state) => SduiScreenPage(
+                key: ValueKey(state.uri.toString()),
+                screenId: state.pathParameters['id']!,
+                loader: _NavigateLoader(),
+              ),
+            ),
+          ],
+        );
+        await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('go home'));
+        await tester.pumpAndSettle();
+        // `go` back to the same location keeps home's State, so the action
+        // that pushed detail is still the one being tapped.
+        expect(find.text('open'), findsOneWidget);
+
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+        expect(find.text('go home'), findsOneWidget);
+      });
+    });
   });
+}
+
+final class _NavigateLoader implements ScreenLoader {
+  @override
+  Future<LoadedScreen> load(String screenId) async => (
+    template: screenId == 'home'
+        ? _tapToNavigate('open', {'route': '/screens/detail'})
+        : _tapToNavigate('go home', {'method': 'go', 'route': '/screens/home'}),
+    modals: const <String, Map<String, Object?>>{},
+  );
+
+  static Map<String, Object?> _tapToNavigate(
+    String label,
+    Map<String, Object?> navigate,
+  ) => {
+    '_type': 'container',
+    '_scope': {
+      '_action': {
+        'navigate': {'_type': 'navigate', ...navigate},
+      },
+    },
+    '_child': {
+      '_type': 'text',
+      '_on': {'tap': 'navigate'},
+      'value': label,
+    },
+  };
 }
 
 final class _RecordingObserver extends SduiErrorObserver {

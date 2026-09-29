@@ -8,6 +8,7 @@ import '../contract/error_observer.dart';
 import '../runtime/engine_errors.dart';
 import '../runtime/engine_presentation.dart';
 import '../runtime/telemetry/screen_visit.dart';
+import 'go_router_navigate.dart';
 import 'sdui_state.dart';
 
 /// Builds the widget shown while a screen's template is loading.
@@ -107,14 +108,6 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     _load();
   }
 
-  NavigateHandle _navigateHandle(GoRouter router) => NavigateHandle(
-    push: (location) => router.push<Object?>(location),
-    go: router.go,
-    pop: ([result]) {
-      if (router.canPop()) router.pop(result);
-    },
-  );
-
   ToastHandle _toastHandle() => ToastHandle((message, variant) {
     final presenter = SduiState.toastPresenter;
     if (presenter != null) {
@@ -150,14 +143,13 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     final loaded = _loaded;
     if (loaded == null) return _loading(context);
 
-    final router = GoRouter.of(context);
     return EngineRunner(
       screenId: widget.screenId,
       screenViewId: _screenViewId,
       rootData: widget.params,
       template: loaded.template,
       modalTemplates: loaded.modals,
-      navigate: _navigateHandle(router),
+      navigate: goRouterNavigateHandle(GoRouter.of(context)),
       toast: _toastHandle(),
       errorBuilder: (context, error) => _errorView(context, error),
     );

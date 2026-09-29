@@ -103,6 +103,11 @@ final class NavigateHandle {
   const NavigateHandle({this.push, this.go, this.pop});
 
   /// Pushes [location] and completes with its pop result.
+  ///
+  /// Must also complete — with `null` — when the page leaves the stack any
+  /// other way (replaced by a later `go`, or overtaken before it lands). An
+  /// uncompleted push keeps the action that started it in flight, so every
+  /// later invocation of that action is deduplicated away.
   final Future<Object?> Function(String location)? push;
 
   /// Replaces the current location with [location].

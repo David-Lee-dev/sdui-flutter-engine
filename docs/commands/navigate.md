@@ -8,7 +8,7 @@ The `navigate` command delegates route changes to the current engine host.
 | `route` | string | non-empty | required for `push`/`go` | Yes | Route passed to the host; the parameter name is `route`. |
 | `result` | any | — | `null` | Yes | Value passed by `pop`. |
 
-`push` awaits and returns the host result as `$data`; `go` and `pop` return null. A missing host callback is a no-op, but `push`/`go` still validate `route` when the callback is invoked through null-aware dispatch semantics as implemented.
+`push` awaits the pushed page and returns its `pop` result as `$data`; when the page leaves the stack any other way (a later `go` or replace, or a navigation that overtakes it before it lands) it returns null, so the action is never left in flight. `go` and `pop` return null. A missing host callback is a no-op, but `push`/`go` still validate `route` when the callback is invoked through null-aware dispatch semantics as implemented.
 
 ```yaml
 _type: navigate
