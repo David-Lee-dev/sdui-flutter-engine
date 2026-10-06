@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../../engine_presentation.dart';
+import '../../../media/shared_video_session.dart';
 import '../../../log/engine_log.dart';
 import '../../../transition/shared_transition_scope.dart';
 import '../../../telemetry/visit_observer.dart';
 
-/// Wraps one box child in a snapshot-only, same-Navigator Hero flight.
+/// Wraps one box child in a same-Navigator Hero flight.
 final class SharedElementWidget {
   const SharedElementWidget._();
 
@@ -95,6 +96,8 @@ final class _Participants {
 
 class _SharedElementState extends State<SharedElement> {
   final _boundary = GlobalKey();
+  final _videoLeases = <SharedVideoLease>{};
+  VoidCallback? _flightRelease;
   _Participants? _registry;
   PageRoute<dynamic>? _route;
   NavigatorState? _navigator;
@@ -124,7 +127,9 @@ class _SharedElementState extends State<SharedElement> {
   }
 
   void _register() {
-    if (_active && _route != null) _registry?.register(_route!, this);
+    if ((_active || _videoLeases.isNotEmpty) && _route != null) {
+      _registry?.register(_route!, this);
+    }
   }
 
   void _unregister(String tag) {
@@ -156,6 +161,7 @@ class _SharedElementState extends State<SharedElement> {
   void dispose() {
     _unregister(widget.tag);
     _snapshot?.dispose();
+    _flightRelease?.call();
     super.dispose();
   }
 
@@ -249,6 +255,22 @@ class _SharedElementState extends State<SharedElement> {
   ) {
     final source = from.findAncestorStateOfType<_SharedElementState>()!;
     final destination = to.findAncestorStateOfType<_SharedElementState>()!;
+    final sourceVideos = source._videoLeases;
+    final destinationVideos = destination._videoLeases;
+    if (sourceVideos.length == 1 && destinationVideos.length == 1) {
+      final session = sourceVideos.single.session;
+      if (identical(session, destinationVideos.single.session) &&
+          session.initialized) {
+        return _LiveVideoFlight(
+          session: session,
+          release: destination._flightRelease ?? session.retainFlight(),
+          animation: animation,
+          direction: direction,
+          fromRadius: source.widget.radius,
+          toRadius: destination.widget.radius,
+        );
+      }
+    }
     final image = source._snapshot;
     if (image == null) return const SizedBox.shrink();
     return _SnapshotFlight(
@@ -267,6 +289,18 @@ class _SharedElementState extends State<SharedElement> {
     child: Hero(
       tag: (_navigator, widget.tag),
       createRectTween: (begin, end) {
+        if (_videoLeases.length == 1) {
+          final session = _videoLeases.single.session;
+          if (session.hasMultipleLeases &&
+              session.initialized &&
+              _flightRelease == null) {
+            final release = session.retainFlight();
+            _flightRelease = () {
+              release();
+              _flightRelease = null;
+            };
+          }
+        }
         if (_route?.animation?.status == AnimationStatus.forward) {
           _transition?.flightStarted();
         }
@@ -279,7 +313,21 @@ class _SharedElementState extends State<SharedElement> {
         height: size.height,
         child: Offstage(child: child),
       ),
-      child: RepaintBoundary(key: _boundary, child: widget.child),
+      child: RepaintBoundary(
+        key: _boundary,
+        child:
+            (_active || _videoLeases.isNotEmpty) &&
+                _route != null &&
+                _navigator != null
+            ? SharedVideoScope(
+                navigator: _navigator!,
+                tag: widget.tag,
+                leases: _videoLeases,
+                canShare: () => _registry?.unique(_route!, widget.tag) ?? false,
+                child: widget.child,
+              )
+            : widget.child,
+      ),
     ),
   );
 }
@@ -359,6 +407,85 @@ class _SnapshotFlightState extends State<_SnapshotFlight> {
               ),
           ],
         ),
+      );
+    },
+  );
+}
+
+class _LiveVideoFlight extends StatefulWidget {
+  const _LiveVideoFlight({
+    required this.session,
+    required this.release,
+    required this.animation,
+    required this.direction,
+    required this.fromRadius,
+    required this.toRadius,
+  });
+
+  final SharedVideoSession session;
+  final VoidCallback release;
+  final Animation<double> animation;
+  final HeroFlightDirection direction;
+  final double fromRadius;
+  final double toRadius;
+
+  @override
+  State<_LiveVideoFlight> createState() => _LiveVideoFlightState();
+}
+
+class _LiveVideoFlightState extends State<_LiveVideoFlight> {
+  late VoidCallback _release;
+  bool _flying = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _release = widget.release;
+    widget.animation.addStatusListener(_onStatus);
+  }
+
+  @override
+  void didUpdateWidget(_LiveVideoFlight oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animation != widget.animation) {
+      oldWidget.animation.removeStatusListener(_onStatus);
+      widget.animation.addStatusListener(_onStatus);
+    }
+    if (oldWidget.release != widget.release) {
+      _release();
+      _release = widget.release;
+    }
+  }
+
+  void _onStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed ||
+        status == AnimationStatus.dismissed) {
+      _flying = false;
+      _release();
+      if (mounted) setState(() {});
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.animation.removeStatusListener(_onStatus);
+    _release();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.animation,
+    builder: (_, _) {
+      if (!_flying) return const SizedBox.shrink();
+      final t = widget.direction == HeroFlightDirection.push
+          ? widget.animation.value
+          : 1 - widget.animation.value;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(
+          ui.lerpDouble(widget.fromRadius, widget.toRadius, t)!,
+        ),
+        child: widget.session.buildView(),
       );
     },
   );

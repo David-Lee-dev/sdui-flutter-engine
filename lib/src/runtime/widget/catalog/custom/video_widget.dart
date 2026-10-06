@@ -6,6 +6,7 @@ import 'package:sdui_engine/src/contract/video_source.dart';
 import '../../../util/props_resolver.dart';
 import '../../contract/action_sink.dart';
 import '../../../media/video_source_registry.dart';
+import '../../../media/shared_video_session.dart';
 
 /// `video` — Builds a policy-backed video player with optional playback interaction.
 ///
@@ -86,10 +87,59 @@ class _VideoViewState extends State<_VideoView> {
   bool _endDispatched = false;
   int _generation = 0;
 
+  SharedVideoLease? _lease;
+  SharedVideoScope? _scope;
+  bool _started = false;
+
   @override
-  void initState() {
-    super.initState();
-    unawaited(_createController());
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final scope = SharedVideoScope.of(context);
+    if (_started &&
+        identical(scope?.leases, _scope?.leases) &&
+        scope?.tag == _scope?.tag &&
+        scope?.navigator == _scope?.navigator) {
+      return;
+    }
+    if (_started) _disposeController();
+    _scope = scope;
+    _started = true;
+    final route = ModalRoute.of(context);
+    if (scope == null || route == null) {
+      unawaited(_createController());
+      return;
+    }
+    _createLease(scope, route);
+  }
+
+  void _createLease(SharedVideoScope scope, ModalRoute<dynamic> route) {
+    _endDispatched = false;
+    final lease = SharedVideoSession.acquire(
+      scope,
+      widget.src,
+      route,
+      loop: widget.loop,
+      muted: widget.muted,
+      autoplay: widget.autoplay,
+      onPlayback: _onPlaybackChanged,
+    );
+    _lease = lease;
+    lease.session.addListener(_onSessionChanged);
+  }
+
+  void _onSessionChanged() {
+    if (!mounted) return;
+    final lease = _lease;
+    final scope = _scope;
+    if (lease != null &&
+        scope != null &&
+        !lease.canShare() &&
+        lease.session.hasMultipleLeases) {
+      final route = lease.route;
+      _disposeController();
+      _createLease(scope, route);
+    }
+    setState(() {});
   }
 
   Future<void> _createController() async {
@@ -128,7 +178,7 @@ class _VideoViewState extends State<_VideoView> {
   }
 
   void _onPlaybackChanged() {
-    final controller = _controller;
+    final controller = _lease?.session.controller ?? _controller;
     final onEnd = widget.onEnd;
     if (controller == null || widget.loop || onEnd == null || _endDispatched) {
       return;
@@ -147,7 +197,23 @@ class _VideoViewState extends State<_VideoView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.src != widget.src) {
       _disposeController();
-      unawaited(_createController());
+      final scope = _scope;
+      final route = ModalRoute.of(context);
+      if (scope != null && route != null) {
+        _createLease(scope, route);
+      } else {
+        unawaited(_createController());
+      }
+      return;
+    }
+    final lease = _lease;
+    if (lease != null) {
+      if (oldWidget.loop != widget.loop) _endDispatched = false;
+      lease.configure(
+        loop: widget.loop,
+        muted: widget.muted,
+        autoplay: widget.autoplay,
+      );
       return;
     }
     final controller = _controller;
@@ -163,6 +229,13 @@ class _VideoViewState extends State<_VideoView> {
 
   void _disposeController() {
     _generation++;
+    final lease = _lease;
+    _lease = null;
+    if (lease != null) {
+      lease.session.removeListener(_onSessionChanged);
+      _scope?.leases.remove(lease);
+      lease.release();
+    }
     final controller = _controller;
     _controller = null;
     _initialized = false;
@@ -172,7 +245,9 @@ class _VideoViewState extends State<_VideoView> {
   }
 
   void _togglePlayback() {
-    final controller = _controller;
+    final lease = _lease;
+    if (lease != null && !lease.session.ownsPlayback(lease)) return;
+    final controller = lease?.session.controller ?? _controller;
     if (controller == null) return;
     if (controller.playback.isPlaying) {
       unawaited(controller.pause());
@@ -189,21 +264,29 @@ class _VideoViewState extends State<_VideoView> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = _controller;
-    if (!_initialized || controller == null) return const SizedBox.shrink();
+    final lease = _lease;
+    final session = lease?.session;
+    final controller = session?.controller ?? _controller;
+    final initialized = session?.initialized ?? _initialized;
+    if (!initialized || controller == null) return const SizedBox.shrink();
     final playback = controller.playback;
     final video = AspectRatio(
       aspectRatio: widget.aspectRatio ?? playback.aspectRatio,
-      child: FittedBox(
-        fit: widget.fit,
-        child: SizedBox(
-          width: playback.width,
-          height: playback.height,
-          child: controller.buildView(),
-        ),
-      ),
+      child:
+          session?.buildView(fit: widget.fit) ??
+          FittedBox(
+            fit: widget.fit,
+            child: SizedBox(
+              width: playback.width,
+              height: playback.height,
+              child: controller.buildView(),
+            ),
+          ),
     );
-    if (!widget.showControls) return video;
+    if (!widget.showControls ||
+        (lease != null && !session!.ownsPlayback(lease))) {
+      return video;
+    }
     return Stack(
       fit: StackFit.passthrough,
       children: [

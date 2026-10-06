@@ -88,6 +88,41 @@ void main() {
       });
       tearDown(VideoSourceRegistry.reset);
 
+      testWidgets('untagged same-src videos both autoplay independently', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Row(
+              children: List.generate(
+                2,
+                (_) => Expanded(
+                  child: Builder(
+                    builder: (context) => VideoWidget.build(
+                      context,
+                      const {'src': 'clip.mp4', 'autoplay': true},
+                      const [],
+                      null,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(source.requests.map((r) => r.src), ['clip.mp4', 'clip.mp4']);
+        expect(source.controllers, hasLength(2));
+        expect(source.controllers[0], isNot(same(source.controllers[1])));
+        expect(source.controllers.map((c) => c.playCalls), everyElement(1));
+        expect(
+          source.controllers.map((c) => c.playback.isPlaying),
+          everyElement(isTrue),
+        );
+        await tester.pumpWidget(const SizedBox());
+      });
+
       testWidgets('src를 VideoSource 요청으로 전달한다', (tester) async {
         await _pump(tester, const {'src': 'clip.mp4'});
 

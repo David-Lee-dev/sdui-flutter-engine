@@ -42,6 +42,28 @@ _on:
     ripple: false
 ```
 
+## Continuous video across navigation
+
+Wrap one `video` at each endpoint in a [`shared_element`](shared_element.md) with the same evaluated `tag` and exactly the same `src`. Within the same Navigator, the engine retains one controller and one initialization Future, preserving playback position through push, flight and pop. Untagged videos and differing `tag` or `src` values keep independent controllers, even when multiple cards use the same asset.
+
+```yaml
+_type: shared_element
+tag: "video-${id}"
+radius: 16
+_child:
+  _type: video
+  src: assets/videos/counter.mp4
+  autoplay: true
+  loop: true
+  muted: true
+```
+
+The destination owns controls, `on_end`, loop, volume and autoplay after push; pop returns ownership to the source. Only the active owner receives playback callbacks. Autoplay may resume a paused controller but never seeks or initializes it again. Each endpoint and the live shuttle builds its own view from the same controller; the flight uses cover cropping and keeps endpoint slots offstage. Views may overlap during handoff frames, but only one owner handles controls and events. The controller is disposed once when the last route/flight reference leaves.
+
+Texture-backed `PlayerVideoController` is the supported continuous path. Custom platform-view controllers are unsupported for continuous handoff: remounting their view may flicker; platform views skip the Hero flight. Use one video per shared-element subtree, unique tags per route, and keep both endpoints mounted on the destination's first frame. Modal surfaces and initially inactive tabs do not participate; reduced motion disables the flight.
+
+When displaying multiple videos at once, the app's `VideoSource` must allow concurrent playback. With `video_player`, create `VideoPlayerController` with `VideoPlayerOptions(mixWithOthers: true)` and wrap it in `PlayerVideoController`. On Android, the default audio-focus policy can pause another player even if its volume is zero; `muted` alone does not disable focus handling. The engine does not override the app's audio policy.
+
 ## Pitfalls & related
 
 - Use only the documented positional child form; `_slots` are rejected for this specification kind.

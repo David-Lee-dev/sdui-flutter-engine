@@ -1,6 +1,6 @@
 # shared_element
 
-Wraps one box child in a Flutter Hero that flies a snapshot between matching tags.
+Wraps one box child in a Flutter Hero between matching tags, using snapshots or a continuous live video surface.
 
 ## Properties
 
@@ -27,6 +27,12 @@ Both endpoints must exist on the destination's first frame. Place the destinatio
 
 Modal surfaces and inactive tabs (`TickerMode: false`) are excluded. A zero-size, unpainted, or platform-view source cannot provide a snapshot, so navigation continues without a flight. Reduced motion disables flights when `respectReducedMotion` and `disableAnimations` are both true.
 
-Video is a snapshot during flight and initializes at the destination as usual. Video-controller handoff is not part of v1. Tab-shell branch-to-root navigation is unverified; v1 supports the same Navigator only.
+## Continuous video
+
+A subtree containing exactly one leased `video` can hand off playback when both endpoints have the same tag and exactly the same `src`, in the same Navigator. The controller initializes once and keeps its position; each endpoint and the shuttle builds its own view from the same controller, with cover fit inside the animated rounded rectangle. Endpoint slots stay offstage during flight; view overlap during handoff is allowed to avoid an empty frame. Content other than matching video continues to use the snapshot crossfade.
+
+Push transfers controls, playback callbacks/`on_end`, loop, volume and autoplay configuration to the destination; pop returns them to the source. Route and flight leases release on removal or gesture cancellation, and the last release disposes the controller exactly once. Different sources, duplicate tags and untagged videos use independent playback. Texture-backed `PlayerVideoController` is supported; custom platform views are unsupported for continuous handoff, skip the flight and may flicker when their view remounts.
+
+Tab-shell branch-to-root navigation remains unverified; only the same Navigator is supported. See [video](video.md#continuous-video-across-navigation) for an example.
 
 See [page transitions](../../transitions.md#shared-elements) for `_transition.content_timing` and destination-content reveal behavior. `radius` affects the flight; use a `clip_rrect` child when rounded endpoint rendering is also desired.
