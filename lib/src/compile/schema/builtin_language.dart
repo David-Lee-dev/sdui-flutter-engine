@@ -182,6 +182,9 @@ abstract final class BuiltinLanguage {
   'zoom_in',
   };
 
+  /// Page transition effect names accepted at a screen root.
+  static const Set<String> transitions = {'platform', 'none', 'fade'};
+
   /// Registered expression function names accepted in `${...}` calls.
   static const Set<String> functions = {
   'abs',

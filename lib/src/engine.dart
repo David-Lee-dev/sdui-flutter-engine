@@ -17,6 +17,8 @@ import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'runtime/motion/composite/presets.dart';
 import 'runtime/motion/motion_factory.dart';
+import 'runtime/transition/_base.dart';
+import 'runtime/transition/transition_factory.dart';
 import 'runtime/util/function_registry.dart';
 import 'runtime/driver/driver_registry.dart';
 import 'runtime/driver/external_driver.dart';
@@ -59,6 +61,7 @@ final class Engine {
     TelemetrySink? telemetry,
     Map<String, WidgetSpec> widgets = const {},
     List<Motion> motions = const [],
+    List<PageTransitionEffect> transitions = const [],
     Map<String, Object? Function(List<Object?>)> functions = const {},
     SduiPresentation presentation = const SduiPresentation(),
     SduiErrorObserver? errorObserver,
@@ -86,13 +89,16 @@ final class Engine {
       NetDriver(client: networkClient, protocols: networkProtocols),
     );
     DriverRegistry.installEngineOwned(AppStorageDriver(store: appStorage));
-    DriverRegistry.installEngineOwned(SecureStorageDriver(store: secureStorage));
+    DriverRegistry.installEngineOwned(
+      SecureStorageDriver(store: secureStorage),
+    );
     for (final command in externalCommands) {
       DriverRegistry.register(ExternalDriver(command));
     }
     if (telemetry != null) Telemetry.install(telemetry);
     WidgetFactory.registerAll(widgets);
     MotionFactory.registerAll(motions);
+    PageTransitionFactory.registerAll(transitions);
     FunctionRegistry.registerAll(functions);
     // Built-in catalogs are lazily seeded — force them before the freeze and
     // the snapshot, or a boot with no custom widgets would assemble an empty
@@ -111,6 +117,7 @@ final class Engine {
     widgets: WidgetSchemaRegistry.all(),
     commands: CommandSchemaRegistry.all(),
     motions: {...MotionFactory.types(), ...MotionPresets.names()},
+    transitions: PageTransitionFactory.types(),
     functions: FunctionRegistry.names(),
   );
 

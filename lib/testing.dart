@@ -20,6 +20,7 @@ import 'src/runtime/driver/driver_registry.dart';
 import 'src/runtime/media/image_source_registry.dart';
 import 'src/runtime/media/video_source_registry.dart';
 import 'src/runtime/motion/motion_factory.dart';
+import 'src/runtime/transition/transition_factory.dart';
 import 'src/runtime/telemetry/telemetry.dart';
 import 'src/runtime/util/function_registry.dart';
 import 'src/runtime/widget/factory.dart';
@@ -54,6 +55,7 @@ void resetEngineForTest() {
   DriverRegistry.reset();
   FunctionRegistry.reset();
   MotionFactory.reset();
+  PageTransitionFactory.reset();
   ImageSourceRegistry.reset();
   VideoSourceRegistry.reset();
 }

@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../contract/tap_feedback.dart';
 import 'modal_style.dart';
+import 'page_transition_style.dart';
 import 'scaling.dart';
 import 'typography.dart';
 
@@ -39,6 +40,7 @@ final class SduiPresentation {
   const SduiPresentation({
     this.tapFeedback,
     this.modal = const ModalStyle(),
+    this.transitions = const PageTransitionStyle(),
     this.typography = const SduiTypography(),
     this.scaling = const SduiScaling(),
     this.screenErrorBuilder,
@@ -52,6 +54,7 @@ final class SduiPresentation {
   final TapFeedback? tapFeedback;
 
   final ModalStyle modal;
+  final PageTransitionStyle transitions;
   final SduiTypography typography;
   final SduiScaling scaling;
 

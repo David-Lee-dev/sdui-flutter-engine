@@ -5,6 +5,7 @@ import 'driver/driver_registry.dart';
 import 'media/image_source_registry.dart';
 import 'media/video_source_registry.dart';
 import 'motion/motion_factory.dart';
+import 'transition/transition_factory.dart';
 import 'util/function_registry.dart';
 import 'widget/factory.dart';
 
@@ -22,6 +23,7 @@ final class EngineCatalog {
     WidgetSchemaRegistry.freeze();
     CommandSchemaRegistry.freeze();
     MotionFactory.freeze();
+    PageTransitionFactory.freeze();
     FunctionRegistry.freeze();
     ImageSourceRegistry.freeze();
     VideoSourceRegistry.freeze();

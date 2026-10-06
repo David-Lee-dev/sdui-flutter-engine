@@ -13,6 +13,9 @@ import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
 import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
 import 'package:sdui_engine/src/runtime/motion/motion_factory.dart';
+import 'package:sdui_engine/src/runtime/transition/_base.dart';
+import 'package:sdui_engine/src/runtime/transition/transition_factory.dart';
+import 'package:sdui_engine/src/ir/model/page_transition.dart';
 import 'package:sdui_engine/src/runtime/util/function_registry.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
 
@@ -76,6 +79,20 @@ final class _AppMotion extends Motion {
   ) => child;
 }
 
+final class _AppTransition extends PageTransitionEffect {
+  const _AppTransition();
+  @override
+  String get type => 'app_transition';
+  @override
+  Widget build(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) => child;
+}
+
 class _NetworkClient implements NetworkClient {
   const _NetworkClient();
 
@@ -94,6 +111,7 @@ void main() {
       DriverRegistry.reset();
       FunctionRegistry.reset();
       MotionFactory.reset();
+      PageTransitionFactory.reset();
       ImageSourceRegistry.reset();
       VideoSourceRegistry.reset();
     });
@@ -144,6 +162,22 @@ void main() {
 
         expect(MotionFactory.resolve('app_glow'), isA<_AppMotion>());
         expect(FunctionRegistry.resolve('appUpper')!(['hi']), 'HI');
+      });
+
+      test('앱이 넘긴 page transition을 등록하고 부팅 카탈로그에 넣는다', () {
+        Engine.initialize(
+          networkClient: const _NetworkClient(),
+          imageSource: const _ImageSource(),
+          videoSource: const _VideoSource(),
+          appStorage: _AppStorage(),
+          secureStorage: _SecureStorage(),
+          transitions: [const _AppTransition()],
+        );
+        expect(
+          PageTransitionFactory.resolve('app_transition'),
+          isA<_AppTransition>(),
+        );
+        expect(Engine.catalog!.transitions, contains('app_transition'));
       });
 
       test('부팅 카탈로그를 조립한다 — 위젯·커맨드·모션(프리셋 포함)·함수 전부 열거', () {

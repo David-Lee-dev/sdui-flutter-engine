@@ -3,6 +3,7 @@ import 'package:sdui_engine/src/compile/schema/builtin_language.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/runtime/motion/composite/presets.dart';
 import 'package:sdui_engine/src/runtime/motion/motion_factory.dart';
+import 'package:sdui_engine/src/runtime/transition/transition_factory.dart';
 import 'package:sdui_engine/src/runtime/util/function_registry.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
 
@@ -36,10 +37,14 @@ void main() {
     });
 
     test('motion names match atoms + composite presets', () {
-      expect(
-        {...MotionFactory.types(), ...MotionPresets.names()},
-        BuiltinLanguage.motions,
-      );
+      expect({
+        ...MotionFactory.types(),
+        ...MotionPresets.names(),
+      }, BuiltinLanguage.motions);
+    });
+
+    test('page transition names match builtins', () {
+      expect(PageTransitionFactory.types(), BuiltinLanguage.transitions);
     });
 
     test('expression function names match the registry', () {

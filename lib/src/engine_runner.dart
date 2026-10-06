@@ -200,6 +200,7 @@ class _EngineRunnerState extends State<EngineRunner> {
       // runtime snapshot, so directly-registered custom motions/functions
       // still pass — only the frozen boot catalog is missing.
       catalog: catalog ?? Engine.snapshotCatalog(),
+      screen: widget.surfaceType == null,
     );
     if (kDebugMode) EngineLog.screen.compiled(result.nodeCount, sw!.elapsed);
     return result.directive;
@@ -248,10 +249,7 @@ class _EngineRunnerState extends State<EngineRunner> {
         child: EngineRegistryScope(
           // Widgets always receive this root's isolated registries.
           registries: _registries,
-          child: EngineHostScope(
-            host: host,
-            child: _buildRootScope(),
-          ),
+          child: EngineHostScope(host: host, child: _buildRootScope()),
         ),
       ),
     );
@@ -320,7 +318,10 @@ class _EngineRunnerState extends State<EngineRunner> {
     return const Center(
       child: Padding(
         padding: EdgeInsets.all(16),
-        child: Text('This screen could not be loaded.', textAlign: TextAlign.center),
+        child: Text(
+          'This screen could not be loaded.',
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }

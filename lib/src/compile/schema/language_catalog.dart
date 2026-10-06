@@ -18,10 +18,14 @@ final class LanguageCatalog {
     required Map<String, WidgetSchema> widgets,
     required Set<String> commands,
     Set<String>? motions,
+    Set<String>? transitions,
     Set<String>? functions,
   }) : widgets = Map.unmodifiable(widgets),
        commands = Set.unmodifiable(commands),
        motions = motions == null ? null : Set.unmodifiable(motions),
+       transitions = Set.unmodifiable(
+         transitions ?? BuiltinLanguage.transitions,
+       ),
        functions = functions == null ? null : Set.unmodifiable(functions);
 
   /// Widget type → schema (kind, produced/required layout protocol).
@@ -33,6 +37,9 @@ final class LanguageCatalog {
   /// Every `_motion` name (atoms and composite presets), or `null` when the
   /// assembler cannot enumerate them — validation of motion names is skipped.
   final Set<String>? motions;
+
+  /// Every screen-root `_transition.type` the compiler accepts.
+  final Set<String> transitions;
 
   /// Every registered expression function name, or `null` when the assembler
   /// cannot enumerate them — validation of call names is skipped.
@@ -49,6 +56,7 @@ final class LanguageCatalog {
     // the builtin sets — a mount configured through Engine.initialize gets
     // the full catalog instead.
     motions: BuiltinLanguage.motions,
+    transitions: BuiltinLanguage.transitions,
     functions: BuiltinLanguage.functions,
   );
 
@@ -59,6 +67,7 @@ final class LanguageCatalog {
     widgets: BuiltinLanguage.widgets,
     commands: BuiltinLanguage.commands,
     motions: BuiltinLanguage.motions,
+    transitions: BuiltinLanguage.transitions,
     functions: BuiltinLanguage.functions,
   );
 }

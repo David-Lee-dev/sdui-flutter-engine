@@ -11,6 +11,7 @@ import '../contract/secure_storage.dart';
 import '../contract/telemetry_sink.dart';
 import '../contract/video_source.dart';
 import '../runtime/motion/_base.dart';
+import '../runtime/transition/_base.dart';
 import '../presentation/presentation.dart';
 import 'screen_page.dart';
 import '../impl/noop_telemetry_sink.dart';
@@ -79,6 +80,7 @@ final class Sdui {
     TelemetrySink? telemetry,
     Map<String, WidgetSpec> widgets = const {},
     List<Motion> motions = const [],
+    List<PageTransitionEffect> transitions = const [],
     Map<String, Object? Function(List<Object?>)> functions = const {},
     SduiPresentation presentation = const SduiPresentation(),
     SduiErrorObserver? errorObserver,
@@ -110,6 +112,7 @@ final class Sdui {
       telemetry: telemetry ?? const NoopTelemetrySink(),
       widgets: widgets,
       motions: motions,
+      transitions: transitions,
       functions: functions,
       presentation: presentation,
       errorObserver: errorObserver,

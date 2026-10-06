@@ -55,6 +55,20 @@ final class _FakeServiceCommand extends ExternalCommand {
   Future<Object?> run(CommandInvocation invocation) async => null;
 }
 
+final class _FacadeTransition extends PageTransitionEffect {
+  @override
+  String get type => 'facade_transition';
+
+  @override
+  Widget build(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) => child;
+}
+
 final class _FakeLoader implements ScreenLoader {
   final requested = <String>[];
 
@@ -91,6 +105,19 @@ void main() {
 
       test('screenLoader before initialize throws', () {
         expect(() => Sdui.screenLoader, throwsStateError);
+      });
+
+      test('page transition extension is forwarded to Engine', () {
+        Sdui.initialize(
+          screenLoader: _FakeLoader(),
+          networkClient: _FakeNetworkClient(),
+          imageSource: _FakeImageSource(),
+          videoSource: _FakeVideoSource(),
+          appStorage: _FakeAppStorage(),
+          secureStorage: _FakeSecureStorage(),
+          transitions: [_FacadeTransition()],
+        );
+        expect(Engine.catalog!.transitions, contains('facade_transition'));
       });
     });
 
@@ -142,9 +169,7 @@ void main() {
 
         expect(find.text('screen:home'), findsOneWidget);
         expect(loader.requested, ['home']);
-        final page = tester.widget<SduiScreenPage>(
-          find.byType(SduiScreenPage),
-        );
+        final page = tester.widget<SduiScreenPage>(find.byType(SduiScreenPage));
         expect(page.params, {'tab': 'a'});
       });
 
@@ -164,10 +189,8 @@ void main() {
           routes: [
             GoRoute(
               path: '/native',
-              builder: (context, state) => const Text(
-                'native-page',
-                textDirection: TextDirection.ltr,
-              ),
+              builder: (context, state) =>
+                  const Text('native-page', textDirection: TextDirection.ltr),
             ),
           ],
         );
