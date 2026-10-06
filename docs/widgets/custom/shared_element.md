@@ -21,7 +21,7 @@ _child:
   _child: { _type: text, value: "${title}" }
 ```
 
-Use the same evaluated tag at both endpoints in the same Navigator. The overlay paints source pixels using `RawImage`; the live widget and GlobalKeys stay in their original tree. Push grows/moves to the destination rectangle; pop flies back if the source slot still exists.
+Use the same evaluated tag at both endpoints in the same Navigator. The overlay crossfades source and destination snapshots using aspect-preserving `BoxFit.cover`, clipped by the interpolated radius; the live widget and GlobalKeys stay in their original tree. Push grows/moves to the destination rectangle; pop reverses the snapshot endpoints if the source slot still exists. A destination capture failure retains the source snapshot. Empty placeholders preserve both slot sizes without a second visible card.
 
 Both endpoints must exist on the destination's first frame. Place the destination outside `_skeleton` and data-dependent subtrees that mount after navigation. Duplicate tags in one route fail closed for all participants and emit a debug warning; removing duplicates restores flights.
 

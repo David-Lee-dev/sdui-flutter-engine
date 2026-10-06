@@ -89,7 +89,11 @@ void main() {
           var previous = times.first;
           for (final t in times) {
             await tester.pump(
-              Duration(milliseconds: ((t - previous).abs() * 300).round()),
+              Duration(
+                microseconds:
+                    ((t - previous).abs() * (reverse ? 250 : 300) * 1000)
+                        .round(),
+              ),
             );
             previous = t;
             expect(

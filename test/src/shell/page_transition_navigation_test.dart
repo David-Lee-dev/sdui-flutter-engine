@@ -215,7 +215,7 @@ void main() {
     expect(_fade(tester).opacity.value, 1);
     expect(
       _route(tester).transitionDuration,
-      const Duration(milliseconds: 300),
+      const Duration(milliseconds: 200),
     );
   });
 
@@ -423,10 +423,10 @@ void main() {
     await _open(tester, router, loader);
     router.pop();
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 50));
     final first = _fade(tester).opacity.value;
     expect(first, inExclusiveRange(0, 1));
-    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 50));
     expect(_fade(tester).opacity.value, lessThan(first));
     await tester.pumpAndSettle();
     expect(find.text('detail'), findsNothing);
@@ -476,7 +476,7 @@ void main() {
       await _open(tester, router, loader);
       expect(
         _route(tester).transitionDuration,
-        respect ? Duration.zero : const Duration(milliseconds: 300),
+        respect ? Duration.zero : const Duration(milliseconds: 200),
       );
     });
   }

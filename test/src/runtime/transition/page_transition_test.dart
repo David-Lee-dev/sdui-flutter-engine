@@ -67,7 +67,7 @@ void main() {
     );
     expect(
       fade.duration(PageTransitionSpec(type: 'fade')),
-      const Duration(milliseconds: 300),
+      const Duration(milliseconds: 200),
     );
     expect(fade.duration(spec), const Duration(milliseconds: 120));
     expect(fade.reverseDuration(spec), const Duration(milliseconds: 80));
@@ -101,11 +101,11 @@ void main() {
       final effect = PageTransitionFactory.resolve(type);
       expect(
         effect.duration(PageTransitionSpec(type: type)),
-        const Duration(milliseconds: 280),
+        const Duration(milliseconds: 250),
       );
       expect(
         effect.reverseDuration(PageTransitionSpec(type: type)),
-        const Duration(milliseconds: 220),
+        const Duration(milliseconds: 200),
       );
       final spec = PageTransitionSpec(
         type: type,
@@ -203,6 +203,19 @@ void main() {
       );
     }
   }
+
+  test('base duration is 250ms and fade reverse is 150ms', () {
+    final custom = const _TagTransition('custom');
+    final spec = PageTransitionSpec(type: 'custom');
+    expect(custom.duration(spec), const Duration(milliseconds: 250));
+    expect(custom.reverseDuration(spec), const Duration(milliseconds: 250));
+    expect(
+      PageTransitionFactory.resolve(
+        'fade',
+      ).reverseDuration(PageTransitionSpec(type: 'fade')),
+      const Duration(milliseconds: 150),
+    );
+  });
 
   test('compile-side curves resolve at runtime', () {
     const sentinel = _SentinelCurve();

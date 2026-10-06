@@ -118,36 +118,38 @@ final class _TransitionRoute extends PageRoute<void> {
           );
     // One curve maps the route value in both directions, so pop and edge
     // scrubbing retrace push without a direction-dependent visual jump.
-    final transitioned = effect.build(
-      context,
-      animation.drive(CurveTween(curve: EngineCurve.resolve(page.spec.curve))),
-      outgoing == null ? secondaryAnimation : const AlwaysStoppedAnimation(0),
-      outgoing ?? child,
-      page.spec,
+    final content = _SharedContent(
+      controller: _shared,
+      timing: page.spec.contentTiming,
+      animation: animation,
+      curve: EngineCurve.resolve(page.spec.curve),
+      builder: (progress) => effect.build(
+        context,
+        progress.drive(CurveTween(curve: EngineCurve.resolve(page.spec.curve))),
+        outgoing == null ? secondaryAnimation : const AlwaysStoppedAnimation(0),
+        outgoing ?? child,
+        page.spec,
+      ),
     );
-    final content =
-        page.spec.contentTiming == PageTransitionContentTiming.afterShared
-        ? _SharedContent(
-            controller: _shared,
-            curve: EngineCurve.resolve(page.spec.curve),
-            child: transitioned,
-          )
-        : transitioned;
     if (Theme.of(context).platform != TargetPlatform.iOS) return content;
     return _BackSwipe(route: this, controller: controller!, child: content);
   }
 }
 
-/// Starts hidden until HeroController has matched the first frame's heroes.
+/// Uses one content animation after Hero discovery, avoiding stacked fades.
 final class _SharedContent extends StatefulWidget {
   const _SharedContent({
     required this.controller,
     required this.curve,
-    required this.child,
+    required this.timing,
+    required this.animation,
+    required this.builder,
   });
   final SharedTransitionController controller;
   final Curve curve;
-  final Widget child;
+  final PageTransitionContentTiming timing;
+  final Animation<double> animation;
+  final Widget Function(Animation<double>) builder;
 
   @override
   State<_SharedContent> createState() => _SharedContentState();
@@ -165,17 +167,31 @@ class _SharedContentState extends State<_SharedContent> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
-    builder: (_, _) => AnimatedOpacity(
-      opacity: widget.controller.waiting ? 0 : 1,
-      duration: widget.controller.hasFlight
-          ? const Duration(milliseconds: 120)
-          : Duration.zero,
-      curve: widget.curve,
-      child: IgnorePointer(
-        ignoring: widget.controller.waiting,
-        child: widget.child,
-      ),
-    ),
+    builder: (_, _) {
+      final shared = widget.controller;
+      if (widget.timing == PageTransitionContentTiming.duringShared) {
+        final progress = shared.hasFlight
+            ? widget.animation.drive(CurveTween(curve: const Interval(0.3, 1)))
+            : widget.animation;
+        return widget.builder(progress);
+      }
+      // While waiting on push, only the reveal owns opacity. On pop the
+      // normal route effect retraces its animation with content already shown.
+      final progress = shared.hasFlight && !shared.landed
+          ? const AlwaysStoppedAnimation<double>(1)
+          : widget.animation;
+      return AnimatedOpacity(
+        opacity: shared.waiting ? 0 : 1,
+        duration: shared.hasFlight
+            ? const Duration(milliseconds: 120)
+            : Duration.zero,
+        curve: widget.curve,
+        child: IgnorePointer(
+          ignoring: shared.waiting,
+          child: widget.builder(progress),
+        ),
+      );
+    },
   );
 }
 

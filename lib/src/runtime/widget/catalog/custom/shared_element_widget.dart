@@ -215,15 +215,28 @@ class _SharedElementState extends State<SharedElement> {
       painted = !boundary.debugNeedsPaint;
       return true;
     }());
-    if (painted) {
+    try {
+      if (painted) _snapshot = boundary.toImageSync();
+    } catch (_) {
+      // An offstage destination may not have a composited layer yet.
+    }
+    if (_snapshot == null && destination) {
+      // Paint the laid-out destination into an isolated parent layer before
+      // Hero hides it. No live child or GlobalKey is copied into the overlay.
+      final layer = LayerHandle<OffsetLayer>(OffsetLayer());
       try {
+        PaintingContext(
+          layer.layer!,
+          boundary.paintBounds,
+        ).paintChild(boundary, Offset.zero);
         _snapshot = boundary.toImageSync();
       } catch (_) {
         // Unsupported rasterization is decorative: navigation must continue.
+      } finally {
+        layer.layer!.removeAllChildren();
+        layer.layer = null;
       }
     }
-    // The incoming route is laid out offstage on its first frame. It need not
-    // have painted yet: only the departure's pixels are used in the shuttle.
     return _snapshot != null || destination;
   }
 
@@ -240,6 +253,7 @@ class _SharedElementState extends State<SharedElement> {
     if (image == null) return const SizedBox.shrink();
     return _SnapshotFlight(
       image: image.clone(),
+      destinationImage: destination._snapshot?.clone(),
       animation: animation,
       direction: direction,
       fromRadius: source.widget.radius,
@@ -259,6 +273,12 @@ class _SharedElementState extends State<SharedElement> {
         return RectTween(begin: begin, end: end);
       },
       flightShuttleBuilder: _shuttle,
+      // Keep the slot and live keys mounted without a second visible copy.
+      placeholderBuilder: (_, size, child) => SizedBox(
+        width: size.width,
+        height: size.height,
+        child: Offstage(child: child),
+      ),
       child: RepaintBoundary(key: _boundary, child: widget.child),
     ),
   );
@@ -275,12 +295,14 @@ class _ParticipantMode extends HeroMode {
 class _SnapshotFlight extends StatefulWidget {
   const _SnapshotFlight({
     required this.image,
+    required this.destinationImage,
     required this.animation,
     required this.direction,
     required this.fromRadius,
     required this.toRadius,
   });
   final ui.Image image;
+  final ui.Image? destinationImage;
   final Animation<double> animation;
   final HeroFlightDirection direction;
   final double fromRadius;
@@ -297,11 +319,15 @@ class _SnapshotFlightState extends State<_SnapshotFlight> {
     if (!identical(oldWidget.image, widget.image)) {
       oldWidget.image.dispose();
     }
+    if (!identical(oldWidget.destinationImage, widget.destinationImage)) {
+      oldWidget.destinationImage?.dispose();
+    }
   }
 
   @override
   void dispose() {
     widget.image.dispose();
+    widget.destinationImage?.dispose();
     super.dispose();
   }
 
@@ -316,7 +342,23 @@ class _SnapshotFlightState extends State<_SnapshotFlight> {
         borderRadius: BorderRadius.circular(
           ui.lerpDouble(widget.fromRadius, widget.toRadius, t)!,
         ),
-        child: RawImage(image: widget.image, fit: BoxFit.fill),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Opacity(
+              opacity: widget.destinationImage == null ? 1 : 1 - t,
+              child: RawImage(image: widget.image, fit: BoxFit.cover),
+            ),
+            if (widget.destinationImage != null)
+              Opacity(
+                opacity: t,
+                child: RawImage(
+                  image: widget.destinationImage,
+                  fit: BoxFit.cover,
+                ),
+              ),
+          ],
+        ),
       );
     },
   );

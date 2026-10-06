@@ -78,6 +78,7 @@ Future<void> _push(
   ValueNotifier<List<Page<void>>> pages, {
   String tag = 'item',
   PageTransitionContentTiming timing = PageTransitionContentTiming.duringShared,
+  Duration elapsed = const Duration(milliseconds: 100),
 }) async {
   pages.value = [
     ...pages.value,
@@ -97,10 +98,11 @@ Future<void> _push(
     ),
   ];
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 100));
+  await tester.pump(elapsed);
 }
 
-Finder get _snapshot => find.byType(RawImage);
+Finder get _snapshots => find.byType(RawImage);
+Finder get _snapshot => _snapshots.first;
 
 void main() {
   tearDown(EnginePresentation.reset);
@@ -110,7 +112,7 @@ void main() {
     (tester) async {
       final (pages, navigator) = await _pump(tester, _box());
       await _push(tester, pages);
-      expect(_snapshot, findsOneWidget);
+      expect(_snapshots, findsNWidgets(2));
       final rect = tester.getRect(_snapshot);
       expect(rect.width, inExclusiveRange(80, 200));
       expect(rect.left, inExclusiveRange(0, 600));
@@ -123,7 +125,7 @@ void main() {
       );
       expect(tester.widget<RawImage>(_snapshot).image, isNotNull);
       await tester.pumpAndSettle();
-      expect(_snapshot, findsNothing);
+      expect(_snapshots, findsNothing);
       navigator.pop();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -134,6 +136,174 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'crossfade snapshots at 0, 0.5, 1 in push and pop preserve aspect',
+    (tester) async {
+      final (pages, navigator) = await _pump(tester, _box());
+      await _push(tester, pages);
+      expect(_snapshots, findsNWidgets(2));
+      await tester.pumpAndSettle();
+      final source = tester.element(
+        find.descendant(
+          of: find.byKey(_source, skipOffstage: false),
+          matching: find.byType(Hero, skipOffstage: false),
+        ),
+      );
+      final destination = tester.element(
+        find.descendant(
+          of: find.byKey(_destination),
+          matching: find.byType(Hero),
+        ),
+      );
+      final hero = destination.widget as Hero;
+      for (final direction in HeroFlightDirection.values) {
+        for (final t in [0.0, 0.5, 1.0]) {
+          final push = direction == HeroFlightDirection.push;
+          final flight = hero.flightShuttleBuilder!(
+            destination,
+            AlwaysStoppedAnimation(push ? t : 1 - t),
+            direction,
+            push ? source : destination,
+            push ? destination : source,
+          );
+          final entry = OverlayEntry(
+            builder: (_) => Positioned(
+              left: 0,
+              top: 0,
+              width: 240,
+              height: 100,
+              child: SizedBox(key: const ValueKey('probe'), child: flight),
+            ),
+          );
+          navigator.overlay!.insert(entry);
+          await tester.pump();
+          final images = find.descendant(
+            of: find.byKey(const ValueKey('probe')),
+            matching: find.byType(RawImage),
+          );
+          expect(images, findsNWidgets(2));
+          final raw = tester.widgetList<RawImage>(images).toList();
+          expect(raw.first.image!.width, push ? 80 : 200);
+          expect(raw.last.image!.width, push ? 200 : 80);
+          for (var i = 0; i < 2; i++) {
+            final opacity = tester.widget<Opacity>(
+              find
+                  .ancestor(of: images.at(i), matching: find.byType(Opacity))
+                  .first,
+            );
+            expect(opacity.opacity, closeTo(i == 0 ? 1 - t : t, 1e-6));
+            expect(raw[i].fit, BoxFit.cover);
+            final fitted = applyBoxFit(
+              raw[i].fit!,
+              Size(
+                raw[i].image!.width.toDouble(),
+                raw[i].image!.height.toDouble(),
+              ),
+              tester.getSize(images.at(i)),
+            );
+            expect(
+              fitted.destination.width / fitted.source.width,
+              closeTo(fitted.destination.height / fitted.source.height, 1e-6),
+            );
+          }
+          entry.remove();
+          await tester.pump();
+          entry.dispose();
+        }
+      }
+    },
+  );
+
+  testWidgets('during_shared content follows latter route interval', (
+    tester,
+  ) async {
+    final (pages, _) = await _pump(tester, _box());
+    await _push(tester, pages, elapsed: Duration.zero);
+    final route = ModalRoute.of(tester.element(find.byKey(_destination)))!;
+    for (final elapsed in [0, 40, 60, 100]) {
+      await tester.pump(Duration(milliseconds: elapsed));
+      final fade = tester.widget<FadeTransition>(
+        find
+            .ancestor(
+              of: find.byKey(_content),
+              matching: find.byType(FadeTransition),
+            )
+            .first,
+      );
+      expect(
+        fade.opacity.value,
+        closeTo(const Interval(0.3, 1).transform(route.animation!.value), 1e-6),
+      );
+    }
+  });
+
+  testWidgets(
+    'after_shared has one 120ms fade after landing without double dim',
+    (tester) async {
+      final (pages, _) = await _pump(tester, _box());
+      await _push(
+        tester,
+        pages,
+        timing: PageTransitionContentTiming.afterShared,
+      );
+      final reveal = find
+          .ancestor(
+            of: find.byKey(_content),
+            matching: find.byType(AnimatedOpacity),
+          )
+          .first;
+      final pageFade = find
+          .ancestor(
+            of: find.byKey(_content),
+            matching: find.byType(FadeTransition),
+          )
+          .first;
+      expect(tester.widget<AnimatedOpacity>(reveal).opacity, 0);
+      expect(
+        tester.widget<AnimatedOpacity>(reveal).duration,
+        const Duration(milliseconds: 120),
+      );
+      expect(tester.widget<FadeTransition>(pageFade).opacity.value, 1);
+      await tester.pump(const Duration(milliseconds: 101));
+      await tester.pump();
+      expect(tester.widget<AnimatedOpacity>(reveal).opacity, 1);
+      await tester.pump(const Duration(milliseconds: 60));
+      final rendered = tester.renderObject<RenderAnimatedOpacity>(
+        find
+            .descendant(of: reveal, matching: find.byType(FadeTransition))
+            .first,
+      );
+      // Inspect the reveal's generated FadeTransition separately from the page fade.
+      expect(rendered.opacity.value, inExclusiveRange(0, 1));
+      expect(tester.widget<FadeTransition>(pageFade).opacity.value, 1);
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(rendered.opacity.value, 1);
+    },
+  );
+
+  testWidgets('placeholder keeps source slot size and live child mounted', (
+    tester,
+  ) async {
+    final (pages, _) = await _pump(tester, _box());
+    final before = tester.getSize(find.byKey(_source));
+    await _push(tester, pages);
+    expect(tester.getSize(find.byKey(_source)), before);
+    final sourceHero = tester.widget<Hero>(
+      find.descendant(of: find.byKey(_source), matching: find.byType(Hero)),
+    );
+    final placeholder = sourceHero.placeholderBuilder!(
+      tester.element(find.byKey(_source)),
+      const Size(80, 80),
+      sourceHero.child,
+    );
+    expect(placeholder, isA<SizedBox>());
+    expect((placeholder as SizedBox).width, 80);
+    expect(placeholder.height, 80);
+    expect((placeholder.child! as Offstage).offstage, isTrue);
+    expect((placeholder.child! as Offstage).child, same(sourceHero.child));
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('duplicate tags fail closed and recovery restores flights', (
     tester,
@@ -152,7 +322,7 @@ void main() {
     );
     await _push(tester, pages);
     expect(tester.takeException(), isNull);
-    expect(_snapshot, findsNothing);
+    expect(_snapshots, findsNothing);
     expect(logs.any((line) => line.contains('duplicate tag "item"')), isTrue);
     await tester.pumpAndSettle();
     navigator.pop();
@@ -183,7 +353,7 @@ void main() {
     navigator.pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(_snapshot, findsNothing);
+    expect(_snapshots, findsNothing);
     await tester.pumpAndSettle();
     expect(pages.value, hasLength(1));
     expect(tester.takeException(), isNull);
@@ -201,7 +371,7 @@ void main() {
         reduced: mode == 'reduced',
       );
       await _push(tester, pages);
-      expect(_snapshot, findsNothing);
+      expect(_snapshots, findsNothing);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });
@@ -262,7 +432,7 @@ void main() {
       tag: 'different',
       timing: PageTransitionContentTiming.afterShared,
     );
-    expect(_snapshot, findsNothing);
+    expect(_snapshots, findsNothing);
     expect(
       tester
           .widget<AnimatedOpacity>(
@@ -323,7 +493,7 @@ void main() {
       ),
     );
     await _push(tester, pages);
-    expect(_snapshot, findsNothing);
+    expect(_snapshots, findsNothing);
     await tester.pumpAndSettle();
   });
 
@@ -401,7 +571,7 @@ void main() {
       ];
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      expect(_snapshot, findsNothing);
+      expect(_snapshots, findsNothing);
       expect(tester.takeException(), isNull);
       order.value = true;
       await tester.pump();
@@ -410,7 +580,7 @@ void main() {
       navigator.pop();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      expect(_snapshot, findsNothing);
+      expect(_snapshots, findsNothing);
       await tester.pumpAndSettle();
     },
   );
@@ -466,7 +636,7 @@ void main() {
     navigator.pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(_snapshot, findsNothing);
+    expect(_snapshots, findsNothing);
     await tester.pumpAndSettle();
     expect(pages.value, hasLength(1));
   });
@@ -491,7 +661,7 @@ void main() {
       ),
     );
     await _push(tester, pages);
-    expect(_snapshot, findsNothing);
+    expect(_snapshots, findsNothing);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
