@@ -52,7 +52,7 @@ _slots:
 | `duration` | finite number ≥ 0 | effect default | Push duration in milliseconds, rounded to an integer. |
 | `reverse_duration` | finite number ≥ 0 | effect default | Pop duration in milliseconds, rounded to an integer. |
 | `curve` | EngineCurve name | `linear` | Maps the route animation for both push and reverse playback. |
-| `content_timing` | string | `during_shared` | Accepts `during_shared` or `after_shared`; retained as metadata for shared-content integration. |
+| `content_timing` | string | `during_shared` | Runs non-shared page content concurrently (`during_shared`), or hides it until snapshot flights land and then fades it in (`after_shared`). Without a matching flight, content appears immediately. |
 | `params` | map | `{}` | Effect-specific static parameters. |
 
 Unknown declaration keys are rejected at compile time.
@@ -137,3 +137,24 @@ Override `defaultReverseDuration` to choose a separate pop duration; otherwise i
 Server/build-time compilers must pass `Compile.build(template, state, screen: true)` for screen roots. The default compilation mode rejects `_transition`. A server compiling custom effect names must include those names in its `LanguageCatalog.transitions`; compilation does not import runtime implementations.
 
 Version-gate templates containing `_transition` to app versions that support it. Older apps reject the reserved key rather than ignoring it, even if their presentation configuration disables transitions.
+
+## Shared elements
+
+Wrap the source and destination's box widget with [`shared_element`](widgets/custom/shared_element.md) and the same `tag`. The engine uses Flutter Hero to interpolate its rectangle and optional `radius` while the page's `_transition` runs. Push flies a snapshot of the source; pop flies a snapshot of the departing detail back to the source slot. The live child and its GlobalKeys are never duplicated in the overlay.
+
+```yaml
+_type: shared_element
+tag: "product-${id}"
+radius: 12
+_child:
+  _type: image
+  src: "${image}"
+```
+
+The destination must be present on the first frame. Preloaded screens are rendered synchronously, but elements inside `_skeleton` or data-dependent subtrees that appear later cannot fly. Removed/scrolled-away source slots simply have no matching pop flight.
+
+Duplicate tags within a route disable every participant with that tag and emit a debug diagnostic; fixing duplicates restores participation. Modal surfaces, inactive tabs (`TickerMode: false`), zero-size/unpainted sources, platform views, and reduced motion (`respectReducedMotion` plus `disableAnimations`) do not fly. Navigation continues normally. A `video` flies only as pixels and initializes again at its destination; controller handoff is outside v1.
+
+`content_timing: during_shared` runs the page effect concurrently. On custom engine routes, `after_shared` keeps destination content transparent until the flight lands, then reveals it in a short 120 ms fade using the page curve. A missing match reveals immediately. Platform/legacy routes retain their host transitions and concurrent content behavior.
+
+v1 guarantees flights only inside the same Navigator. Tab-shell branch-to-root behavior is unverified; cross-Navigator tags are isolated. go_router 14.8.1 provides each Navigator's HeroControllerScope (`lib/src/builder.dart`).

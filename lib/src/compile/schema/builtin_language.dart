@@ -20,6 +20,7 @@ abstract final class BuiltinLanguage {
   static const Map<String, WidgetSchema> widgets = {
   'absorb_pointer': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'align': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
+  'shared_element': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'anchor': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'anchor_scope': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'app_bar': WidgetSchema(kind: WidgetKind.slot, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),

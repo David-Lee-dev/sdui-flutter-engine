@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../ir/model/page_transition.dart';
 import '../runtime/transition/transition_factory.dart';
+import '../runtime/transition/shared_transition_scope.dart';
 import '../runtime/util/engine_curve.dart';
 
 Page<void> sduiTransitionPage({
@@ -27,6 +28,26 @@ final class _TransitionRoute extends PageRoute<void> {
   _TransitionRoute(_TransitionPage page) : super(settings: page);
 
   _TransitionRoute? _nextRoute;
+  final _shared = SharedTransitionController();
+
+  @override
+  void install() {
+    super.install();
+    animation!.addStatusListener(_animationStatus);
+  }
+
+  void _animationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && !offstage) {
+      _shared.flightLanded();
+    }
+  }
+
+  @override
+  void dispose() {
+    animation!.removeStatusListener(_animationStatus);
+    _shared.dispose();
+    super.dispose();
+  }
 
   // Limit route-pair effects to engine neighbours. In particular, do not
   // receive a platform delegated transition or supply one to a legacy route.
@@ -74,7 +95,7 @@ final class _TransitionRoute extends PageRoute<void> {
     BuildContext context,
     Animation<double> animation,
     Animation<double> secondaryAnimation,
-  ) => page.child;
+  ) => SharedTransitionScope(controller: _shared, child: page.child);
 
   @override
   Widget buildTransitions(
@@ -104,13 +125,58 @@ final class _TransitionRoute extends PageRoute<void> {
       outgoing ?? child,
       page.spec,
     );
-    if (Theme.of(context).platform != TargetPlatform.iOS) return transitioned;
-    return _BackSwipe(
-      route: this,
-      controller: controller!,
-      child: transitioned,
-    );
+    final content =
+        page.spec.contentTiming == PageTransitionContentTiming.afterShared
+        ? _SharedContent(
+            controller: _shared,
+            curve: EngineCurve.resolve(page.spec.curve),
+            child: transitioned,
+          )
+        : transitioned;
+    if (Theme.of(context).platform != TargetPlatform.iOS) return content;
+    return _BackSwipe(route: this, controller: controller!, child: content);
   }
+}
+
+/// Starts hidden until HeroController has matched the first frame's heroes.
+final class _SharedContent extends StatefulWidget {
+  const _SharedContent({
+    required this.controller,
+    required this.curve,
+    required this.child,
+  });
+  final SharedTransitionController controller;
+  final Curve curve;
+  final Widget child;
+
+  @override
+  State<_SharedContent> createState() => _SharedContentState();
+}
+
+class _SharedContentState extends State<_SharedContent> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.controller.discoveryFinished();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.controller,
+    builder: (_, _) => AnimatedOpacity(
+      opacity: widget.controller.waiting ? 0 : 1,
+      duration: widget.controller.hasFlight
+          ? const Duration(milliseconds: 120)
+          : Duration.zero,
+      curve: widget.curve,
+      child: IgnorePointer(
+        ignoring: widget.controller.waiting,
+        child: widget.child,
+      ),
+    ),
+  );
 }
 
 /// Cupertino's edge gesture semantics with the route's own effect. The effect

@@ -145,6 +145,7 @@ Engine-specific widgets; includes the explicitly unregistered internal helper fo
 
 | Name | Summary | Protocol | Loop wrapper? | Reference |
 | --- | --- | --- | --- | --- |
+| `shared_element` | Flies one box child as a snapshot between matching route tags. | box | No | [Open](custom/shared_element.md) |
 | `anchor` | Registers an `anchor` node's first child under its non-empty `id`. | box | No | [Open](custom/anchor.md) |
 | `anchor_scope` | Owns the stacking context `anchor`s inside it fly within. | box | No | [Open](custom/anchor_scope.md) |
 | `auto_scroll` | A seamless, infinitely repeating scrolling marquee. | box | Yes | [Open](custom/auto_scroll.md) |

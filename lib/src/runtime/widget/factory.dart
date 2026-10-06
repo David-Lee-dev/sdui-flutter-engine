@@ -9,6 +9,7 @@ import 'catalog/primitive/absorb_pointer_widget.dart';
 import 'catalog/primitive/align_widget.dart';
 import 'catalog/custom/anchor_scope_widget.dart';
 import 'catalog/custom/anchor_widget.dart';
+import 'catalog/custom/shared_element_widget.dart';
 import 'catalog/custom/chart_widget.dart';
 import 'catalog/primitive/app_bar_widget.dart';
 import 'catalog/primitive/aspect_ratio_widget.dart';
@@ -120,6 +121,7 @@ final class WidgetFactory {
 
   static const Map<String, WidgetSpec> _builtins = {
     'anchor': EagerSpec(AnchorWidget.build),
+    'shared_element': EagerSpec(SharedElementWidget.build),
     'anchor_scope': EagerSpec(AnchorScopeWidget.build),
     'text': EagerSpec(TextWidget.build),
     'rich_text': EagerSpec(RichTextWidget.build),
