@@ -11,11 +11,17 @@ import '../contract/video_source.dart';
 class PlayerVideoController implements SduiVideoController {
   PlayerVideoController(this._inner);
 
-  PlayerVideoController.asset(String path)
-    : _inner = VideoPlayerController.asset(path);
+  /// Pass `VideoPlayerOptions(mixWithOthers: true)` as [options] when a screen
+  /// can show several videos at once; otherwise Android audio focus may pause
+  /// all but one of them, even muted.
+  PlayerVideoController.asset(String path, {VideoPlayerOptions? options})
+    : _inner = VideoPlayerController.asset(path, videoPlayerOptions: options);
 
-  PlayerVideoController.network(Uri url)
-    : _inner = VideoPlayerController.networkUrl(url);
+  PlayerVideoController.network(Uri url, {VideoPlayerOptions? options})
+    : _inner = VideoPlayerController.networkUrl(
+        url,
+        videoPlayerOptions: options,
+      );
 
   final VideoPlayerController _inner;
 

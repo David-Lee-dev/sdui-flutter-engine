@@ -62,7 +62,7 @@ The destination owns controls, `on_end`, loop, volume and autoplay after push; p
 
 Texture-backed `PlayerVideoController` is the supported continuous path. Custom platform-view controllers are unsupported for continuous handoff: remounting their view may flicker; platform views skip the Hero flight. Use one video per shared-element subtree, unique tags per route, and keep both endpoints mounted on the destination's first frame. Modal surfaces and initially inactive tabs do not participate; reduced motion disables the flight.
 
-When displaying multiple videos at once, the app's `VideoSource` must allow concurrent playback. With `video_player`, create `VideoPlayerController` with `VideoPlayerOptions(mixWithOthers: true)` and wrap it in `PlayerVideoController`. On Android, the default audio-focus policy can pause another player even if its volume is zero; `muted` alone does not disable focus handling. The engine does not override the app's audio policy.
+When displaying multiple videos at once, the app's `VideoSource` must allow concurrent playback. With `video_player`, pass the options to the package controller: `PlayerVideoController.network(url, options: VideoPlayerOptions(mixWithOthers: true))` (or `.asset`). On Android, the default audio-focus policy can pause another player even if its volume is zero; `muted` alone does not disable focus handling. The engine does not override the app's audio policy.
 
 ## Pitfalls & related
 
