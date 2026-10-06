@@ -19,6 +19,16 @@ abstract class PageTransitionEffect {
         spec.reverseDurationMs ?? defaultReverseDuration.inMilliseconds,
   );
 
+  /// Optionally animates the page below this route. The animation includes
+  /// this route's curve and retraces the same values on pop and swipe.
+  /// Returning null preserves the previous effect's secondary transition.
+  Widget? buildOutgoing(
+    BuildContext context,
+    Animation<double> animation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) => null;
+
   Widget build(
     BuildContext context,
     Animation<double> animation,

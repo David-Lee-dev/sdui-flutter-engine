@@ -93,7 +93,15 @@ void main() {
       );
     });
 
-    for (final type in ['platform', 'none', 'fade', 'slide_up', 'zoom']) {
+    for (final type in [
+      'platform',
+      'none',
+      'fade',
+      'slide_up',
+      'zoom',
+      'fade_through',
+      'shared_axis',
+    ]) {
       test('$type rejects unknown params', () {
         expect(
           () => Compile.build(
@@ -119,16 +127,18 @@ void main() {
         );
       });
     }
-    for (final (type, key, min) in [
-      ('slide_up', 'distance', 0.0),
-      ('zoom', 'begin_scale', 0.5),
+    for (final (type, key, min, max) in [
+      ('slide_up', 'distance', 0.0, 1.0),
+      ('zoom', 'begin_scale', 0.5, 1.0),
+      ('fade_through', 'threshold', 0.0, 1.0),
+      ('shared_axis', 'distance', 0.0, 200.0),
     ]) {
       test('$type accepts defaults and valid inclusive bounds', () {
         for (final params in <Map<String, Object?>>[
           {},
           {key: min},
           {key: 0.75},
-          {key: 1},
+          {key: max},
         ]) {
           expect(
             () => Compile.build(
@@ -153,7 +163,7 @@ void main() {
           [],
           {},
           min - 0.01,
-          1.01,
+          max + 0.01,
           double.nan,
           double.infinity,
         ]) {
@@ -176,6 +186,40 @@ void main() {
         }
       });
     }
+
+    test('shared_axis validates the axis enum', () {
+      for (final axis in <Object?>[
+        'x',
+        'y',
+        'z',
+        'X',
+        '',
+        0,
+        true,
+        null,
+        [],
+        {},
+      ]) {
+        Object? compile() => Compile.build(
+          {
+            '_type': 'text',
+            'value': 'x',
+            '_transition': {
+              'type': 'shared_axis',
+              'params': {'axis': axis},
+            },
+          },
+          const {},
+          catalog: catalog,
+          screen: true,
+        );
+        if (axis == 'x' || axis == 'y' || axis == 'z') {
+          expect(compile, returnsNormally);
+        } else {
+          expect(compile, throwsA(isA<InvalidTemplateException>()));
+        }
+      }
+    });
 
     test('rejects malformed declarations and expressions', () {
       final bad = <Object?>[

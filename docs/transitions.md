@@ -66,8 +66,14 @@ Unknown declaration keys are rejected at compile time.
 | `fade` | Opacity 0 → 1 | none | 300 / 300 ms |
 | `slide_up` | Bottom offset → 0, opacity 0 → 1 | `distance`: fraction of page height, default `0.08`, inclusive range `0..1` | 280 / 220 ms |
 | `zoom` | Centered scale → 1, opacity 0 → 1 | `begin_scale`: default `0.94`, inclusive range `0.5..1` | 280 / 220 ms |
+| `fade_through` | Outgoing opacity 1 → 0 before the threshold; incoming opacity 0 → 1 and scale 0.92 → 1 afterward | `threshold`: default `0.35`, inclusive range `0..1` | 300 / 300 ms |
+| `shared_axis` | x/y: incoming +distance → 0, outgoing 0 → −distance with cross-fade; z: incoming scale 0.8 → 1, outgoing 1 → 1.1 with cross-fade | `axis`: `x`, `y`, or `z`, default `x`; `distance`: logical pixels for x/y, default `30`, inclusive range `0..200` | 300 / 300 ms |
 
-Built-in parameters must be finite numbers within the listed bounds. Unknown parameter keys, strings, booleans, nulls and out-of-range values are rejected. Custom effect names without a built-in schema accept arbitrary static JSON parameters; the custom implementation owns their interpretation.
+`shared_axis` flips x offsets in RTL. Its pixel distance is independent of page dimensions. `fade_through` threshold endpoints are allowed: 0 makes the exit immediate after the start, and 1 makes the entrance immediate at the end.
+
+Both effects animate the page below using the incoming route's specification, curve and secondary animation, including pop and iOS swipe. Route-pair animation applies only between engine transition routes. With legacy Material/Cupertino pages or app routes, the engine page plays its incoming half and the neighbour keeps its platform transition behaviour; the engine does not install an outgoing effect on that neighbour.
+
+Numeric built-in parameters must be finite numbers within the listed bounds. Unknown parameter keys, invalid axis strings, wrong parameter types, nulls and out-of-range values are rejected. Custom effect names without a built-in schema accept arbitrary static JSON parameters; the custom implementation owns their interpretation.
 
 ## Precedence and loading
 
@@ -122,7 +128,9 @@ Sdui.initialize(
 );
 ```
 
-The primary animation already includes the declared curve. Effects should derive transforms from that animation so push, pop and swipe remain synchronized. Override `defaultReverseDuration` to choose a separate pop duration; otherwise it equals `defaultDuration`.
+The primary animation already includes the declared curve. Effects should derive transforms from that animation so push, pop and swipe remain synchronized. Optionally override `buildOutgoing(context, animation, child, spec)` to animate the previous engine page. That animation includes the incoming route's curve and follows its secondary progress. The default returns `null`, preserving existing custom effects. A supplied outgoing widget replaces the previous effect's secondary transition to avoid double animation; its primary transition remains active.
+
+Override `defaultReverseDuration` to choose a separate pop duration; otherwise it equals `defaultDuration`.
 
 ## Server compilation and compatibility
 

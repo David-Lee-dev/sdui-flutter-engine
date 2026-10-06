@@ -13,6 +13,8 @@ final class PageTransitionFactory {
     'fade': _FadePageTransition(),
     'slide_up': _SlideUpPageTransition(),
     'zoom': _ZoomPageTransition(),
+    'fade_through': _FadeThroughPageTransition(),
+    'shared_axis': _SharedAxisPageTransition(),
   };
 
   static final Map<String, PageTransitionEffect> _transitions = {..._builtins};
@@ -162,6 +164,117 @@ final class _ZoomPageTransition extends PageTransitionEffect {
     return ScaleTransition(
       scale: Tween<double>(begin: begin, end: 1).animate(animation),
       child: FadeTransition(opacity: animation, child: child),
+    );
+  }
+}
+
+final class _FadeThroughPageTransition extends PageTransitionEffect {
+  const _FadeThroughPageTransition();
+
+  @override
+  String get type => 'fade_through';
+
+  @override
+  Widget build(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) {
+    final threshold = (spec.params['threshold'] as num?)?.toDouble() ?? 0.35;
+    final incoming = animation.drive(CurveTween(curve: Interval(threshold, 1)));
+    return FadeTransition(
+      opacity: incoming,
+      child: ScaleTransition(
+        scale: Tween<double>(begin: 0.92, end: 1).animate(incoming),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  Widget buildOutgoing(
+    BuildContext context,
+    Animation<double> animation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) {
+    final threshold = (spec.params['threshold'] as num?)?.toDouble() ?? 0.35;
+    return FadeTransition(
+      opacity: animation
+          .drive(CurveTween(curve: Interval(0, threshold)))
+          .drive(Tween<double>(begin: 1, end: 0)),
+      child: child,
+    );
+  }
+}
+
+final class _SharedAxisPageTransition extends PageTransitionEffect {
+  const _SharedAxisPageTransition();
+
+  @override
+  String get type => 'shared_axis';
+
+  @override
+  Widget build(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) {
+    final axis = spec.params['axis'] as String? ?? 'x';
+    final faded = FadeTransition(opacity: animation, child: child);
+    if (axis == 'z') {
+      return ScaleTransition(
+        scale: Tween<double>(begin: 0.8, end: 1).animate(animation),
+        child: faded,
+      );
+    }
+    final distance = (spec.params['distance'] as num?)?.toDouble() ?? 30;
+    final direction = Directionality.of(context) == TextDirection.rtl ? -1 : 1;
+    return AnimatedBuilder(
+      animation: animation,
+      child: faded,
+      builder: (_, child) => Transform.translate(
+        offset: axis == 'y'
+            ? Offset(0, distance * (1 - animation.value))
+            : Offset(direction * distance * (1 - animation.value), 0),
+        child: child,
+      ),
+    );
+  }
+
+  @override
+  Widget buildOutgoing(
+    BuildContext context,
+    Animation<double> animation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) {
+    final axis = spec.params['axis'] as String? ?? 'x';
+    final faded = FadeTransition(
+      opacity: animation.drive(Tween<double>(begin: 1, end: 0)),
+      child: child,
+    );
+    if (axis == 'z') {
+      return ScaleTransition(
+        scale: Tween<double>(begin: 1, end: 1.1).animate(animation),
+        child: faded,
+      );
+    }
+    final distance = (spec.params['distance'] as num?)?.toDouble() ?? 30;
+    final direction = Directionality.of(context) == TextDirection.rtl ? -1 : 1;
+    return AnimatedBuilder(
+      animation: animation,
+      child: faded,
+      builder: (_, child) => Transform.translate(
+        offset: axis == 'y'
+            ? Offset(0, -distance * animation.value)
+            : Offset(-direction * distance * animation.value, 0),
+        child: child,
+      ),
     );
   }
 }

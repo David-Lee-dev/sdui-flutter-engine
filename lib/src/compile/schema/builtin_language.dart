@@ -189,17 +189,28 @@ abstract final class BuiltinLanguage {
     'fade',
     'slide_up',
     'zoom',
+    'fade_through',
+    'shared_axis',
   };
 
-  /// Built-in numeric params and inclusive bounds. Empty schemas reject all
-  /// keys; app effects without an entry accept arbitrary static literal params.
-  static const Map<String, Map<String, ({double min, double max})>>
+  /// Built-in params: inclusive numeric bounds or allowed string values.
+  /// Empty schemas reject all keys; app effects without an entry accept
+  /// arbitrary static literal params.
+  static const Map<
+    String,
+    Map<String, ({double? min, double? max, Set<String>? values})>
+  >
   transitionParams = {
     'platform': {},
     'none': {},
     'fade': {},
-    'slide_up': {'distance': (min: 0, max: 1)},
-    'zoom': {'begin_scale': (min: 0.5, max: 1)},
+    'slide_up': {'distance': (min: 0, max: 1, values: null)},
+    'zoom': {'begin_scale': (min: 0.5, max: 1, values: null)},
+    'fade_through': {'threshold': (min: 0, max: 1, values: null)},
+    'shared_axis': {
+      'axis': (min: null, max: null, values: {'x', 'y', 'z'}),
+      'distance': (min: 0, max: 200, values: null),
+    },
   };
 
   /// Registered expression function names accepted in `${...}` calls.

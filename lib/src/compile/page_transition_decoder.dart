@@ -96,22 +96,33 @@ final class PageTransitionDecoder {
     final schema = BuiltinLanguage.transitionParams[type];
     if (schema != null && params is Map) {
       for (final entry in params.entries) {
-        final range = schema[entry.key];
-        if (range == null) {
+        final rule = schema[entry.key];
+        if (rule == null) {
           throw InvalidTemplateException(
             'root',
             'Unknown "_transition.params.${entry.key}" for "$type".',
           );
         }
         final value = entry.value;
+        final values = rule.values;
+        if (values != null) {
+          if (value is! String || !values.contains(value)) {
+            throw InvalidTemplateException(
+              'root',
+              '"_transition.params.${entry.key}" for "$type" must be one of '
+                  '${values.join(", ")}.',
+            );
+          }
+          continue;
+        }
         if (value is! num ||
             !value.isFinite ||
-            value < range.min ||
-            value > range.max) {
+            value < rule.min! ||
+            value > rule.max!) {
           throw InvalidTemplateException(
             'root',
             '"_transition.params.${entry.key}" for "$type" must be a finite '
-                'number in ${range.min}..${range.max}.',
+                'number in ${rule.min}..${rule.max}.',
           );
         }
       }

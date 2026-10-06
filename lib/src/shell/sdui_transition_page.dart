@@ -26,6 +26,30 @@ final class _TransitionPage extends Page<void> {
 final class _TransitionRoute extends PageRoute<void> {
   _TransitionRoute(_TransitionPage page) : super(settings: page);
 
+  _TransitionRoute? _nextRoute;
+
+  // Limit route-pair effects to engine neighbours. In particular, do not
+  // receive a platform delegated transition or supply one to a legacy route.
+  @override
+  bool canTransitionTo(TransitionRoute<dynamic> nextRoute) =>
+      nextRoute is _TransitionRoute;
+
+  @override
+  bool canTransitionFrom(TransitionRoute<dynamic> previousRoute) =>
+      previousRoute is _TransitionRoute;
+
+  @override
+  void didChangeNext(Route<dynamic>? nextRoute) {
+    _nextRoute = nextRoute is _TransitionRoute ? nextRoute : null;
+    super.didChangeNext(nextRoute);
+  }
+
+  @override
+  void didPopNext(Route<dynamic> nextRoute) {
+    _nextRoute = nextRoute is _TransitionRoute ? nextRoute : null;
+    super.didPopNext(nextRoute);
+  }
+
   _TransitionPage get page => settings as _TransitionPage;
 
   @override
@@ -60,13 +84,24 @@ final class _TransitionRoute extends PageRoute<void> {
     Widget child,
   ) {
     final effect = PageTransitionFactory.resolve(page.spec.type);
+    final next = _nextRoute;
+    final outgoing = next == null
+        ? null
+        : PageTransitionFactory.resolve(next.page.spec.type).buildOutgoing(
+            context,
+            secondaryAnimation.drive(
+              CurveTween(curve: EngineCurve.resolve(next.page.spec.curve)),
+            ),
+            child,
+            next.page.spec,
+          );
     // One curve maps the route value in both directions, so pop and edge
     // scrubbing retrace push without a direction-dependent visual jump.
     final transitioned = effect.build(
       context,
       animation.drive(CurveTween(curve: EngineCurve.resolve(page.spec.curve))),
-      secondaryAnimation,
-      child,
+      outgoing == null ? secondaryAnimation : const AlwaysStoppedAnimation(0),
+      outgoing ?? child,
       page.spec,
     );
     if (Theme.of(context).platform != TargetPlatform.iOS) return transitioned;
