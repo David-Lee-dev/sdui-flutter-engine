@@ -1,4 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueKey;
+import 'package:flutter/material.dart' show MaterialApp, MaterialPage;
+import 'package:flutter/cupertino.dart' show CupertinoApp, CupertinoPage;
+import 'package:flutter/widgets.dart' show MediaQuery, Builder, Widget;
 import 'package:go_router/go_router.dart';
 
 import '../contract/error_observer.dart';
@@ -19,7 +22,11 @@ import '../engine.dart';
 import '../runtime/log/engine_log.dart';
 import '../runtime/telemetry/telemetry.dart';
 import '../runtime/widget/factory.dart';
+import '../runtime/engine_presentation.dart';
+import '../ir/model/page_transition.dart';
 import 'sdui_state.dart';
+import 'sdui_transition_page.dart';
+import 'transition_preload.dart';
 
 /// Batteries-included entry point for an SDUI app.
 ///
@@ -143,21 +150,86 @@ final class Sdui {
     ScreenLoader? loader,
     SduiLoadingBuilder? loadingBuilder,
     SduiErrorBuilder? errorBuilder,
-  }) => GoRouter(
-    initialLocation: initialLocation,
-    routes: [
-      ...routes,
-      GoRoute(
-        path: '/screens/:id',
-        builder: (context, state) => SduiScreenPage(
-          key: ValueKey(state.uri.toString()),
-          screenId: state.pathParameters['id']!,
-          loader: loader ?? screenLoader,
-          params: state.uri.queryParameters,
-          loadingBuilder: loadingBuilder,
-          errorBuilder: errorBuilder,
-        ),
-      ),
-    ],
-  );
+  }) {
+    final store = TransitionPreloads();
+    final route = GoRoute(
+      path: '/screens/:id',
+      pageBuilder: (context, state) {
+        final style = EnginePresentation.value.transitions;
+        final preload = style.enabled
+            ? store.bind(state.extra, state.pageKey, state.uri)
+            : null;
+        Widget child = Builder(
+          builder: (context) => SduiScreenPage(
+            key: ValueKey(state.uri.toString()),
+            screenId: state.pathParameters['id']!,
+            loader: loader ?? screenLoader,
+            params: state.uri.queryParameters,
+            preloaded: preload?.screen,
+            loadingBuilder: loadingBuilder,
+            errorBuilder: errorBuilder,
+          ),
+        );
+        if (preload != null) {
+          child = PreloadedPage(
+            key: ValueKey(preload),
+            store: store,
+            pageKey: state.pageKey,
+            uri: state.uri,
+            preload: preload,
+            child: child,
+          );
+        }
+        final spec = preload == null
+            ? null
+            : style.respectReducedMotion &&
+                  MediaQuery.maybeOf(context)?.disableAnimations == true
+            ? PageTransitionSpec(type: 'none')
+            : preload.transition;
+        if (spec != null && spec.type != 'platform') {
+          return sduiTransitionPage(
+            key: state.pageKey,
+            child: child,
+            spec: spec,
+          );
+        }
+        final name = state.name ?? state.path;
+        final arguments = <String, String>{
+          ...state.pathParameters,
+          ...state.uri.queryParameters,
+        };
+        if (context.findAncestorWidgetOfExactType<MaterialApp>() != null) {
+          return MaterialPage<void>(
+            key: state.pageKey,
+            name: name,
+            arguments: arguments,
+            restorationId: state.pageKey.value,
+            child: child,
+          );
+        }
+        if (context.findAncestorWidgetOfExactType<CupertinoApp>() != null) {
+          return CupertinoPage<void>(
+            key: state.pageKey,
+            name: name,
+            arguments: arguments,
+            restorationId: state.pageKey.value,
+            child: child,
+          );
+        }
+        return NoTransitionPage<void>(
+          key: state.pageKey,
+          name: name,
+          arguments: arguments,
+          restorationId: state.pageKey.value,
+          child: child,
+        );
+      },
+    );
+    final router = GoRouter(
+      initialLocation: initialLocation,
+      routes: [...routes, route],
+    );
+    store.attach(router, route);
+    return router;
+  }
 }
