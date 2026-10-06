@@ -48,6 +48,14 @@ server URL baked in has NO default — it is required; the rest defaults.
 app-owned routes (tab shells, pre-warmed screens, custom transitions) in front
 of the generic screen route and swaps the loading/error surfaces.
 
+Page transitions are opt-in:
+`SduiPresentation(transitions: PageTransitionStyle(enabled: true))` lets each
+screen template declare a root `_transition` (fade, slide_up, zoom,
+fade_through, shared_axis, none, or app-registered effects via
+`Sdui.initialize(transitions: [...])`), and `shared_element` flies a widget —
+including a continuously playing video — between screens. Back plays the
+effect in reverse. See [docs/transitions.md](docs/transitions.md).
+
 Runtime toggles: `Sdui.telemetryEnabled = false` stops telemetry delivery
 without rewiring the sink (privacy opt-out); set it back to resume.
 

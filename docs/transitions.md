@@ -1,6 +1,6 @@
 # Page transitions
 
-Page transitions animate screens mounted through `Sdui.screenRoute`. They are separate from widget `_motion` and modal presentation.
+Page transitions animate screens opened through the generic `/screens/:id` route of `Sdui.router` (the engine navigation handle used by `SduiScreenPage`). They are separate from widget `_motion` and modal presentation.
 
 ## Enable transitions
 
@@ -68,6 +68,8 @@ Unknown declaration keys are rejected at compile time.
 | `zoom` | Centered scale → 1, opacity 0 → 1 | `begin_scale`: default `0.94`, inclusive range `0.5..1` | 250 / 200 ms |
 | `fade_through` | Outgoing opacity 1 → 0 before the threshold; incoming opacity 0 → 1 and scale 0.92 → 1 afterward | `threshold`: default `0.35`, inclusive range `0..1` | 300 / 250 ms |
 | `shared_axis` | x/y: incoming +distance → 0, outgoing 0 → −distance with cross-fade; z: incoming scale 0.8 → 1, outgoing 1 → 1.1 with cross-fade | `axis`: `x`, `y`, or `z`, default `x`; `distance`: logical pixels for x/y, default `30`, inclusive range `0..200` | 300 / 250 ms |
+
+`none` swaps pages instantly in both directions, so shared elements do not fly; omit `duration` for it (a duration only delays an invisible change). An iOS swipe on a `none` page has no visual scrub and pops when released.
 
 `shared_axis` flips x offsets in RTL. Its pixel distance is independent of page dimensions. `fade_through` threshold endpoints are allowed: 0 makes the exit immediate after the start, and 1 makes the entrance immediate at the end.
 
@@ -142,7 +144,7 @@ Version-gate templates containing `_transition` to app versions that support it.
 
 ## Shared elements
 
-Wrap the source and destination's box widget with [`shared_element`](widgets/custom/shared_element.md) and the same `tag`. The engine uses Flutter Hero to interpolate its rectangle and optional `radius` while the page's `_transition` runs. Push crossfades source and destination snapshots while their rectangle and radius interpolate; pop reverses the endpoints. Both images use aspect-preserving cover cropping inside the animated rounded rectangle. If destination capture is unavailable, the flight keeps the source snapshot. The live child and its GlobalKeys are never duplicated in the overlay. An empty placeholder keeps each slot at its original size without a faint second card beneath the flight.
+Wrap the source and destination's box widget with [`shared_element`](widgets/custom/shared_element.md) and the same `tag`. The engine uses Flutter Hero to interpolate its rectangle while the page's `_transition` runs. `radius` is the element's real corner radius: the wrapper clips its child at rest, and the flight interpolates from the source radius to the destination radius (for example a card at `16` and a full-width header at `0`), so corners never snap on landing. Push crossfades source and destination snapshots while their rectangle and radius interpolate; pop reverses the endpoints. Both images use aspect-preserving cover cropping inside the animated rounded rectangle. If destination capture is unavailable, the flight keeps the source snapshot. The live child and its GlobalKeys are never duplicated in the overlay. An empty placeholder keeps each slot at its original size without a faint second card beneath the flight.
 
 ```yaml
 _type: shared_element
@@ -158,5 +160,11 @@ The destination must be present on the first frame. Preloaded screens are render
 Duplicate tags within a route disable every participant with that tag and emit a debug diagnostic; fixing duplicates restores participation. Modal surfaces, inactive tabs (`TickerMode: false`), zero-size/unpainted sources, platform views, and reduced motion (`respectReducedMotion` plus `disableAnimations`) do not fly. Navigation continues normally. A shared subtree with exactly one `video` at each endpoint and the same `src` instead flies a live video surface. Its internal session key is (Navigator identity, evaluated shared tag, exact src). One controller and initialization Future retain position through push/pop; each endpoint and shuttle builds its own view of that controller, allowing handoff-frame overlap while only one owner handles controls and events. The destination owns playback controls, callbacks and configuration after push, and pop returns ownership to the source. The last participant/flight lease disposes the controller. Different sources or duplicate tags do not hand off. Texture-backed `PlayerVideoController` is supported; custom platform views are unsupported for continuous handoff, may flicker when remounted and skip flights. Untagged videos retain their independent lifecycle. See [continuous video](widgets/custom/video.md#continuous-video-across-navigation).
 
 `content_timing: during_shared` drives destination content over the latter route interval (0.3–1.0), using the page effect once. On custom engine routes, `after_shared` keeps destination content transparent until the flight lands, then reveals it in a short 120 ms fade using the page curve. The page effect is held fully visible while waiting, so it does not dim the content a second time during the reveal. A missing match keeps the normal page effect. Platform/legacy routes retain their host transitions and concurrent content behavior.
+
+Flights follow the iOS edge swipe: the element shrinks back under the finger, returns on cancel, and the source is restored on both outcomes.
+
+When a screen shows several videos at once, the app's `VideoSource` should create players with `PlayerVideoController.asset/network(..., options: VideoPlayerOptions(mixWithOthers: true))`; otherwise Android audio focus pauses all but one, even muted.
+
+Known limitation: if code removes the destination route (`navigate go`, deep link, redirect) while an iOS edge swipe is still being dragged, that flight is not resolved and the source element can stay hidden until the screen rebuilds. Completed and cancelled swipes and Back are unaffected.
 
 v1 guarantees flights only inside the same Navigator. Tab-shell branch-to-root behavior is unverified; cross-Navigator tags are isolated. go_router 14.8.1 provides each Navigator's HeroControllerScope (`lib/src/builder.dart`).
