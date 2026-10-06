@@ -11,6 +11,8 @@ final class PageTransitionFactory {
     'platform': _PlatformPageTransition(),
     'none': _NonePageTransition(),
     'fade': _FadePageTransition(),
+    'slide_up': _SlideUpPageTransition(),
+    'zoom': _ZoomPageTransition(),
   };
 
   static final Map<String, PageTransitionEffect> _transitions = {..._builtins};
@@ -103,4 +105,63 @@ final class _FadePageTransition extends PageTransitionEffect {
     Widget child,
     PageTransitionSpec spec,
   ) => FadeTransition(opacity: animation, child: child);
+}
+
+final class _SlideUpPageTransition extends PageTransitionEffect {
+  const _SlideUpPageTransition();
+
+  @override
+  String get type => 'slide_up';
+
+  @override
+  Duration get defaultDuration => const Duration(milliseconds: 280);
+
+  @override
+  Duration get defaultReverseDuration => const Duration(milliseconds: 220);
+
+  @override
+  Widget build(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) {
+    final begin = (spec.params['distance'] as num?)?.toDouble() ?? 0.08;
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: Offset(0, begin),
+        end: Offset.zero,
+      ).animate(animation),
+      child: FadeTransition(opacity: animation, child: child),
+    );
+  }
+}
+
+final class _ZoomPageTransition extends PageTransitionEffect {
+  const _ZoomPageTransition();
+
+  @override
+  String get type => 'zoom';
+
+  @override
+  Duration get defaultDuration => const Duration(milliseconds: 280);
+
+  @override
+  Duration get defaultReverseDuration => const Duration(milliseconds: 220);
+
+  @override
+  Widget build(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+    PageTransitionSpec spec,
+  ) {
+    final begin = (spec.params['begin_scale'] as num?)?.toDouble() ?? 0.94;
+    return ScaleTransition(
+      scale: Tween<double>(begin: begin, end: 1).animate(animation),
+      child: FadeTransition(opacity: animation, child: child),
+    );
+  }
 }

@@ -183,7 +183,24 @@ abstract final class BuiltinLanguage {
   };
 
   /// Page transition effect names accepted at a screen root.
-  static const Set<String> transitions = {'platform', 'none', 'fade'};
+  static const Set<String> transitions = {
+    'platform',
+    'none',
+    'fade',
+    'slide_up',
+    'zoom',
+  };
+
+  /// Built-in numeric params and inclusive bounds. Empty schemas reject all
+  /// keys; app effects without an entry accept arbitrary static literal params.
+  static const Map<String, Map<String, ({double min, double max})>>
+  transitionParams = {
+    'platform': {},
+    'none': {},
+    'fade': {},
+    'slide_up': {'distance': (min: 0, max: 1)},
+    'zoom': {'begin_scale': (min: 0.5, max: 1)},
+  };
 
   /// Registered expression function names accepted in `${...}` calls.
   static const Set<String> functions = {

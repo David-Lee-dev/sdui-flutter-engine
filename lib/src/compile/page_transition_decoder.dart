@@ -2,6 +2,7 @@ import 'package:sdui_engine/src/ir/model/engine_curve.dart';
 import 'package:sdui_engine/src/ir/model/page_transition.dart';
 
 import 'invalid_template_exception.dart';
+import 'schema/builtin_language.dart';
 import 'schema/language_catalog.dart';
 
 /// Decodes the root-only `_transition` declaration into immutable IR.
@@ -90,6 +91,30 @@ final class PageTransitionDecoder {
         'root',
         '"_transition.params" must be a map.',
       );
+    }
+
+    final schema = BuiltinLanguage.transitionParams[type];
+    if (schema != null && params is Map) {
+      for (final entry in params.entries) {
+        final range = schema[entry.key];
+        if (range == null) {
+          throw InvalidTemplateException(
+            'root',
+            'Unknown "_transition.params.${entry.key}" for "$type".',
+          );
+        }
+        final value = entry.value;
+        if (value is! num ||
+            !value.isFinite ||
+            value < range.min ||
+            value > range.max) {
+          throw InvalidTemplateException(
+            'root',
+            '"_transition.params.${entry.key}" for "$type" must be a finite '
+                'number in ${range.min}..${range.max}.',
+          );
+        }
+      }
     }
 
     return PageTransitionSpec(

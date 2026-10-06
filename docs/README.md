@@ -24,6 +24,7 @@ This reference documents the template language implemented by the engine, from s
 - [Control flow](control-flow.md) — `cond`, `switch`, node `_if`, and `_morph`.
 - [Loops](loops.md) — `_loop`, stable keys, all 14 wrappers, lazy/eager behavior, and mutation.
 - [Motion](motion.md) — nine atoms, every composite preset, curves, and scheduling parameters.
+- [Page transitions](transitions.md) — screen effects, preloading, reverse playback, and custom registrations.
 - [Media](media.md) — image/video source policies, placeholders, cross-fades, and controls.
 - [Widget catalog](widgets/README.md) — categorized widget index with protocol and loop-wrapper status.
 - [Errors](errors.md) — load/compile/node/modal error surfaces, builder precedence, and the `SduiErrorObserver` seam.

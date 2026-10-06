@@ -16,12 +16,6 @@ void main() {
       'duration': 120,
       'reverse_duration': 80,
       'curve': 'ease_in',
-      'params': {
-        'nested': [
-          1,
-          {'value': true},
-        ],
-      },
     },
   };
 
@@ -57,16 +51,131 @@ void main() {
         );
         expect(withTransition.nodeCount, withoutTransition.nodeCount);
         expect(() => transition.params['x'] = 1, throwsUnsupportedError);
-        expect(
-          () => (transition.params['nested'] as List).add(2),
-          throwsUnsupportedError,
-        );
-        expect(
-          () => ((transition.params['nested'] as List)[1] as Map)['x'] = 1,
-          throwsUnsupportedError,
-        );
       },
     );
+
+    test('custom effects preserve arbitrary immutable literal params', () {
+      final customCatalog = LanguageCatalog(
+        widgets: catalog.widgets,
+        commands: catalog.commands,
+        transitions: {...catalog.transitions, 'custom'},
+      );
+      final transition = Compile.build(
+        {
+          '_type': 'text',
+          'value': 'x',
+          '_transition': {
+            'type': 'custom',
+            'params': {
+              'nested': [
+                1,
+                {'value': true},
+              ],
+            },
+          },
+        },
+        const {},
+        catalog: customCatalog,
+        screen: true,
+      ).transition!;
+      expect(transition.params['nested'], [
+        1,
+        {'value': true},
+      ]);
+      expect(() => transition.params['x'] = 1, throwsUnsupportedError);
+      expect(
+        () => (transition.params['nested'] as List).add(2),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => ((transition.params['nested'] as List)[1] as Map)['x'] = 1,
+        throwsUnsupportedError,
+      );
+    });
+
+    for (final type in ['platform', 'none', 'fade', 'slide_up', 'zoom']) {
+      test('$type rejects unknown params', () {
+        expect(
+          () => Compile.build(
+            {
+              '_type': 'text',
+              'value': 'x',
+              '_transition': {
+                'type': type,
+                'params': {'unknown': 0.5},
+              },
+            },
+            const {},
+            catalog: catalog,
+            screen: true,
+          ),
+          throwsA(
+            isA<InvalidTemplateException>().having(
+              (e) => e.toString(),
+              'message',
+              contains('_transition.params.unknown'),
+            ),
+          ),
+        );
+      });
+    }
+    for (final (type, key, min) in [
+      ('slide_up', 'distance', 0.0),
+      ('zoom', 'begin_scale', 0.5),
+    ]) {
+      test('$type accepts defaults and valid inclusive bounds', () {
+        for (final params in <Map<String, Object?>>[
+          {},
+          {key: min},
+          {key: 0.75},
+          {key: 1},
+        ]) {
+          expect(
+            () => Compile.build(
+              {
+                '_type': 'text',
+                'value': 'x',
+                '_transition': {'type': type, 'params': params},
+              },
+              const {},
+              catalog: catalog,
+              screen: true,
+            ),
+            returnsNormally,
+          );
+        }
+      });
+      test('$type rejects wrong types and out of range params', () {
+        for (final value in <Object?>[
+          '0.75',
+          true,
+          null,
+          [],
+          {},
+          min - 0.01,
+          1.01,
+          double.nan,
+          double.infinity,
+        ]) {
+          expect(
+            () => Compile.build(
+              {
+                '_type': 'text',
+                'value': 'x',
+                '_transition': {
+                  'type': type,
+                  'params': {key: value},
+                },
+              },
+              const {},
+              catalog: catalog,
+              screen: true,
+            ),
+            throwsA(isA<InvalidTemplateException>()),
+          );
+        }
+      });
+    }
 
     test('rejects malformed declarations and expressions', () {
       final bad = <Object?>[

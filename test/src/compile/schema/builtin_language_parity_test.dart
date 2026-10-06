@@ -45,6 +45,10 @@ void main() {
 
     test('page transition names match builtins', () {
       expect(PageTransitionFactory.types(), BuiltinLanguage.transitions);
+      expect(
+        BuiltinLanguage.transitionParams.keys.toSet(),
+        BuiltinLanguage.transitions,
+      );
     });
 
     test('expression function names match the registry', () {

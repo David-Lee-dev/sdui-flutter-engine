@@ -23,3 +23,4 @@ method: pop
 result: { saved: true }
 ```
 
+Screen routes can select a root `_transition` when the app enables page transitions. The engine navigation handle preloads the destination before `push`/`go`, with a bounded timeout; `pop` reverses the selected effect. See [Page transitions](../transitions.md) for configuration, precedence, parameters, and iOS swipe behavior.

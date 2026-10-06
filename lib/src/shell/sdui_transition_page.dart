@@ -60,6 +60,8 @@ final class _TransitionRoute extends PageRoute<void> {
     Widget child,
   ) {
     final effect = PageTransitionFactory.resolve(page.spec.type);
+    // One curve maps the route value in both directions, so pop and edge
+    // scrubbing retrace push without a direction-dependent visual jump.
     final transitioned = effect.build(
       context,
       animation.drive(CurveTween(curve: EngineCurve.resolve(page.spec.curve))),
