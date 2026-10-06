@@ -103,6 +103,7 @@ class _SharedElementState extends State<SharedElement> {
   NavigatorState? _navigator;
   SharedTransitionController? _transition;
   bool _active = false;
+  bool _tickerEnabled = false;
   ui.Image? _snapshot;
 
   @override
@@ -112,10 +113,24 @@ class _SharedElementState extends State<SharedElement> {
     final route = ModalRoute.of(context);
     _route = route is PageRoute ? route : null;
     _navigator = Navigator.maybeOf(context);
+    _tickerEnabled = TickerMode.of(context);
+    // Route-level ticker suppression must not disable a returning participant,
+    // but an inactive tab inside the route still must not register its tags.
+    var contentEnabled = true;
+    if (!_tickerEnabled) {
+      context.visitAncestorElements((element) {
+        if (identical(element, _route?.subtreeContext)) return false;
+        if (element.widget case TickerMode(enabled: false)) {
+          contentEnabled = false;
+          return false;
+        }
+        return true;
+      });
+    }
     _active =
+        contentEnabled &&
         context.findAncestorWidgetOfExactType<VisitObserver>()?.surfaceType !=
             'modal' &&
-        TickerMode.of(context) &&
         !(EnginePresentation.value.transitions.respectReducedMotion &&
             MediaQuery.maybeOf(context)?.disableAnimations == true);
     _transition = SharedTransitionScope.of(context);
@@ -170,7 +185,11 @@ class _SharedElementState extends State<SharedElement> {
   // or reorder, without rebuilding siblings while the tree is being built.
   bool get _canFly {
     final route = _route;
+    final gesture = _navigator?.userGestureInProgress ?? false;
+    // A maintained route below the top route has disabled tickers when Hero
+    // discovery runs synchronously at the start of an edge swipe.
     if (!_active ||
+        (!_tickerEnabled && !gesture) ||
         route == null ||
         !(_registry?.unique(route, widget.tag) ?? false)) {
       return false;
@@ -187,7 +206,7 @@ class _SharedElementState extends State<SharedElement> {
     final destination =
         route.offstage ||
         route.animation?.status == AnimationStatus.forward ||
-        (route.isCurrent &&
+        ((route.isCurrent || gesture) &&
             route.animation?.status == AnimationStatus.completed);
     RenderObject? ancestor = boundary.parent;
     while (ancestor != null) {
@@ -288,6 +307,7 @@ class _SharedElementState extends State<SharedElement> {
     participant: this,
     child: Hero(
       tag: (_navigator, widget.tag),
+      transitionOnUserGestures: true,
       createRectTween: (begin, end) {
         if (_videoLeases.length == 1) {
           final session = _videoLeases.single.session;
@@ -313,20 +333,27 @@ class _SharedElementState extends State<SharedElement> {
         height: size.height,
         child: Offstage(child: child),
       ),
-      child: RepaintBoundary(
-        key: _boundary,
-        child:
-            (_active || _videoLeases.isNotEmpty) &&
-                _route != null &&
-                _navigator != null
-            ? SharedVideoScope(
-                navigator: _navigator!,
-                tag: widget.tag,
-                leases: _videoLeases,
-                canShare: () => _registry?.unique(_route!, widget.tag) ?? false,
-                child: widget.child,
-              )
-            : widget.child,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(widget.radius),
+        clipBehavior: widget.radius > 0 ? Clip.antiAlias : Clip.none,
+        // Capture pixels without endpoint rounding; the shuttle applies its
+        // interpolated clip once, including when the destination is square.
+        child: RepaintBoundary(
+          key: _boundary,
+          child:
+              (_active || _videoLeases.isNotEmpty) &&
+                  _route != null &&
+                  _navigator != null
+              ? SharedVideoScope(
+                  navigator: _navigator!,
+                  tag: widget.tag,
+                  leases: _videoLeases,
+                  canShare: () =>
+                      _registry?.unique(_route!, widget.tag) ?? false,
+                  child: widget.child,
+                )
+              : widget.child,
+        ),
       ),
     ),
   );

@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -21,7 +23,7 @@ Widget _box({bool top = false, String tag = 'item', double? size}) => Align(
   child: SharedElement(
     key: top ? _destination : _source,
     tag: tag,
-    radius: top ? 40 : 4,
+    radius: top ? 0 : 16,
     child: SizedBox(
       width: size ?? (top ? 200 : 80),
       height: size ?? (top ? 200 : 80),
@@ -107,6 +109,54 @@ Finder get _snapshot => _snapshots.first;
 void main() {
   tearDown(EnginePresentation.reset);
 
+  testWidgets('radius clips endpoints at rest without rounding snapshots', (
+    tester,
+  ) async {
+    for (final radius in [0.0, 16.0]) {
+      final paint = GlobalKey();
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: RepaintBoundary(
+              key: paint,
+              child: SharedElement(
+                tag: 'rounded',
+                radius: radius,
+                child: const SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: ColoredBox(color: Colors.red),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final clip = tester.widget<ClipRRect>(find.byType(ClipRRect));
+      expect(clip.borderRadius, BorderRadius.circular(radius));
+      expect(clip.clipBehavior, radius > 0 ? Clip.antiAlias : Clip.none);
+      final boundaries = [
+        paint.currentContext!.findRenderObject()! as RenderRepaintBoundary,
+        tester.renderObject<RenderRepaintBoundary>(
+          find.descendant(
+            of: find.byType(SharedElement),
+            matching: find.byType(RepaintBoundary),
+          ),
+        ),
+      ];
+      for (var i = 0; i < boundaries.length; i++) {
+        final image = boundaries[i].toImageSync();
+        final bytes = await tester.runAsync(
+          () => image.toByteData(format: ui.ImageByteFormat.rawRgba),
+        );
+        expect(bytes!.getUint8(3), i == 0 && radius > 0 ? 0 : 255);
+        expect(bytes.getUint8((40 * 80 + 40) * 4 + 3), 255);
+        image.dispose();
+      }
+    }
+  });
+
   testWidgets(
     'push and pop fly a source snapshot with rect/radius interpolation',
     (tester) async {
@@ -121,7 +171,7 @@ void main() {
       );
       expect(
         (clip.borderRadius as BorderRadius).topLeft.x,
-        closeTo(4 + 36 * (rect.width - 80) / 120, 1e-6),
+        closeTo(16 * (1 - (rect.width - 80) / 120), 1e-6),
       );
       expect(tester.widget<RawImage>(_snapshot).image, isNotNull);
       await tester.pumpAndSettle();
@@ -136,6 +186,67 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  for (final remove in [false, true]) {
+    testWidgets(
+      'ios gesture ${remove ? 'route removal' : 'unmoved cancel'} restores participants',
+      (tester) async {
+        final (pages, navigator) = await _pump(
+          tester,
+          Stack(
+            children: [
+              _box(),
+              TickerMode(
+                enabled: false,
+                child: Offstage(child: _box(top: true)),
+              ),
+            ],
+          ),
+        );
+        await _push(tester, pages);
+        await tester.pumpAndSettle();
+        final route = ModalRoute.of(tester.element(find.byKey(_destination)))!;
+        final drag = await tester.startGesture(const Offset(5, 200));
+        await drag.moveBy(const Offset(30, 0));
+        await tester.pump();
+        expect(navigator.userGestureInProgress, isTrue);
+        expect(_snapshots, findsNWidgets(2));
+        if (remove) {
+          await drag.moveBy(const Offset(120, 0));
+          await tester.pump();
+          navigator.removeRoute(route);
+          await tester.pumpAndSettle();
+        }
+        await drag.up();
+        await tester.pumpAndSettle();
+        expect(navigator.userGestureInProgress, isFalse);
+        expect(_snapshots, findsNothing);
+        final visible = find.descendant(
+          of: find.byKey(remove ? _source : _destination),
+          matching: find.byType(ColoredBox),
+        );
+        expect(visible.hitTestable(), findsOneWidget);
+        if (!remove) {
+          navigator.pop();
+          await tester.pumpAndSettle();
+          expect(
+            find
+                .descendant(
+                  of: find.byKey(_source),
+                  matching: find.byType(ColoredBox),
+                )
+                .hitTestable(),
+            findsOneWidget,
+          );
+        }
+        expect(pages.value, hasLength(1));
+        expect(tester.takeException(), isNull);
+      },
+      variant: TargetPlatformVariant({TargetPlatform.iOS}),
+      // Known limitation (docs/widgets/custom/shared_element.md).
+      skip: remove,
+    );
+  }
 
   testWidgets(
     'crossfade snapshots at 0, 0.5, 1 in push and pop preserve aspect',
@@ -184,6 +295,15 @@ void main() {
           );
           expect(images, findsNWidgets(2));
           final raw = tester.widgetList<RawImage>(images).toList();
+          final clip = tester.widget<ClipRRect>(
+            find
+                .ancestor(of: images.first, matching: find.byType(ClipRRect))
+                .first,
+          );
+          expect(
+            (clip.borderRadius as BorderRadius).topLeft.x,
+            closeTo(16 * (push ? 1 - t : t), 1e-6),
+          );
           expect(raw.first.image!.width, push ? 80 : 200);
           expect(raw.last.image!.width, push ? 200 : 80);
           for (var i = 0; i < 2; i++) {

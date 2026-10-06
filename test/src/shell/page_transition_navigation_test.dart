@@ -468,6 +468,97 @@ void main() {
     variant: TargetPlatformVariant({TargetPlatform.iOS}),
   );
 
+  for (final timing in ['during_shared', 'after_shared']) {
+    for (final commit in [true, false]) {
+      testWidgets(
+        'shared_element ios swipe restores participants timing=$timing commit=$commit',
+        (tester) async {
+          LoadedScreen shared(String id) => (
+            template: {
+              '_type': 'align',
+              'alignment': id == 'home' ? 'top_left' : 'bottom_right',
+              '_transition': {'type': 'fade', 'content_timing': timing},
+              '_child': {
+                '_type': 'shared_element',
+                'tag': 'post-1',
+                'radius': 16,
+                '_child': {
+                  '_type': 'container',
+                  'width': id == 'home' ? 100 : 250,
+                  'height': id == 'home' ? 100 : 250,
+                  'color': '#FF0000',
+                  '_child': {'_type': 'text', 'value': id},
+                },
+              },
+            },
+            modals: const {},
+          );
+          void visible(String id) {
+            final child = find.text(id);
+            expect(child, findsOneWidget);
+            expect(child.hitTestable(), findsOneWidget);
+            for (final offstage in tester.widgetList<Offstage>(
+              find.ancestor(of: child, matching: find.byType(Offstage)),
+            )) {
+              expect(offstage.offstage, isFalse);
+            }
+            for (final opacity in tester.widgetList<AnimatedOpacity>(
+              find.ancestor(of: child, matching: find.byType(AnimatedOpacity)),
+            )) {
+              expect(opacity.opacity, 1);
+            }
+            for (final opacity in tester.widgetList<FadeTransition>(
+              find.ancestor(of: child, matching: find.byType(FadeTransition)),
+            )) {
+              expect(opacity.opacity.value, 1);
+            }
+            expect(find.byType(RawImage), findsNothing);
+          }
+
+          final loader = _Loader(
+            home: () async => shared('home'),
+            detail: () async => shared('detail'),
+          );
+          final router = await _pump(tester, loader);
+          visible('home');
+          await _open(tester, router, loader);
+          visible('detail');
+          expect(loader.calls, ['home', 'detail']);
+          final navigator = tester.state<NavigatorState>(
+            find.byType(Navigator).first,
+          );
+          final drag = await tester.startGesture(const Offset(5, 200));
+          await drag.moveBy(const Offset(30, 0));
+          await tester.pump();
+          await drag.moveBy(Offset(commit ? 550 : 120, 0));
+          await tester.pump();
+          expect(navigator.userGestureInProgress, isTrue);
+          expect(find.byType(RawImage), findsNWidgets(2));
+          final firstRect = tester.getRect(find.byType(RawImage).first);
+          await drag.moveBy(const Offset(20, 0));
+          await tester.pump();
+          expect(
+            tester.getRect(find.byType(RawImage).first).width,
+            lessThan(firstRect.width),
+          );
+          await tester.pump(const Duration(milliseconds: 500));
+          await drag.up();
+          await tester.pumpAndSettle();
+          expect(navigator.userGestureInProgress, isFalse);
+          expect(router.canPop(), !commit);
+          visible(commit ? 'home' : 'detail');
+          if (!commit) {
+            router.pop();
+            await tester.pumpAndSettle();
+            visible('home');
+          }
+          expect(tester.takeException(), isNull);
+        },
+        variant: TargetPlatformVariant({TargetPlatform.iOS}),
+      );
+    }
+  }
+
   for (final respect in [true, false]) {
     testWidgets('reduced_motion_forces_none respect=$respect', (tester) async {
       _style(reduced: respect);

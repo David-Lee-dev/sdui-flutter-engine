@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/contract/video_source.dart';
+import 'package:sdui_engine/src/ir/model/page_transition.dart';
+import 'package:sdui_engine/src/shell/sdui_transition_page.dart';
 import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
 import 'package:sdui_engine/src/runtime/media/shared_video_session.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/shared_element_widget.dart';
@@ -451,6 +453,19 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(navigator.userGestureInProgress, isTrue);
+    expect(
+      tester
+          .getSize(
+            find
+                .ancestor(
+                  of: find.byType(_Surface),
+                  matching: find.byType(ClipRRect),
+                )
+                .first,
+          )
+          .width,
+      inExclusiveRange(100, 250),
+    );
     c.position += const Duration(seconds: 1);
     expect(c.initializes, 1);
     expect(c.listeners, hasLength(1));
@@ -474,6 +489,99 @@ void main() {
     expect(c.disposes, 1);
     expect(tester.takeException(), isNull);
   });
+
+  for (final remove in [false, true]) {
+    testWidgets('swipe ${remove ? 'removal' : 'commit'} releases live flight', (
+      tester,
+    ) async {
+      Page<void> page(String id, {bool destination = false}) =>
+          sduiTransitionPage(
+            key: ValueKey(id),
+            child: _video(destination: destination),
+            spec: PageTransitionSpec(type: 'fade'),
+          );
+      final pages = ValueNotifier<List<Page<void>>>([page('source')]);
+      addTearDown(pages.dispose);
+      final key = GlobalKey<NavigatorState>();
+      final hero = HeroController();
+      addTearDown(hero.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.iOS),
+          home: ValueListenableBuilder<List<Page<void>>>(
+            valueListenable: pages,
+            builder: (_, value, _) => HeroControllerScope(
+              controller: hero,
+              child: Navigator(
+                key: key,
+                pages: value,
+                onDidRemovePage: (page) =>
+                    pages.value = [...pages.value]..remove(page),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final navigator = key.currentState!;
+      pages.value = [...pages.value, page('destination', destination: true)];
+      await tester.pumpAndSettle();
+      final route = ModalRoute.of(tester.element(find.byType(_Surface)))!;
+      final c = source.controllers.single;
+      final gesture = await tester.startGesture(const Offset(1, 300));
+      await gesture.moveBy(const Offset(30, 0));
+      await tester.pump();
+      await gesture.moveBy(const Offset(550, 0));
+      await tester.pump();
+      expect(navigator.userGestureInProgress, isTrue);
+      expect(find.byType(RawImage), findsNothing);
+      expect(
+        tester
+            .getSize(
+              find
+                  .ancestor(
+                    of: find.byType(_Surface),
+                    matching: find.byType(ClipRRect),
+                  )
+                  .first,
+            )
+            .width,
+        inExclusiveRange(100, 250),
+      );
+      if (remove) {
+        navigator.removeRoute(route);
+        await tester.pumpAndSettle();
+      }
+      await tester.pump(const Duration(seconds: 1));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(navigator.userGestureInProgress, isFalse);
+      expect(navigator.canPop(), isFalse);
+      expect(find.byType(_Surface), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(Hero), matching: find.byType(_Surface)),
+        findsOneWidget,
+      );
+      for (final offstage in tester.widgetList<Offstage>(
+        find.ancestor(
+          of: find.byType(_Surface),
+          matching: find.byType(Offstage),
+        ),
+      )) {
+        expect(offstage.offstage, isFalse);
+      }
+      expect(c.volume, 0);
+      expect(c.disposes, 0);
+      expect(c.initializes, 1);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      expect(c.mountedViews, 0);
+      expect(c.disposes, 1);
+      expect(c.listeners, isEmpty);
+      expect(tester.takeException(), isNull);
+      // Removal mid-drag is a known limitation; see shared_element.md.
+    }, skip: remove);
+  }
 
   testWidgets('duplicate source tags never hand off to destination', (
     tester,
