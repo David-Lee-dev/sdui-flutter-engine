@@ -5,11 +5,11 @@ import 'package:sdui_engine/src/runtime/transition/transition_factory.dart';
 
 void main() {
   for (final type in ['fade_through', 'shared_axis']) {
-    test('$type defaults to 300ms push and 250ms pop', () {
+    test('$type defaults to 220ms push and 180ms pop', () {
       final effect = PageTransitionFactory.resolve(type);
       final spec = PageTransitionSpec(type: type);
-      expect(effect.duration(spec), const Duration(milliseconds: 300));
-      expect(effect.reverseDuration(spec), const Duration(milliseconds: 250));
+      expect(effect.duration(spec), const Duration(milliseconds: 220));
+      expect(effect.reverseDuration(spec), const Duration(milliseconds: 180));
     });
   }
 

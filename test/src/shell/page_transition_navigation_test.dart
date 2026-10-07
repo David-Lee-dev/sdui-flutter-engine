@@ -174,7 +174,14 @@ void main() {
           _route(tester).transitionDuration,
           reduced
               ? Duration.zero
-              : Duration(milliseconds: type == 'card_stack' ? 350 : 300),
+              : Duration(
+                  milliseconds: switch (type) {
+                    'container_transform' => 250,
+                    'card_stack' => 260,
+                    'tap_zoom' => 220,
+                    _ => throw StateError('Unexpected transition type: $type'),
+                  },
+                ),
         );
         if (reduced) {
           expect(
@@ -295,7 +302,7 @@ void main() {
     expect(_fade(tester).opacity.value, 1);
     expect(
       _route(tester).transitionDuration,
-      const Duration(milliseconds: 200),
+      const Duration(milliseconds: 150),
     );
   });
 
@@ -647,7 +654,7 @@ void main() {
       await _open(tester, router, loader);
       expect(
         _route(tester).transitionDuration,
-        respect ? Duration.zero : const Duration(milliseconds: 200),
+        respect ? Duration.zero : const Duration(milliseconds: 150),
       );
     });
   }

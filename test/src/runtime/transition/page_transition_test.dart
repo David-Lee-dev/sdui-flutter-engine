@@ -67,7 +67,7 @@ void main() {
     );
     expect(
       fade.duration(PageTransitionSpec(type: 'fade')),
-      const Duration(milliseconds: 200),
+      const Duration(milliseconds: 150),
     );
     expect(fade.duration(spec), const Duration(milliseconds: 120));
     expect(fade.reverseDuration(spec), const Duration(milliseconds: 80));
@@ -101,11 +101,11 @@ void main() {
       final effect = PageTransitionFactory.resolve(type);
       expect(
         effect.duration(PageTransitionSpec(type: type)),
-        const Duration(milliseconds: 250),
+        const Duration(milliseconds: 200),
       );
       expect(
         effect.reverseDuration(PageTransitionSpec(type: type)),
-        const Duration(milliseconds: 200),
+        const Duration(milliseconds: 160),
       );
       final spec = PageTransitionSpec(
         type: type,
@@ -204,16 +204,16 @@ void main() {
     }
   }
 
-  test('base duration is 250ms and fade reverse is 150ms', () {
+  test('base duration is 200ms and fade reverse is 120ms', () {
     final custom = const _TagTransition('custom');
     final spec = PageTransitionSpec(type: 'custom');
-    expect(custom.duration(spec), const Duration(milliseconds: 250));
-    expect(custom.reverseDuration(spec), const Duration(milliseconds: 250));
+    expect(custom.duration(spec), const Duration(milliseconds: 200));
+    expect(custom.reverseDuration(spec), const Duration(milliseconds: 200));
     expect(
       PageTransitionFactory.resolve(
         'fade',
       ).reverseDuration(PageTransitionSpec(type: 'fade')),
-      const Duration(milliseconds: 150),
+      const Duration(milliseconds: 120),
     );
   });
 

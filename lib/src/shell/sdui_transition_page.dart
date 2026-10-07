@@ -331,7 +331,7 @@ final class _BackSwipeState extends State<_BackSwipe> {
     if (forward) {
       widget.controller.animateTo(
         1,
-        duration: const Duration(milliseconds: 350),
+        duration: _settleDuration(widget.controller.duration),
         curve: Curves.fastEaseInToSlowEaseOut,
       );
     } else {
@@ -339,7 +339,7 @@ final class _BackSwipeState extends State<_BackSwipe> {
       if (widget.controller.isAnimating) {
         widget.controller.animateBack(
           0,
-          duration: const Duration(milliseconds: 350),
+          duration: _settleDuration(widget.controller.reverseDuration),
           curve: Curves.fastEaseInToSlowEaseOut,
         );
       }
@@ -351,6 +351,10 @@ final class _BackSwipeState extends State<_BackSwipe> {
       _stop();
     }
   }
+
+  Duration _settleDuration(Duration? routeDuration) => Duration(
+    milliseconds: math.min(routeDuration?.inMilliseconds ?? 350, 350),
+  );
 
   @override
   void dispose() {

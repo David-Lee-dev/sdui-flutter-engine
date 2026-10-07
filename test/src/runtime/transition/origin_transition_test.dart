@@ -134,8 +134,8 @@ void main() {
       addTearDown(source.dispose);
       final controller = AnimationController(
         vsync: tester,
-        duration: const Duration(milliseconds: 300),
-        reverseDuration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 250),
+        reverseDuration: const Duration(milliseconds: 200),
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
@@ -166,7 +166,7 @@ void main() {
         await tester.pump();
         for (final t in reverse ? [1.0, 0.5, 0.0] : [0.0, 0.5, 1.0]) {
           if (t == 0.5 || (reverse ? t == 0 : t == 1)) {
-            await tester.pump(Duration(milliseconds: reverse ? 125 : 150));
+            await tester.pump(Duration(milliseconds: reverse ? 100 : 125));
           }
           final clip = tester.widget<ClipPath>(find.byType(ClipPath));
           final bounds = clip.clipper!
@@ -240,7 +240,7 @@ void main() {
         }
         for (final t in reverse ? [1.0, 0.5] : [0.0, 0.5, 1.0]) {
           if (t == 0.5 || (!reverse && t == 1)) {
-            await tester.pump(Duration(milliseconds: reverse ? 150 : 175));
+            await tester.pump(Duration(milliseconds: reverse ? 110 : 130));
           }
           final slide = tester.widget<SlideTransition>(
             find
@@ -294,8 +294,8 @@ void main() {
     ) async {
       final controller = AnimationController(
         vsync: tester,
-        duration: const Duration(milliseconds: 300),
-        reverseDuration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 220),
+        reverseDuration: const Duration(milliseconds: 180),
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(
@@ -333,7 +333,7 @@ void main() {
         await tester.pump();
         for (final t in reverse ? [1.0, 0.5, 0.0] : [0.0, 0.5, 1.0]) {
           if (t == 0.5 || (reverse ? t == 0 : t == 1)) {
-            await tester.pump(Duration(milliseconds: reverse ? 125 : 150));
+            await tester.pump(Duration(milliseconds: reverse ? 90 : 110));
           }
           final transform = tester.widget<Transform>(find.byType(Transform));
           expect(
@@ -374,7 +374,7 @@ void main() {
           ),
         ];
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 150));
+        await tester.pump(const Duration(milliseconds: 125));
         expect(source.hidden.value, isTrue);
         expect(
           TransitionOrigins.of(navigator).suppresses((navigator, 'nested')),
@@ -386,7 +386,7 @@ void main() {
         if (outcome == 'back') {
           navigator.pop();
           await tester.pump();
-          await tester.pump(const Duration(milliseconds: 125));
+          await tester.pump(const Duration(milliseconds: 100));
           expect(source.hidden.value, isTrue);
         } else {
           final gesture = await tester.startGesture(const Offset(5, 300));

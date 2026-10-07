@@ -7,7 +7,7 @@ abstract class PageTransitionEffect {
 
   String get type;
 
-  Duration get defaultDuration => const Duration(milliseconds: 250);
+  Duration get defaultDuration => const Duration(milliseconds: 200);
 
   Duration get defaultReverseDuration => defaultDuration;
 

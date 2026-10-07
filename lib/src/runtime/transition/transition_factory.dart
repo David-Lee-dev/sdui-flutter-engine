@@ -107,10 +107,10 @@ final class _FadePageTransition extends PageTransitionEffect {
   String get type => 'fade';
 
   @override
-  Duration get defaultDuration => const Duration(milliseconds: 200);
+  Duration get defaultDuration => const Duration(milliseconds: 150);
 
   @override
-  Duration get defaultReverseDuration => const Duration(milliseconds: 150);
+  Duration get defaultReverseDuration => const Duration(milliseconds: 120);
 
   @override
   Widget build(
@@ -129,10 +129,10 @@ final class _SlideUpPageTransition extends PageTransitionEffect {
   String get type => 'slide_up';
 
   @override
-  Duration get defaultDuration => const Duration(milliseconds: 250);
+  Duration get defaultDuration => const Duration(milliseconds: 200);
 
   @override
-  Duration get defaultReverseDuration => const Duration(milliseconds: 200);
+  Duration get defaultReverseDuration => const Duration(milliseconds: 160);
 
   @override
   Widget build(
@@ -160,10 +160,10 @@ final class _ZoomPageTransition extends PageTransitionEffect {
   String get type => 'zoom';
 
   @override
-  Duration get defaultDuration => const Duration(milliseconds: 250);
+  Duration get defaultDuration => const Duration(milliseconds: 200);
 
   @override
-  Duration get defaultReverseDuration => const Duration(milliseconds: 200);
+  Duration get defaultReverseDuration => const Duration(milliseconds: 160);
 
   @override
   Widget build(
@@ -188,10 +188,10 @@ final class _FadeThroughPageTransition extends PageTransitionEffect {
   String get type => 'fade_through';
 
   @override
-  Duration get defaultDuration => const Duration(milliseconds: 300);
+  Duration get defaultDuration => const Duration(milliseconds: 220);
 
   @override
-  Duration get defaultReverseDuration => const Duration(milliseconds: 250);
+  Duration get defaultReverseDuration => const Duration(milliseconds: 180);
 
   @override
   Widget build(
@@ -236,10 +236,10 @@ final class _SharedAxisPageTransition extends PageTransitionEffect {
   String get type => 'shared_axis';
 
   @override
-  Duration get defaultDuration => const Duration(milliseconds: 300);
+  Duration get defaultDuration => const Duration(milliseconds: 220);
 
   @override
-  Duration get defaultReverseDuration => const Duration(milliseconds: 250);
+  Duration get defaultReverseDuration => const Duration(milliseconds: 180);
 
   @override
   Widget build(
@@ -309,9 +309,9 @@ final class _ContainerTransformPageTransition extends PageTransitionEffect {
   @override
   String get type => 'container_transform';
   @override
-  Duration get defaultDuration => const Duration(milliseconds: 300);
+  Duration get defaultDuration => const Duration(milliseconds: 250);
   @override
-  Duration get defaultReverseDuration => const Duration(milliseconds: 250);
+  Duration get defaultReverseDuration => const Duration(milliseconds: 200);
 
   @override
   Widget build(
@@ -414,9 +414,9 @@ final class _CardStackPageTransition extends PageTransitionEffect {
   @override
   String get type => 'card_stack';
   @override
-  Duration get defaultDuration => const Duration(milliseconds: 350);
+  Duration get defaultDuration => const Duration(milliseconds: 260);
   @override
-  Duration get defaultReverseDuration => const Duration(milliseconds: 300);
+  Duration get defaultReverseDuration => const Duration(milliseconds: 220);
 
   @override
   Widget build(
@@ -472,9 +472,9 @@ final class _TapZoomPageTransition extends PageTransitionEffect {
   @override
   String get type => 'tap_zoom';
   @override
-  Duration get defaultDuration => const Duration(milliseconds: 300);
+  Duration get defaultDuration => const Duration(milliseconds: 220);
   @override
-  Duration get defaultReverseDuration => const Duration(milliseconds: 250);
+  Duration get defaultReverseDuration => const Duration(milliseconds: 180);
 
   @override
   Widget build(

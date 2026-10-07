@@ -91,7 +91,7 @@ void main() {
             await tester.pump(
               Duration(
                 microseconds:
-                    ((t - previous).abs() * (reverse ? 250 : 300) * 1000)
+                    ((t - previous).abs() * (reverse ? 180 : 220) * 1000)
                         .round(),
               ),
             );
@@ -171,7 +171,7 @@ void main() {
                 : legacyPage('top');
             pages.value = [base, top];
             await tester.pump();
-            await tester.pump(const Duration(milliseconds: 150));
+            await tester.pump(const Duration(milliseconds: 110));
             final baseRoute = _route(tester, _baseKey);
             final topRoute = _route(tester, _topKey);
             expect(baseRoute.secondaryAnimation!.value, 0);
@@ -197,7 +197,7 @@ void main() {
             await tester.pumpAndSettle();
             navigator.pop();
             await tester.pump();
-            await tester.pump(const Duration(milliseconds: 150));
+            await tester.pump(const Duration(milliseconds: 90));
             expect(baseRoute.secondaryAnimation!.value, 0);
             expect(baseRoute.receivedTransition, isNull);
             await tester.pumpAndSettle();
@@ -222,7 +222,7 @@ void main() {
           _engine('top', PageTransitionSpec(type: type)),
         ];
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 150));
+        await tester.pump(const Duration(milliseconds: 110));
         final t = _route(tester, _topKey).animation!.value;
         final fades = tester
             .widgetList<FadeTransition>(
@@ -264,7 +264,7 @@ void main() {
       ),
     ];
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump(const Duration(milliseconds: 110));
     final t = Curves.easeIn.transform(_route(tester, _topKey).animation!.value);
     expect(_opacity(tester, _topKey), closeTo(t, 1e-6));
     expect(_opacity(tester, _baseKey), closeTo(1 - t, 1e-6));
