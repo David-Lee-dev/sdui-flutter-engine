@@ -27,6 +27,32 @@ Sdui.initialize(
 
 Transitions are disabled by default; `defaultType` defaults to `platform`. `SduiScreenPage` supplies the engine navigation handle with its loader for preloading. App-owned navigation handles must provide their own integration.
 
+## Choosing an effect
+
+Available since engine `0.2.0`. Pick by the relationship between the two screens:
+
+| Situation | Recommended | Template |
+| --- | --- | --- |
+| List/grid item → its detail page (the card becomes the page) | `container_transform` | wrap the card's growing part in `transition_source`; detail root `_transition: { type: container_transform }` |
+| One element (image, thumbnail, video) continues into the detail page | `shared_element` + `fade` | same `tag` on both screens; detail root `_transition: { type: fade }` |
+| Same element must keep playing video across the transition | `shared_element` with one `video` | same tag and identical `src` at both ends |
+| Forward/backward step in a flow (wizard, onboarding) | `shared_axis` (`axis: x`) | `_transition: { type: shared_axis, params: { axis: x } }` |
+| Parent → child level of a hierarchy | `shared_axis` (`axis: z`) or `zoom` | `_transition: { type: shared_axis, params: { axis: z } }` |
+| Switching between unrelated screens | `fade_through` | `_transition: { type: fade_through }` |
+| Sheet-like page (settings, compose, filters) over a context | `card_stack` | `_transition: { type: card_stack }` |
+| Page opened from a button/FAB with no card to grow from | `tap_zoom` | `_transition: { type: tap_zoom }` |
+| Vertical "present" without depth | `slide_up` | `_transition: { type: slide_up }` |
+| Quiet default for everything else | `fade` | `defaultType: 'fade'` in `PageTransitionStyle` |
+| No animation (e.g. replacing a splash or an auth gate) | `none` | `_transition: { type: none }` |
+
+Rules of thumb:
+
+1. Declare the effect on the destination screen; the source screen only marks what grows (`transition_source`) or what flies (`shared_element`).
+2. Keep durations on defaults (150–260 ms) unless a design asks otherwise; longer transitions feel slow on device.
+3. Use `container_transform` when the whole card should become the page, and `shared_element` when one element should continue while the rest of the page fades in.
+4. Do not combine both on the same element: a `shared_element` inside a `transition_source` grows with the container snapshot instead of flying separately.
+5. Effects run only when the app enables transitions and the screen is opened by an engine `navigate` push/go; deep links and direct router calls use the platform transition.
+
 ## Screen declaration
 
 `_transition` is allowed only at a screen root, never on a child node or modal. All values must be static JSON literals; `${…}` expressions are rejected.
