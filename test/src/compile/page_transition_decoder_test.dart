@@ -101,6 +101,9 @@ void main() {
       'zoom',
       'fade_through',
       'shared_axis',
+      'container_transform',
+      'card_stack',
+      'tap_zoom',
     ]) {
       test('$type rejects unknown params', () {
         expect(
@@ -132,12 +135,17 @@ void main() {
       ('zoom', 'begin_scale', 0.5, 1.0),
       ('fade_through', 'threshold', 0.0, 1.0),
       ('shared_axis', 'distance', 0.0, 200.0),
+      ('container_transform', 'scrim', 0.0, 1.0),
+      ('card_stack', 'scale', 0.8, 1.0),
+      ('card_stack', 'radius', 0.0, 40.0),
+      ('card_stack', 'dim', 0.0, 0.6),
+      ('tap_zoom', 'begin_scale', 0.05, 1.0),
     ]) {
       test('$type accepts defaults and valid inclusive bounds', () {
         for (final params in <Map<String, Object?>>[
           {},
           {key: min},
-          {key: 0.75},
+          {key: (min + max) / 2},
           {key: max},
         ]) {
           expect(

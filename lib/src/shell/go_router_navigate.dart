@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:go_router/go_router.dart';
+import 'package:flutter/widgets.dart';
+
+import '../runtime/transition/transition_origin.dart';
 
 import '../runtime/engine_host.dart';
 import '../contract/screen_loader.dart';
@@ -20,9 +23,10 @@ import 'transition_preload.dart';
 NavigateHandle goRouterNavigateHandle(
   GoRouter router, {
   ScreenLoader? loader,
+  NavigatorState? navigator,
 }) => NavigateHandle(
   push: (location) => EnginePresentation.value.transitions.enabled
-      ? _navigateWithPreload(router, location, loader)
+      ? _navigateWithPreload(router, location, loader, navigator: navigator)
       : _pushUntilGone(router, location),
   go: (location) {
     if (!EnginePresentation.value.transitions.enabled) {
@@ -30,7 +34,13 @@ NavigateHandle goRouterNavigateHandle(
       return;
     }
     unawaited(
-      _navigateWithPreload(router, location, loader, replaceStack: true),
+      _navigateWithPreload(
+        router,
+        location,
+        loader,
+        replaceStack: true,
+        navigator: navigator,
+      ),
     );
   },
   pop: ([result]) {
@@ -43,6 +53,7 @@ Future<Object?> _navigateWithPreload(
   String location,
   ScreenLoader? loader, {
   bool replaceStack = false,
+  NavigatorState? navigator,
 }) async {
   final style = EnginePresentation.value.transitions;
   final uri = Uri.tryParse(location);
@@ -109,11 +120,18 @@ Future<Object?> _navigateWithPreload(
       !identical(delegate.currentConfiguration, configuration)) {
     return null;
   }
+  final owner = navigator ?? router.routerDelegate.navigatorKey.currentState;
+  final origin = owner == null ? null : TransitionOrigins.of(owner).consume();
+  final selected = spec ?? PageTransitionSpec(type: style.defaultType);
+  if (selected.type != 'container_transform') origin?.source?.dispose();
   final token = store.put(
     TransitionPreload(
       location: uri,
       screen: screen,
-      transition: spec ?? PageTransitionSpec(type: style.defaultType),
+      origin: selected.type == 'container_transform' ? origin?.source : null,
+      tapPoint: origin?.point,
+      originNavigator: owner,
+      transition: selected,
     ),
   );
   if (replaceStack) {

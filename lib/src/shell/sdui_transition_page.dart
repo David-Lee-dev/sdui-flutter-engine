@@ -6,19 +6,40 @@ import 'package:flutter/material.dart';
 import '../ir/model/page_transition.dart';
 import '../runtime/transition/transition_factory.dart';
 import '../runtime/transition/shared_transition_scope.dart';
+import '../runtime/transition/transition_origin.dart';
 import '../runtime/util/engine_curve.dart';
 
 Page<void> sduiTransitionPage({
   required LocalKey key,
   required Widget child,
   required PageTransitionSpec spec,
-}) => _TransitionPage(key: key, child: child, spec: spec);
+  TransitionOrigin? origin,
+  Offset? tapPoint,
+  NavigatorState? originNavigator,
+}) => _TransitionPage(
+  key: key,
+  child: child,
+  spec: spec,
+  origin: origin,
+  tapPoint: tapPoint,
+  originNavigator: originNavigator,
+);
 
 final class _TransitionPage extends Page<void> {
-  const _TransitionPage({super.key, required this.child, required this.spec});
+  const _TransitionPage({
+    super.key,
+    required this.child,
+    required this.spec,
+    this.origin,
+    this.tapPoint,
+    this.originNavigator,
+  });
 
   final Widget child;
   final PageTransitionSpec spec;
+  final TransitionOrigin? origin;
+  final Offset? tapPoint;
+  final NavigatorState? originNavigator;
 
   @override
   Route<void> createRoute(BuildContext context) => _TransitionRoute(this);
@@ -34,6 +55,31 @@ final class _TransitionRoute extends PageRoute<void> {
   void install() {
     super.install();
     animation!.addStatusListener(_animationStatus);
+    animation!.addListener(_originProgress);
+    if (page.spec.type == 'container_transform' && _origin != null) {
+      _origin!.activate(TransitionOrigins.of(navigator!));
+      _origin!.setHidden(true);
+    }
+  }
+
+  TransitionOrigin? get _origin =>
+      page.originNavigator == null || identical(page.originNavigator, navigator)
+      ? page.origin
+      : null;
+
+  bool _returning = false;
+
+  void _originProgress() {
+    if (page.spec.type != 'container_transform') return;
+    final origin = _origin;
+    if (origin == null) return;
+    final t = animation!.value;
+    if (t < 1 && !_returning && animation!.status != AnimationStatus.forward) {
+      _returning = true;
+      origin.refresh();
+    }
+    if (t == 1) _returning = false;
+    origin.setHidden(t > 0 && t < 1);
   }
 
   void _animationStatus(AnimationStatus status) {
@@ -45,6 +91,8 @@ final class _TransitionRoute extends PageRoute<void> {
   @override
   void dispose() {
     animation!.removeStatusListener(_animationStatus);
+    animation!.removeListener(_originProgress);
+    page.origin?.dispose();
     _shared.dispose();
     super.dispose();
   }
@@ -104,6 +152,26 @@ final class _TransitionRoute extends PageRoute<void> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
+    return TransitionOriginScope(
+      source: page.spec.type == 'container_transform' ? _origin : null,
+      point:
+          page.originNavigator == null ||
+              identical(page.originNavigator, navigator)
+          ? page.tapPoint
+          : null,
+      child: Builder(
+        builder: (context) =>
+            _buildEffect(context, animation, secondaryAnimation, child),
+      ),
+    );
+  }
+
+  Widget _buildEffect(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
     final effect = PageTransitionFactory.resolve(page.spec.type);
     final next = _nextRoute;
     final outgoing = next == null
@@ -125,7 +193,9 @@ final class _TransitionRoute extends PageRoute<void> {
       curve: EngineCurve.resolve(page.spec.curve),
       builder: (progress) => effect.build(
         context,
-        progress.drive(CurveTween(curve: EngineCurve.resolve(page.spec.curve))),
+        (page.spec.type == 'container_transform' ? animation : progress).drive(
+          CurveTween(curve: EngineCurve.resolve(page.spec.curve)),
+        ),
         outgoing == null ? secondaryAnimation : const AlwaysStoppedAnimation(0),
         outgoing ?? child,
         page.spec,

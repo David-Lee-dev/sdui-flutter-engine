@@ -68,6 +68,9 @@ Unknown declaration keys are rejected at compile time.
 | `zoom` | Centered scale → 1, opacity 0 → 1 | `begin_scale`: default `0.94`, inclusive range `0.5..1` | 250 / 200 ms |
 | `fade_through` | Outgoing opacity 1 → 0 before the threshold; incoming opacity 0 → 1 and scale 0.92 → 1 afterward | `threshold`: default `0.35`, inclusive range `0..1` | 300 / 250 ms |
 | `shared_axis` | x/y: incoming +distance → 0, outgoing 0 → −distance with cross-fade; z: incoming scale 0.8 → 1, outgoing 1 → 1.1 with cross-fade | `axis`: `x`, `y`, or `z`, default `x`; `distance`: logical pixels for x/y, default `30`, inclusive range `0..200` | 300 / 250 ms |
+| `container_transform` | Captured source box grows into the full page, rounding to square with a fade-through snapshot | `scrim`: default `0`, inclusive range `0..1`; dims the previous engine page | 300 / 250 ms |
+| `card_stack` | Incoming page rises a full page height; previous engine page scales down, rounds and dims | `scale`: default `0.94`, `0.8..1`; `radius`: default `12`, `0..40`; `dim`: default `0.2`, `0..0.6` | 350 / 300 ms |
+| `tap_zoom` | Incoming page grows from the latest pointer-down position with a fade | `begin_scale`: default `0.1`, inclusive range `0.05..1` | 300 / 250 ms |
 
 `none` swaps pages instantly in both directions, so shared elements do not fly; omit `duration` for it (a duration only delays an invisible change). An iOS swipe on a `none` page has no visual scrub and pops when released.
 
@@ -76,6 +79,39 @@ Unknown declaration keys are rejected at compile time.
 Both effects animate the page below using the incoming route's specification, curve and secondary animation, including pop and iOS swipe. Route-pair animation applies only between engine transition routes. With legacy Material/Cupertino pages or app routes, the engine page plays its incoming half and the neighbour keeps its platform transition behaviour; the engine does not install an outgoing effect on that neighbour.
 
 Numeric built-in parameters must be finite numbers within the listed bounds. Unknown parameter keys, invalid axis strings, wrong parameter types, nulls and out-of-range values are rejected. Custom effect names without a built-in schema accept arbitrary static JSON parameters; the custom implementation owns their interpretation.
+
+## Source wrapper and tap origins
+
+Wrap precisely the part of a card that should grow in [`transition_source`](widgets/custom/transition_source.md). Put labels or controls that should stay behind outside that wrapper. Its optional `radius` is the source's actual corner radius (default `0`). Declare `container_transform` on the destination screen:
+
+```yaml
+# Source card
+_type: column
+_children:
+  - _type: transition_source
+    radius: 16
+    _child:
+      _type: image
+      src: "${image}"
+      width: 160
+      height: 100
+  - _type: text
+    value: "${title}"
+
+# Destination screen root
+_type: scaffold
+_transition: { type: container_transform }
+_slots:
+  body: { _type: text, value: Detail }
+```
+
+Pointer-down inside the wrapper captures only its box pixels and global rectangle. The engine screen also records the last pointer-down position for `tap_zoom`; no app callback or new gesture recognizer is required. The preload push consumes both once, within one second and in the same Navigator. A later pointer-down clears an earlier armed source. An unmounted, stale, empty, unpainted or unsupported platform-view source falls back to `fade`; a missing/stale tap or a different Navigator uses screen center for `tap_zoom`. Keyboard/programmatic navigation has the same fallbacks when no fresh pointer origin exists. `_transition` remains static.
+
+`container_transform` interpolates source rectangle → full page and source radius → `0`. Its snapshot uses aspect-preserving cover cropping and fades out over progress `0..0.35`; destination content fades in over `0.35..1`. The optional scrim defaults to zero to avoid imposing a backdrop on authored pages. Back and the existing iOS edge swipe retrace these values. At the start of a return, the engine re-reads a mounted source's global rectangle; if it has been removed, it uses the stored rectangle and original snapshot. The source keeps its layout and live widget state while its painting is hidden during motion, and is restored on push completion, pop, swipe cancellation/completion and route removal, including removal mid-drag.
+
+A `shared_element` inside the captured source is part of that snapshot: its matching Hero tag is excluded from separate flights until the container route is removed, including on pop. Nested video therefore uses the container snapshot rather than continuous Hero handoff. Shared elements outside the wrapper still fly normally; container geometry remains on the original route progress even when shared-content timing is enabled. No live widget subtree or GlobalKey is duplicated.
+
+`card_stack` applies its outgoing half only to another engine transition route; a legacy Material/Cupertino neighbour retains host behavior while the incoming page still slides up. `tap_zoom` maps the captured global tap into the destination route rectangle and clamps its alignment to the page edges; pop returns toward that same point. Reduced motion selects `none` for all three effects.
 
 ## Precedence and loading
 

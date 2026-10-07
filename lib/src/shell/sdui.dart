@@ -186,11 +186,15 @@ final class Sdui {
                   MediaQuery.maybeOf(context)?.disableAnimations == true
             ? PageTransitionSpec(type: 'none')
             : preload.transition;
+        if (spec?.type != 'container_transform') preload?.origin?.dispose();
         if (spec != null && spec.type != 'platform') {
           return sduiTransitionPage(
             key: state.pageKey,
             child: child,
             spec: spec,
+            origin: spec.type == 'container_transform' ? preload?.origin : null,
+            tapPoint: preload?.tapPoint,
+            originNavigator: preload?.originNavigator,
           );
         }
         final name = state.name ?? state.path;

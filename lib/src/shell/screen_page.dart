@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../contract/screen_loader.dart';
 import '../engine_runner.dart';
 import '../runtime/engine_host.dart';
+import '../runtime/transition/transition_origin.dart';
 import '../contract/error_observer.dart';
 import '../runtime/engine_errors.dart';
 import '../runtime/engine_presentation.dart';
@@ -155,18 +156,27 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     final loaded = _loaded;
     if (loaded == null) return _loading(context);
 
-    return EngineRunner(
-      screenId: widget.screenId,
-      screenViewId: _screenViewId,
-      rootData: widget.params,
-      template: loaded.template,
-      modalTemplates: loaded.modals,
-      navigate: goRouterNavigateHandle(
-        GoRouter.of(context),
-        loader: widget.loader,
+    return Listener(
+      onPointerDown: (event) {
+        final navigator = Navigator.maybeOf(context);
+        if (navigator != null) {
+          TransitionOrigins.of(navigator).pointerDown(event);
+        }
+      },
+      child: EngineRunner(
+        screenId: widget.screenId,
+        screenViewId: _screenViewId,
+        rootData: widget.params,
+        template: loaded.template,
+        modalTemplates: loaded.modals,
+        navigate: goRouterNavigateHandle(
+          GoRouter.of(context),
+          loader: widget.loader,
+          navigator: Navigator.maybeOf(context),
+        ),
+        toast: _toastHandle(),
+        errorBuilder: (context, error) => _errorView(context, error),
       ),
-      toast: _toastHandle(),
-      errorBuilder: (context, error) => _errorView(context, error),
     );
   }
 }

@@ -21,6 +21,7 @@ abstract final class BuiltinLanguage {
   'absorb_pointer': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'align': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'shared_element': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
+  'transition_source': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'anchor': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'anchor_scope': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'app_bar': WidgetSchema(kind: WidgetKind.slot, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
@@ -192,6 +193,9 @@ abstract final class BuiltinLanguage {
     'zoom',
     'fade_through',
     'shared_axis',
+    'container_transform',
+    'card_stack',
+    'tap_zoom',
   };
 
   /// Built-in params: inclusive numeric bounds or allowed string values.
@@ -208,6 +212,13 @@ abstract final class BuiltinLanguage {
     'slide_up': {'distance': (min: 0, max: 1, values: null)},
     'zoom': {'begin_scale': (min: 0.5, max: 1, values: null)},
     'fade_through': {'threshold': (min: 0, max: 1, values: null)},
+    'container_transform': {'scrim': (min: 0, max: 1, values: null)},
+    'card_stack': {
+      'scale': (min: 0.8, max: 1, values: null),
+      'radius': (min: 0, max: 40, values: null),
+      'dim': (min: 0, max: 0.6, values: null),
+    },
+    'tap_zoom': {'begin_scale': (min: 0.05, max: 1, values: null)},
     'shared_axis': {
       'axis': (min: null, max: null, values: {'x', 'y', 'z'}),
       'distance': (min: 0, max: 200, values: null),

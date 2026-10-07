@@ -8,6 +8,7 @@ import '../contract/error_observer.dart';
 import '../engine.dart';
 import '../runtime/engine_errors.dart';
 import '../ir/model/page_transition.dart';
+import '../runtime/transition/transition_origin.dart';
 
 /// Validate once, then hand the body to EngineRunner without the already-read
 /// route declaration. A late timeout result keeps the route's chosen default.
@@ -55,12 +56,18 @@ final class TransitionPreload {
     required this.location,
     required this.screen,
     required this.transition,
+    this.origin,
+    this.tapPoint,
+    this.originNavigator,
   });
 
   final Uri location;
 
   final Future<LoadedScreen> screen;
   final PageTransitionSpec transition;
+  final TransitionOrigin? origin;
+  final Offset? tapPoint;
+  final NavigatorState? originNavigator;
 }
 
 /// Router-owned tokens move into page-key bindings on first build. Bindings
@@ -91,7 +98,11 @@ final class TransitionPreloads {
       }
 
       collect(router.routerDelegate.currentConfiguration);
-      _entries.removeWhere((token, _) => !tokens.contains(token));
+      _entries.removeWhere((token, preload) {
+        if (tokens.contains(token)) return false;
+        preload.origin?.dispose();
+        return true;
+      });
       _pages.removeWhere((page, _) => !keys.contains(page.key));
     });
   }
@@ -128,7 +139,7 @@ final class TransitionPreloads {
   }
 
   void remove(String token) {
-    _entries.remove(token);
+    _entries.remove(token)?.origin?.dispose();
   }
 
   void release(LocalKey key, Uri uri, TransitionPreload preload) {
@@ -162,6 +173,7 @@ final class _PreloadedPageState extends State<PreloadedPage> {
   @override
   void dispose() {
     widget.store.release(widget.pageKey, widget.uri, widget.preload);
+    widget.preload.origin?.dispose();
     super.dispose();
   }
 

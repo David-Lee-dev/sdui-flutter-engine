@@ -7,6 +7,7 @@ import '../../../engine_presentation.dart';
 import '../../../media/shared_video_session.dart';
 import '../../../log/engine_log.dart';
 import '../../../transition/shared_transition_scope.dart';
+import '../../../transition/transition_origin.dart';
 import '../../../telemetry/visit_observer.dart';
 
 /// Wraps one box child in a same-Navigator Hero flight.
@@ -185,6 +186,11 @@ class _SharedElementState extends State<SharedElement> {
   // or reorder, without rebuilding siblings while the tree is being built.
   bool get _canFly {
     final route = _route;
+    final navigator = _navigator;
+    if (navigator != null &&
+        TransitionOrigins.of(navigator).suppresses((navigator, widget.tag))) {
+      return false;
+    }
     final gesture = _navigator?.userGestureInProgress ?? false;
     // A maintained route below the top route has disabled tickers when Hero
     // discovery runs synchronously at the start of an edge swipe.

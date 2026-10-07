@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sdui_engine/testing.dart';
 import 'package:sdui_engine/src/runtime/engine_errors.dart';
+import 'package:sdui_engine/src/runtime/transition/transition_origin.dart';
 import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
 import 'package:sdui_engine/src/shell/go_router_navigate.dart';
@@ -121,6 +122,85 @@ Future<void> _open(WidgetTester tester, GoRouter router, _Loader loader) async {
 void main() {
   setUp(_style);
   tearDown(resetEngineForTest);
+
+  for (final type in ['container_transform', 'card_stack', 'tap_zoom']) {
+    for (final reduced in [false, true]) {
+      testWidgets('$type preload captures source and tap reduced=$reduced', (
+        tester,
+      ) async {
+        final loader = _Loader(
+          home: () => Future<LoadedScreen>.value((
+            template: <String, Object?>{
+              '_type': 'center',
+              '_child': {
+                '_type': 'transition_source',
+                'radius': 18,
+                '_child': {
+                  '_type': 'container',
+                  'width': 120,
+                  'height': 80,
+                  '_child': {'_type': 'text', 'value': 'tap source'},
+                },
+              },
+            },
+            modals: const <String, Object?>{},
+          )),
+          detail: () =>
+              Future.value(_screen('detail', transition: {'type': type})),
+        );
+        final router = await _pump(tester, loader, reduced: reduced);
+        final point = tester.getCenter(find.text('tap source'));
+        await tester.tap(find.text('tap source'));
+        final pushed = goRouterNavigateHandle(router, loader: loader).push!(
+          '/screens/detail',
+        );
+        await tester.pump();
+        // Build the route through HeroController's offstage discovery frame.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        final scope = tester.widget<TransitionOriginScope>(
+          find.byType(TransitionOriginScope),
+        );
+        expect(scope.point, point);
+        if (type == 'container_transform' && !reduced) {
+          expect(scope.source!.radius, 18);
+          expect(scope.source!.rect.size, const Size(120, 80));
+          expect(scope.source!.hidden.value, isTrue);
+          expect(find.byType(RawImage), findsOneWidget);
+        } else {
+          expect(scope.source, isNull);
+        }
+        expect(
+          _route(tester).transitionDuration,
+          reduced
+              ? Duration.zero
+              : Duration(milliseconds: type == 'card_stack' ? 350 : 300),
+        );
+        if (reduced) {
+          expect(
+            find.ancestor(
+              of: find.text('detail'),
+              matching: find.byType(SlideTransition),
+            ),
+            findsNothing,
+          );
+          expect(
+            find.ancestor(
+              of: find.text('detail'),
+              matching: find.byType(Opacity),
+            ),
+            findsNothing,
+          );
+        }
+        await tester.pumpAndSettle();
+        router.pop();
+        await tester.pumpAndSettle();
+        await pushed;
+        expect(find.text('tap source'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 
   testWidgets('disabled_style_legacy_path', (tester) async {
     _style(enabled: false);
