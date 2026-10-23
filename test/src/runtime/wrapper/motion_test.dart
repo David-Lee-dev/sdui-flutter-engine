@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
+import 'package:sdui_engine/src/runtime/motion/atom/fade.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/move.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/reveal.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
@@ -527,6 +528,75 @@ void main() {
       );
       // 모션이 시작 프레임에 자식을 화면 밖으로 옮겨도, 판정은 자식이 놓일 자리로 한다.
       expect(translate.transform.getTranslation().x, 0.0);
+    });
+
+    for (final direction in ['left', 'up']) {
+      testWidgets('K: 왼쪽 위 자리의 reveal($direction)도 보이면 시작한다', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SizedBox(
+              width: 400,
+              height: 300,
+              child: ListView(
+                children: [
+                  SizedBox(
+                    height: 100,
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: MotionWrapper(
+                        motion: const RevealMotion(),
+                        params: MotionParams({'direction': direction}),
+                        child: const SizedBox(width: 200, height: 40),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpAndSettle();
+        final align = tester.widget<Align>(
+          find
+              .descendant(
+                of: find.byType(MotionWrapper),
+                matching: find.byType(Align),
+              )
+              .first,
+        );
+        expect(align.widthFactor ?? align.heightFactor, 1.0);
+      });
+    }
+
+    testWidgets('L: reveal 을 감싼 fade 도 보이면 시작한다', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              children: [
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: MotionWrapper(
+                    motion: const FadeMotion(),
+                    params: const MotionParams({}),
+                    child: MotionWrapper(
+                      motion: const RevealMotion(),
+                      params: const MotionParams({'direction': 'right'}),
+                      child: const SizedBox(width: 200, height: 40),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 1.0);
     });
   });
 }

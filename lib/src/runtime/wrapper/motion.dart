@@ -29,10 +29,6 @@ class _MotionWrapperState extends State<MotionWrapper>
   Timer? _delayTimer;
   late MotionPlan _plan;
 
-  /// Marks the child so the visibility gate measures its laid-out box rather
-  /// than the motion frame around it.
-  final _childKey = GlobalKey();
-
   /// Ancestor scroll positions (nearest first) found on the last dependency
   /// check, each with the listener subscribed to it (for later removal).
   final Map<ScrollPosition, VoidCallback> _positionListeners = {};
@@ -159,19 +155,18 @@ class _MotionWrapperState extends State<MotionWrapper>
     // position notification, at zero cost while idle.
   }
 
-  /// True when this widget's render box has non-zero overlap with every
-  /// ancestor scrollable's viewport. A motion whose first frame shrinks that
-  /// box to nothing (a reveal starts at width 0) is measured by its child
-  /// instead, which keeps its laid-out size; otherwise the frame's own box is
-  /// used, so a motion that starts its child off-screen still counts by the
-  /// slot it lands in.
+  /// True when the slot this motion occupies has non-zero overlap with every
+  /// ancestor scrollable's viewport. The slot is this widget's own box; when a
+  /// motion's first frame collapses that box (a reveal starts at width or
+  /// height 0, possibly inside other motions), the slot keeps this widget's
+  /// position and takes the size of the first sized box beneath it, so the
+  /// frame's own clipping and offsets never decide visibility.
   bool _isVisible() {
-    final own = context.findRenderObject() as RenderBox?;
-    final box = own != null && own.hasSize && own.size.isEmpty
-        ? _childKey.currentContext?.findRenderObject() as RenderBox?
-        : own;
-    if (box == null || !box.attached || box.size.isEmpty) return false;
-    var rect = Offset.zero & box.size;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !box.hasSize) return false;
+    final size = box.size.isEmpty ? _contentSize(box) : box.size;
+    if (size == null) return false;
+    var rect = Offset.zero & size;
     for (final s in _scrollables) {
       final viewport = s.context.findRenderObject() as RenderBox?;
       if (viewport == null || !viewport.attached) return false;
@@ -184,6 +179,22 @@ class _MotionWrapperState extends State<MotionWrapper>
       rect = transformed;
     }
     return true;
+  }
+
+  /// Size of the first laid-out, non-empty box below [root], depth first.
+  static Size? _contentSize(RenderObject root) {
+    Size? found;
+    void visit(RenderObject child) {
+      if (found != null) return;
+      if (child is RenderBox && child.hasSize && !child.size.isEmpty) {
+        found = child.size;
+        return;
+      }
+      child.visitChildren(visit);
+    }
+
+    root.visitChildren(visit);
+    return found;
   }
 
   void _passGate() {
@@ -251,7 +262,7 @@ class _MotionWrapperState extends State<MotionWrapper>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _curved!,
-      child: KeyedSubtree(key: _childKey, child: widget.child),
+      child: widget.child,
       builder: (context, child) =>
           widget.motion.frame(context, _curved!.value, child!, widget.params),
     );

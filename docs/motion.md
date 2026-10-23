@@ -46,6 +46,13 @@ screen and back never restarts it. A `trigger` change still restarts the motion 
 bypassing the gate, exactly as before. `repeat: true` motions wait on the same gate before their
 first run.
 
+Visibility is judged from the slot the motion occupies. When a motion's first frame collapses its
+own box (a `reveal_*` starting at width or height 0), the slot keeps the motion's position and
+takes the size of the first sized box beneath it. Known limits of that fallback: a collapsed
+reveal aligned to the right or bottom edge of its parent can stay waiting when that edge sits
+exactly at the viewport edge, and a collapsed multi-child layout is sized by its first child only.
+Prefer left/top alignment for reveals inside scrollables.
+
 ## Atoms
 
 | Atom | Specific parameters | Effect |
