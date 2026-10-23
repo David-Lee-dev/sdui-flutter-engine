@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3
+
+- Fix: 0.3.2 measured the child for every motion, so a motion that starts its
+  child off-screen (`move` with a large `begin`) never started. The start
+  gate measures the motion's own box again and falls back to the child only
+  when that box is empty (a reveal at its first frame).
+
 ## 0.3.2
 
 - Fix: a `_motion` inside a scrollable whose first frame shrinks its own box

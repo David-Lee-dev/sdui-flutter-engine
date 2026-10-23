@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
+import 'package:sdui_engine/src/runtime/motion/atom/move.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/reveal.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/swipe_pane_widget.dart';
@@ -493,6 +494,39 @@ void main() {
             .first,
       );
       expect(align.widthFactor, 1.0); // 시작 프레임 폭 0이 '안 보임'으로 판정돼 멈추지 않는다
+    });
+
+    testWidgets('J: 화면 밖에서 들어오는 move 도 자리가 보이면 시작한다', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              children: [
+                MotionWrapper(
+                  motion: const MoveMotion(),
+                  params: const MotionParams({
+                    'begin': [-1000, 0],
+                    'end': [0, 0],
+                  }),
+                  child: const SizedBox(width: 200, height: 40),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      final translate = tester.widget<Transform>(
+        find.descendant(
+          of: find.byType(MotionWrapper),
+          matching: find.byType(Transform),
+        ),
+      );
+      // 모션이 시작 프레임에 자식을 화면 밖으로 옮겨도, 판정은 자식이 놓일 자리로 한다.
+      expect(translate.transform.getTranslation().x, 0.0);
     });
   });
 }

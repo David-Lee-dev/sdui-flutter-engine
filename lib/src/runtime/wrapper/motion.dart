@@ -159,12 +159,17 @@ class _MotionWrapperState extends State<MotionWrapper>
     // position notification, at zero cost while idle.
   }
 
-  /// True when the child's render box has non-zero overlap with every
-  /// ancestor scrollable's viewport. The child is measured, not this widget:
-  /// a motion's first frame may shrink its own box to zero (a reveal starts
-  /// at width 0), which would otherwise never count as visible.
+  /// True when this widget's render box has non-zero overlap with every
+  /// ancestor scrollable's viewport. A motion whose first frame shrinks that
+  /// box to nothing (a reveal starts at width 0) is measured by its child
+  /// instead, which keeps its laid-out size; otherwise the frame's own box is
+  /// used, so a motion that starts its child off-screen still counts by the
+  /// slot it lands in.
   bool _isVisible() {
-    final box = _childKey.currentContext?.findRenderObject() as RenderBox?;
+    final own = context.findRenderObject() as RenderBox?;
+    final box = own != null && own.hasSize && own.size.isEmpty
+        ? _childKey.currentContext?.findRenderObject() as RenderBox?
+        : own;
     if (box == null || !box.attached || box.size.isEmpty) return false;
     var rect = Offset.zero & box.size;
     for (final s in _scrollables) {
