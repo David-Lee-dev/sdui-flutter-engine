@@ -65,6 +65,32 @@ void main() {
     );
 
     testWidgets(
+      'a tight parent size reaches the image so fit can fill the slot',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Center(
+              child: SizedBox(
+                width: 100,
+                height: 140,
+                child: loadingImageTransition(
+                  loaded: true,
+                  placeholder: placeholder,
+                  image: image,
+                ),
+              ),
+            ),
+          ),
+        );
+
+        final loaded = find.byWidgetPredicate(
+          (widget) => widget is ColoredBox && widget.color == Colors.green,
+        );
+        expect(tester.getSize(loaded), const Size(100, 140));
+      },
+    );
+
+    testWidgets(
       'same loaded state with a different child updates in place instead of starting a new fade',
       (tester) async {
         await tester.pumpWidget(frame(false));

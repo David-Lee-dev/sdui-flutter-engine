@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+- Fix: an `image` that is still loading (the pending path) now receives its
+  parent's constraints unchanged. Previously the load cross-fade loosened them,
+  so in a fixed slot the image sized to its own aspect ratio and `fit` (e.g.
+  `cover`) could not fill the slot. Pending and ready images now lay out alike.
+
 ## 0.2.2
 
 - `video` widget: `on_ready` and `on_error` props. `on_ready` dispatches once a

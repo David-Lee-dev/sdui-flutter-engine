@@ -62,6 +62,15 @@ class _LoadingImageTransitionState extends State<_LoadingImageTransition> {
     duration: _fadeDuration,
     switchInCurve: Curves.easeOut,
     switchOutCurve: Curves.easeOut,
+    // The default layout loosens the parent's constraints, so an image in a
+    // fixed slot would size to its own aspect ratio and `fit` could not fill
+    // the slot. Passing them through keeps a pending image laid out like a
+    // ready one.
+    layoutBuilder: (current, previous) => Stack(
+      fit: StackFit.passthrough,
+      alignment: Alignment.center,
+      children: [...previous, ?current],
+    ),
     child: KeyedSubtree(
       key: ValueKey(_generation),
       child: widget.loaded ? widget.image : widget.placeholder,
