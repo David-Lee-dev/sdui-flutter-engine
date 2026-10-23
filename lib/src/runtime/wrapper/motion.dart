@@ -29,6 +29,10 @@ class _MotionWrapperState extends State<MotionWrapper>
   Timer? _delayTimer;
   late MotionPlan _plan;
 
+  /// Marks the child so the visibility gate measures its laid-out box rather
+  /// than the motion frame around it.
+  final _childKey = GlobalKey();
+
   /// Ancestor scroll positions (nearest first) found on the last dependency
   /// check, each with the listener subscribed to it (for later removal).
   final Map<ScrollPosition, VoidCallback> _positionListeners = {};
@@ -155,10 +159,12 @@ class _MotionWrapperState extends State<MotionWrapper>
     // position notification, at zero cost while idle.
   }
 
-  /// True when this widget's render box has non-zero overlap with every
-  /// ancestor scrollable's viewport.
+  /// True when the child's render box has non-zero overlap with every
+  /// ancestor scrollable's viewport. The child is measured, not this widget:
+  /// a motion's first frame may shrink its own box to zero (a reveal starts
+  /// at width 0), which would otherwise never count as visible.
   bool _isVisible() {
-    final box = context.findRenderObject() as RenderBox?;
+    final box = _childKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.attached || box.size.isEmpty) return false;
     var rect = Offset.zero & box.size;
     for (final s in _scrollables) {
@@ -240,7 +246,7 @@ class _MotionWrapperState extends State<MotionWrapper>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _curved!,
-      child: widget.child,
+      child: KeyedSubtree(key: _childKey, child: widget.child),
       builder: (context, child) =>
           widget.motion.frame(context, _curved!.value, child!, widget.params),
     );

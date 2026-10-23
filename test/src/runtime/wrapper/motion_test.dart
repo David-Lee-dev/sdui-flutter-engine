@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
+import 'package:sdui_engine/src/runtime/motion/atom/reveal.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/swipe_pane_widget.dart';
 import 'package:sdui_engine/src/runtime/widget/swipe/swipe_controller.dart';
@@ -457,6 +458,41 @@ void main() {
       expect(opacityOf(tester, probeKey), 0.0); // still gated — never started
       expect(tester.binding.hasScheduledFrame, isFalse);
       expect(tester.binding.transientCallbackCount, 0);
+    });
+
+    testWidgets('I: 폭 0에서 펼쳐지는 reveal 도 보이면 시작해 끝까지 펼친다', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              children: [
+                // settle_card 막대처럼 느슨한 폭(align) 안 — 시작 프레임의 폭이 실제로 0이 된다.
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: MotionWrapper(
+                    motion: const RevealMotion(),
+                    params: const MotionParams({'direction': 'right'}),
+                    child: const SizedBox(width: 200, height: 4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      final align = tester.widget<Align>(
+        find
+            .descendant(
+              of: find.byType(MotionWrapper),
+              matching: find.byType(Align),
+            )
+            .first,
+      );
+      expect(align.widthFactor, 1.0); // 시작 프레임 폭 0이 '안 보임'으로 판정돼 멈추지 않는다
     });
   });
 }

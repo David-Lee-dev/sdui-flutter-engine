@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- Fix: a `_motion` inside a scrollable whose first frame shrinks its own box
+  to zero (`reveal_*` starting at width or height 0 inside a loose parent such
+  as `align`) never started, because the start gate measured the motion frame.
+  The gate now measures the child's laid-out box.
+
 ## 0.3.1
 
 - New expression function `url_encode(value)`: encodes one URL query value
