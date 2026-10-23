@@ -14,6 +14,8 @@ Builds a policy-backed video player with optional playback interaction.
 | `aspect_ratio` | `number` | — | `null` | Yes | width-to-height ratio of the rendered box. |
 | `show_controls` | `flag` | — | `false` | Yes | shows playback controls over the video. |
 | `on_end` | `text` | — | `null` | Yes | action dispatched when playback ends. |
+| `on_ready` | `text` | — | `null` | Yes | action dispatched once the slot first becomes renderable for the current `src`. |
+| `on_error` | `text` | — | `null` | Yes | action dispatched once if the video fails to initialize for the current `src`. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 
 All non-structural property values are recursively expression-bindable. Structural keys control compilation and therefore are not themselves interpolated.

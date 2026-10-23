@@ -46,6 +46,7 @@ class SharedVideoSession extends ChangeNotifier {
   SharedVideoLease? active;
   int _flights = 0;
   bool initialized = false;
+  bool initializationFailed = false;
   bool _disposed = false;
   Future<void> _configuration = Future.value();
 
@@ -107,6 +108,7 @@ class SharedVideoSession extends ChangeNotifier {
       controller = null;
       if (!_disposed) await value?.dispose();
       initialized = false;
+      initializationFailed = true;
       _notify();
     }
   }

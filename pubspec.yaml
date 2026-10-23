@@ -1,6 +1,6 @@
 name: sdui_engine
 description: "Server-driven UI engine for Flutter: compiles JSON templates into a live, reactive widget tree with actions, drivers, and motion."
-version: 0.2.1
+version: 0.2.2
 repository: https://github.com/David-Lee-dev/sdui-flutter-engine
 publish_to: http://100.115.77.18:28400/api/packages/david/pub
 

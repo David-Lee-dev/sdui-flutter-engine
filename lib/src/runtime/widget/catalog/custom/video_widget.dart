@@ -24,6 +24,10 @@ import '../../../media/shared_video_session.dart';
 /// - `aspect_ratio` (`number`, default `null`) — width-to-height ratio of the rendered box.
 /// - `show_controls` (`flag`, default `false`) — shows playback controls over the video.
 /// - `on_end` (`text`, default `null`) — action dispatched when playback ends.
+/// - `on_ready` (`text`, default `null`) — action dispatched once the slot first
+///   becomes renderable for the current `src`.
+/// - `on_error` (`text`, default `null`) — action dispatched once if the video
+///   fails to initialize for the current `src`.
 ///
 /// Child: none.
 ///
@@ -49,6 +53,8 @@ final class VideoWidget {
       aspectRatio: PropsResolver.number(props['aspect_ratio']),
       showControls: PropsResolver.flag(props['show_controls']) ?? false,
       onEnd: PropsResolver.text(props['on_end']),
+      onReady: PropsResolver.text(props['on_ready']),
+      onError: PropsResolver.text(props['on_error']),
       dispatch: dispatch,
     );
   }
@@ -64,6 +70,8 @@ class _VideoView extends StatefulWidget {
     required this.aspectRatio,
     required this.showControls,
     required this.onEnd,
+    required this.onReady,
+    required this.onError,
     required this.dispatch,
   });
 
@@ -75,6 +83,8 @@ class _VideoView extends StatefulWidget {
   final double? aspectRatio;
   final bool showControls;
   final String? onEnd;
+  final String? onReady;
+  final String? onError;
   final ActionSink? dispatch;
 
   @override
@@ -85,6 +95,8 @@ class _VideoViewState extends State<_VideoView> {
   SduiVideoController? _controller;
   bool _initialized = false;
   bool _endDispatched = false;
+  bool _readyDispatched = false;
+  bool _errorDispatched = false;
   int _generation = 0;
 
   SharedVideoLease? _lease;
@@ -114,6 +126,8 @@ class _VideoViewState extends State<_VideoView> {
 
   void _createLease(SharedVideoScope scope, ModalRoute<dynamic> route) {
     _endDispatched = false;
+    _readyDispatched = false;
+    _errorDispatched = false;
     final lease = SharedVideoSession.acquire(
       scope,
       widget.src,
@@ -125,6 +139,12 @@ class _VideoViewState extends State<_VideoView> {
     );
     _lease = lease;
     lease.session.addListener(_onSessionChanged);
+    // A reused session may already be initialized. This runs from
+    // didChangeDependencies (build phase), so the dispatch — which can set
+    // scope state — waits for the frame to end.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && identical(_lease, lease)) _dispatchLeaseSignals();
+    });
   }
 
   void _onSessionChanged() {
@@ -140,12 +160,30 @@ class _VideoViewState extends State<_VideoView> {
       _createLease(scope, route);
     }
     setState(() {});
+    _dispatchLeaseSignals();
+  }
+
+  void _dispatchLeaseSignals() {
+    final session = _lease?.session;
+    if (session == null) return;
+    if (!_readyDispatched && session.initialized) {
+      _readyDispatched = true;
+      final onReady = widget.onReady;
+      if (onReady != null) widget.dispatch?.handle(onReady);
+    }
+    if (!_errorDispatched && session.initializationFailed) {
+      _errorDispatched = true;
+      final onError = widget.onError;
+      if (onError != null) widget.dispatch?.handle(onError);
+    }
   }
 
   Future<void> _createController() async {
     final generation = ++_generation;
     _initialized = false;
     _endDispatched = false;
+    _readyDispatched = false;
+    _errorDispatched = false;
     try {
       final controller = await VideoSourceRegistry.current.controllerFor(
         VideoRequest(src: widget.src),
@@ -163,6 +201,11 @@ class _VideoViewState extends State<_VideoView> {
       if (widget.autoplay) await controller.play();
       if (!mounted || generation != _generation) return;
       setState(() => _initialized = true);
+      if (!_readyDispatched) {
+        _readyDispatched = true;
+        final onReady = widget.onReady;
+        if (onReady != null) widget.dispatch?.handle(onReady);
+      }
     } catch (_) {
       if (!mounted || generation != _generation) return;
       final controller = _controller;
@@ -171,8 +214,12 @@ class _VideoViewState extends State<_VideoView> {
         controller.removeListener(_onPlaybackChanged);
         await controller.dispose();
       }
-      if (mounted && generation == _generation) {
-        setState(() => _initialized = false);
+      if (!mounted || generation != _generation) return;
+      setState(() => _initialized = false);
+      if (!_errorDispatched) {
+        _errorDispatched = true;
+        final onError = widget.onError;
+        if (onError != null) widget.dispatch?.handle(onError);
       }
     }
   }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- `video` widget: `on_ready` and `on_error` props. `on_ready` dispatches once a
+  slot first becomes renderable for the current `src` (direct and
+  `SharedVideoScope`-leased paths); `on_error` dispatches once if initialization
+  fails. A `src` change resets both guards.
+
 ## 0.2.1
 
 - Fix: motions inside a `Scrollable` ancestor (any depth, including `swipe_pane`
