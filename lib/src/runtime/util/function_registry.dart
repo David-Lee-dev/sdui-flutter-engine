@@ -45,6 +45,7 @@ final class FunctionRegistry {
     'trim': _ar(1, _Builtins.trim),
     'capitalize': _ar(1, _Builtins.capitalize),
     'replace': _ar(3, _Builtins.replace),
+    'url_encode': _ar(1, _Builtins.urlEncode),
     'split': _ar(2, _Builtins.split),
     'substring': _ar(3, _Builtins.substring),
     'starts_with': _ar(2, _Builtins.startsWith),
@@ -338,6 +339,13 @@ final class _Builtins {
     final to = _at(a, 2);
     if (s is! String || from is! String || to is! String) return null;
     return s.replaceAll(from, to);
+  }
+
+  /// Encodes a value for use as one URL query value, so a reader using
+  /// `Uri.queryParameters` gets the original text back; `null` becomes `''`.
+  static Object? urlEncode(List<Object?> a) {
+    final x = _at(a, 0);
+    return x == null ? '' : Uri.encodeComponent(x.toString());
   }
 
   /// Splits a string around each occurrence of a separator.

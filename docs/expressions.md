@@ -103,6 +103,7 @@ Initialization registers these functions before the catalog freezes, includes th
 | `currency` | `currency(number?, symbol?)` | Grouped number prefixed by symbol; default `₩`. |
 | `upper` / `lower` / `trim` / `capitalize` | one string arg | Corresponding string transform. |
 | `replace` | `replace(string?, from?, to?)` | Replaces all occurrences. |
+| `url_encode` | `url_encode(value?)` | Encodes one URL query value (`Uri.encodeComponent` of its text); the reader's `queryParameters` returns the original text. `null` gives `''`. Example: `'/detail?image=' + url_encode(item.imageUrl)`. |
 | `split` | `split(string?, separator?)` | List of substrings. |
 | `substring` | `substring(string?, start?, end?)` | Clamped substring; end defaults to length. |
 | `starts_with` / `ends_with` | `(string?, part?)` | Prefix/suffix test. |

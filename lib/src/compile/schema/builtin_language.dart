@@ -274,6 +274,7 @@ abstract final class BuiltinLanguage {
   'type',
   'update_at',
   'upper',
+  'url_encode',
   'values',
   };
 }

@@ -208,6 +208,21 @@ void main() {
         expect(call('replace', ['aXbXc', 'X', '-']), 'a-b-c');
       });
 
+      test('url_encode는 query 값으로 넣었다가 그대로 되돌아오게 인코딩한다', () {
+        const url = 'https://cdn.x/p/coupang%20travel.jpg?v=1&w=2#a+b c';
+        final encoded = call('url_encode', [url]);
+        expect(encoded, isNot(contains('&')));
+        expect(Uri.parse('/d?imageUrl=$encoded&id=1').queryParameters, {
+          'imageUrl': url,
+          'id': '1',
+        });
+      });
+
+      test('url_encode는 숫자를 문자열로, null은 빈 문자열로 바꾼다', () {
+        expect(call('url_encode', [42]), '42');
+        expect(call('url_encode', [null]), '');
+      });
+
       test('split', () {
         expect(call('split', ['a,b,c', ',']), ['a', 'b', 'c']);
       });

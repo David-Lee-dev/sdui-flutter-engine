@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- New expression function `url_encode(value)`: encodes one URL query value
+  (`Uri.encodeComponent` of its text) so the reader's `queryParameters`
+  returns the original text; `null` gives an empty string.
+
 ## 0.3.0
 
 - **Breaking:** navigation-time preload is replaced by an init-time screen
