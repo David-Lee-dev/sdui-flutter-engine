@@ -10,7 +10,7 @@ The result policy is:
 
 - `NoImage` renders `SizedBox.shrink`; an empty/non-string `src` does this before source resolution.
 - `ReadyImage` renders immediately. The default `AssetImageSource` treats `src` as a bundled asset path and applies the request properties.
-- `PendingImage` uses the `loading` slot while pending, or an engine shimmer placeholder sized from width/height. Completion with null uses the `error` slot or an empty box. Loaded content and placeholder pass through the engine's loading-image transition/cross-fade.
+- `PendingImage` uses the `loading` slot while pending, or an engine shimmer placeholder sized from width/height. Completion with null uses the `error` slot or an empty box. Loaded content and placeholder pass through the engine's loading-image transition/cross-fade, which passes the parent's constraints through unchanged, so a pending image lays out exactly like a ready one: in a fixed slot it takes the slot size and `fit` (e.g. `cover`) fills the slot rather than a box sized to the image's own aspect ratio.
 
 The source owns asset/network/SVG selection. The built-in source supports bundled raster assets only; network and SVG behavior requires the app-installed `ImageSource`. A source that manages loading internally receives the same loading/error widgets in its request.
 
