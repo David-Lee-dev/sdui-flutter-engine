@@ -231,7 +231,6 @@ void main() {
     final style = const SduiPresentation().transitions;
     expect(style.enabled, isFalse);
     expect(style.defaultType, 'platform');
-    expect(style.preloadTimeout, const Duration(milliseconds: 300));
     expect(style.respectReducedMotion, isTrue);
   });
 }

@@ -13,33 +13,13 @@ Page<void> sduiTransitionPage({
   required LocalKey key,
   required Widget child,
   required PageTransitionSpec spec,
-  TransitionOrigin? origin,
-  Offset? tapPoint,
-  NavigatorState? originNavigator,
-}) => _TransitionPage(
-  key: key,
-  child: child,
-  spec: spec,
-  origin: origin,
-  tapPoint: tapPoint,
-  originNavigator: originNavigator,
-);
+}) => _TransitionPage(key: key, child: child, spec: spec);
 
 final class _TransitionPage extends Page<void> {
-  const _TransitionPage({
-    super.key,
-    required this.child,
-    required this.spec,
-    this.origin,
-    this.tapPoint,
-    this.originNavigator,
-  });
+  const _TransitionPage({super.key, required this.child, required this.spec});
 
   final Widget child;
   final PageTransitionSpec spec;
-  final TransitionOrigin? origin;
-  final Offset? tapPoint;
-  final NavigatorState? originNavigator;
 
   @override
   Route<void> createRoute(BuildContext context) => _TransitionRoute(this);
@@ -51,21 +31,27 @@ final class _TransitionRoute extends PageRoute<void> {
   _TransitionRoute? _nextRoute;
   final _shared = SharedTransitionController();
 
+  /// The tapped source (container_transform only) and tap point, consumed
+  /// once from this route's own Navigator when it is installed.
+  TransitionOrigin? _origin;
+  Offset? _tapPoint;
+
   @override
   void install() {
     super.install();
     animation!.addStatusListener(_animationStatus);
     animation!.addListener(_originProgress);
-    if (page.spec.type == 'container_transform' && _origin != null) {
-      _origin!.activate(TransitionOrigins.of(navigator!));
-      _origin!.setHidden(true);
+    final origins = TransitionOrigins.of(navigator!);
+    final consumed = origins.consume();
+    _tapPoint = consumed.point;
+    if (page.spec.type != 'container_transform') {
+      consumed.source?.dispose();
+      return;
     }
+    _origin = consumed.source;
+    _origin?.activate(origins);
+    _origin?.setHidden(true);
   }
-
-  TransitionOrigin? get _origin =>
-      page.originNavigator == null || identical(page.originNavigator, navigator)
-      ? page.origin
-      : null;
 
   bool _returning = false;
 
@@ -92,7 +78,7 @@ final class _TransitionRoute extends PageRoute<void> {
   void dispose() {
     animation!.removeStatusListener(_animationStatus);
     animation!.removeListener(_originProgress);
-    page.origin?.dispose();
+    _origin?.dispose();
     _shared.dispose();
     super.dispose();
   }
@@ -153,12 +139,8 @@ final class _TransitionRoute extends PageRoute<void> {
     Widget child,
   ) {
     return TransitionOriginScope(
-      source: page.spec.type == 'container_transform' ? _origin : null,
-      point:
-          page.originNavigator == null ||
-              identical(page.originNavigator, navigator)
-          ? page.tapPoint
-          : null,
+      source: _origin,
+      point: _tapPoint,
       child: Builder(
         builder: (context) =>
             _buildEffect(context, animation, secondaryAnimation, child),

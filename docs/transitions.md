@@ -1,31 +1,52 @@
 # Page transitions
 
-Page transitions animate screens opened through the generic `/screens/:id` route of `Sdui.router` (the engine navigation handle used by `SduiScreenPage`). They are separate from widget `_motion` and modal presentation.
+Page transitions animate engine screens served by the generic `/screens/:id` route of `Sdui.router` or by an app route built with `Sdui.page`. They are separate from widget `_motion` and modal presentation.
 
 ## Enable transitions
 
-Configure app defaults at initialization:
+Configure app defaults and the screens to preload at initialization:
 
 ```dart
-Sdui.initialize(
+await Sdui.initialize(
   screenLoader: loader,
   networkClient: networkClient,
   imageSource: imageSource,
   videoSource: videoSource,
   appStorage: appStorage,
   secureStorage: secureStorage,
+  preloadScreens: ['partner-detail'],
   presentation: const SduiPresentation(
     transitions: PageTransitionStyle(
       enabled: true,
       defaultType: 'slide_up',
-      preloadTimeout: Duration(milliseconds: 300),
       respectReducedMotion: true,
     ),
   ),
 );
 ```
 
-Transitions are disabled by default; `defaultType` defaults to `platform`. `SduiScreenPage` supplies the engine navigation handle with its loader for preloading. App-owned navigation handles must provide their own integration.
+Transitions are disabled by default; `defaultType` defaults to `platform`.
+
+`preloadScreens` lists screen ids the SDK loads through the configured `ScreenLoader` right after initialization and keeps in an SDK-owned in-memory cache. The returned future completes once every listed load has settled; a failed load is reported through the error observer (`screenLoad`) and leaves that id uncached. Only cached screens use their declared `_transition`; every other screen opens with `defaultType`.
+
+App routes that serve engine screens build their page with `Sdui.page`, the same function the generic route uses:
+
+```dart
+GoRoute(
+  path: '/:screenId',
+  pageBuilder: (context, state) => Sdui.page(
+    context,
+    state,
+    screenId: state.pathParameters['screenId']!,
+    child: SduiScreenPage(
+      screenId: state.pathParameters['screenId']!,
+      loader: Sdui.screenLoader,
+    ),
+  ),
+)
+```
+
+`go` keeps one page per path pattern, so `go('/detail')` then `go('/mission')` reuses the page. `Sdui.page` remounts `child` whenever the screen id changes, so content, `screen_view` and transition always belong to the new screen; `child` needs no key of its own.
 
 ## Choosing an effect
 
@@ -51,7 +72,7 @@ Rules of thumb:
 2. Keep durations on defaults (150–260 ms) unless a design asks otherwise; longer transitions feel slow on device.
 3. Use `container_transform` when the whole card should become the page, and `shared_element` when one element should continue while the rest of the page fades in.
 4. Do not combine both on the same element: a `shared_element` inside a `transition_source` grows with the container snapshot instead of flying separately.
-5. Effects run only when the app enables transitions and the screen is opened by an engine `navigate` push/go; deep links and direct router calls use the platform transition.
+5. Effects run only when the app enables transitions and the page is built by `Sdui.page` (or the generic route). A screen's own `_transition` applies only when it is listed in `preloadScreens`; uncached screens use `defaultType`.
 
 ## Screen declaration
 
@@ -131,7 +152,7 @@ _slots:
   body: { _type: text, value: Detail }
 ```
 
-Pointer-down inside the wrapper captures only its box pixels and global rectangle. The engine screen also records the last pointer-down position for `tap_zoom`; no app callback or new gesture recognizer is required. The preload push consumes both once, within one second and in the same Navigator. A later pointer-down clears an earlier armed source. An unmounted, stale, empty, unpainted or unsupported platform-view source falls back to `fade`; a missing/stale tap or a different Navigator uses screen center for `tap_zoom`. Keyboard/programmatic navigation has the same fallbacks when no fresh pointer origin exists. `_transition` remains static.
+Pointer-down inside the wrapper captures only its box pixels and global rectangle. The engine screen also records the last pointer-down position for `tap_zoom`; no app callback or new gesture recognizer is required. The destination engine route consumes both once from its own Navigator when it is installed, within one second of the pointer-down. A later pointer-down clears an earlier armed source. An unmounted, stale, empty, unpainted or unsupported platform-view source falls back to `fade`; a missing/stale tap or a different Navigator uses screen center for `tap_zoom`. Keyboard/programmatic navigation has the same fallbacks when no fresh pointer origin exists. `_transition` remains static.
 
 `container_transform` interpolates source rectangle → full page and source radius → `0`. Its snapshot uses aspect-preserving cover cropping and fades out over progress `0..0.35`; destination content fades in over `0.35..1`. The optional scrim defaults to zero to avoid imposing a backdrop on authored pages. Back and the existing iOS edge swipe retrace these values. At the start of a return, the engine re-reads a mounted source's global rectangle; if it has been removed, it uses the stored rectangle and original snapshot. The source keeps its layout and live widget state while its painting is hidden during motion, and is restored on push completion, pop, swipe cancellation/completion and route removal, including removal mid-drag.
 
@@ -141,14 +162,16 @@ A `shared_element` inside the captured source is part of that snapshot: its matc
 
 ## Precedence and loading
 
-1. When `enabled` is false, navigation uses the legacy host route path.
-2. When transitions are enabled and `respectReducedMotion` is true, `MediaQuery.disableAnimations` selects `none` for a preloaded route.
-3. A successfully preloaded screen's `_transition` overrides `defaultType`.
-4. If the screen has no declaration or preload times out, `defaultType` is selected.
+1. When `enabled` is false, every page uses the legacy host route path.
+2. When transitions are enabled and `respectReducedMotion` is true, `MediaQuery.disableAnimations` selects `none`.
+3. A cached screen's `_transition` overrides `defaultType`. The declaration is validated once per load; an invalid one is reported (`templateCompile`) and the default is used.
+4. A screen that is not cached, or has no declaration, uses `defaultType`.
 
-The engine navigation handle preloads an owned screen before pushing or replacing it, waiting up to `preloadTimeout` (default 300 ms). A completed load supplies the screen and declaration together. On timeout, navigation proceeds with the default effect and adopts the same pending load: it does not issue a second request or change the chosen effect when the late declaration arrives. Load failures use the screen's existing error surface. A newer navigation abandons the pending navigation so a late load cannot push a stale destination.
+Navigation never waits on a load: the engine navigation handle pushes or replaces immediately. A cached screen renders on the destination's first frame; an uncached one shows the loading surface and loads as before. After a cache hit the SDK reloads that screen in the background and replaces the cache entry for the next open — the page already shown is not changed.
 
-Direct router calls and deep links without engine preloading use the host platform route. `platform` uses the host route rather than a custom effect, including its gesture and timing behavior.
+The decision (page type, effect and the cache entry it was made from) is frozen per page for its lifetime, so pageBuilder rebuilds and background refreshes never change an open page, and pop reverses the same effect. It is released when the page leaves the router configuration; reopening decides again from the current cache. Deep links and direct router calls follow the same rules. `platform` uses the host route rather than a custom effect, including its gesture and timing behavior.
+
+Navigation-time preloading (with its wait, preload timeout setting on `PageTransitionStyle`, and abandonment) and the `SduiScreenPage.preloaded` parameter were removed; list screens in `preloadScreens` instead.
 
 ## Back navigation
 
@@ -217,7 +240,7 @@ _child:
   src: "${image}"
 ```
 
-The destination must be present on the first frame. Preloaded screens are rendered synchronously, but elements inside `_skeleton` or data-dependent subtrees that appear later cannot fly. Removed/scrolled-away source slots simply have no matching pop flight.
+The destination must be present on the first frame. Cached screens (`preloadScreens`) are rendered synchronously, but elements inside `_skeleton` or data-dependent subtrees that appear later cannot fly. Removed/scrolled-away source slots simply have no matching pop flight.
 
 Duplicate tags within a route disable every participant with that tag and emit a debug diagnostic; fixing duplicates restores participation. Modal surfaces, inactive tabs (`TickerMode: false`), zero-size/unpainted sources, platform views, and reduced motion (`respectReducedMotion` plus `disableAnimations`) do not fly. Navigation continues normally. A shared subtree with exactly one `video` at each endpoint and the same `src` instead flies a live video surface. Its internal session key is (Navigator identity, evaluated shared tag, exact src). One controller and initialization Future retain position through push/pop; each endpoint and shuttle builds its own view of that controller, allowing handoff-frame overlap while only one owner handles controls and events. The destination owns playback controls, callbacks and configuration after push, and pop returns ownership to the source. The last participant/flight lease disposes the controller. Different sources or duplicate tags do not hand off. Texture-backed `PlayerVideoController` is supported; custom platform views are unsupported for continuous handoff, may flicker when remounted and skip flights. Untagged videos retain their independent lifecycle. See [continuous video](widgets/custom/video.md#continuous-video-across-navigation).
 

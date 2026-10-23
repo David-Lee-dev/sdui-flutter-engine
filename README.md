@@ -56,7 +56,14 @@ app-registered effects via `Sdui.initialize(transitions: [...])`).
 `transition_source` marks the part of a card that grows into the page, and
 `shared_element` flies a widget — including a continuously playing video —
 between screens. Back plays the
-effect in reverse. See [docs/transitions.md](docs/transitions.md).
+effect in reverse. A screen's `_transition` applies when it is listed in
+`Sdui.initialize(preloadScreens: [...])` — the SDK caches those screens at
+startup (await the returned future to know they are ready), renders them on
+the first frame and refreshes them in the background; other screens load as
+before and use `defaultType`. App routes serving engine screens build their
+page with `Sdui.page(context, state, screenId: ..., child: ...)`; it remounts
+`child` when the screen id changes, so `child` needs no key. Navigation
+no longer preloads or waits. See [docs/transitions.md](docs/transitions.md).
 
 Runtime toggles: `Sdui.telemetryEnabled = false` stops telemetry delivery
 without rewiring the sink (privacy opt-out); set it back to resume.

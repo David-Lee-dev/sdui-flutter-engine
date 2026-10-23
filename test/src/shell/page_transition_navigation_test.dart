@@ -5,12 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sdui_engine/testing.dart';
-import 'package:sdui_engine/src/runtime/engine_errors.dart';
 import 'package:sdui_engine/src/runtime/transition/transition_origin.dart';
 import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
 import 'package:sdui_engine/src/shell/go_router_navigate.dart';
-import 'package:sdui_engine/src/shell/transition_preload.dart';
 import 'package:sdui_engine/src/shell/sdui_state.dart';
 
 LoadedScreen _screen(String id, {Object? transition}) => (
@@ -49,12 +47,6 @@ final class _Reservation implements TelemetryReservation {
   void complete({Map<String, Object?> properties = const {}}) {}
 }
 
-final class _Errors extends SduiErrorObserver {
-  final errors = <SduiError>[];
-  @override
-  void onError(SduiError error) => errors.add(error);
-}
-
 final class _Push {
   _Push(Future<Object?> future) {
     future.then((value) {
@@ -72,7 +64,6 @@ void _style({bool enabled = true, String type = 'fade', bool reduced = true}) {
       enabled: enabled,
       defaultType: type,
       respectReducedMotion: reduced,
-      preloadTimeout: const Duration(milliseconds: 100),
     ),
   );
 }
@@ -114,7 +105,7 @@ FadeTransition _fade(WidgetTester tester) => tester.widget<FadeTransition>(
       .first,
 );
 Future<void> _open(WidgetTester tester, GoRouter router, _Loader loader) async {
-  goRouterNavigateHandle(router, loader: loader).push!('/screens/detail');
+  goRouterNavigateHandle(router).push!('/screens/detail');
   await tester.pump();
   await tester.pumpAndSettle();
 }
@@ -148,18 +139,20 @@ void main() {
           detail: () =>
               Future.value(_screen('detail', transition: {'type': type})),
         );
+        await SduiState.cache.warm(['detail'], loader);
         final router = await _pump(tester, loader, reduced: reduced);
         final point = tester.getCenter(find.text('tap source'));
         await tester.tap(find.text('tap source'));
-        final pushed = goRouterNavigateHandle(router, loader: loader).push!(
-          '/screens/detail',
-        );
+        final pushed = goRouterNavigateHandle(router).push!('/screens/detail');
         await tester.pump();
         // Build the route through HeroController's offstage discovery frame.
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
         final scope = tester.widget<TransitionOriginScope>(
-          find.byType(TransitionOriginScope),
+          find.ancestor(
+            of: find.text('detail', skipOffstage: false),
+            matching: find.byType(TransitionOriginScope, skipOffstage: false),
+          ),
         );
         expect(scope.point, point);
         if (type == 'container_transform' && !reduced) {
@@ -216,7 +209,7 @@ void main() {
     Telemetry.install(sink);
     final loader = _Loader(detail: () => pending.future);
     final router = await _pump(tester, loader);
-    goRouterNavigateHandle(router, loader: loader).push!('/screens/detail');
+    goRouterNavigateHandle(router).push!('/screens/detail');
     expect(loader.calls, ['home']);
     expect(sink.views.map((e) => e.screenId), ['home']);
     await tester.pump();
@@ -255,6 +248,7 @@ void main() {
   testWidgets(
     'platform_page_matches_go_router_default WidgetsApp unknown token',
     (tester) async {
+      _style(type: 'platform');
       final loader = _Loader();
       final router = Sdui.router(loader: loader);
       addTearDown(router.dispose);
@@ -281,6 +275,7 @@ void main() {
         },
       ),
     );
+    await SduiState.cache.warm(['detail'], loader);
     final router = await _pump(tester, loader);
     await _open(tester, router, loader);
     expect(
@@ -319,189 +314,9 @@ void main() {
     router.pop();
     await tester.pumpAndSettle();
     await _open(tester, router, loader);
+    expect(loader.calls.where((id) => id == 'detail').length, 2);
     expect(sink.views.where((e) => e.screenId == 'detail').length, 2);
     expect(sink.views.map((e) => e.screenViewId).toSet().length, 3);
-  });
-
-  testWidgets('preloaded_page_renders_engine_on_first_frame', (tester) async {
-    var loading = 0;
-    final sink = _Sink();
-    Telemetry.install(sink);
-    final loader = _Loader();
-    final router = await _pump(
-      tester,
-      loader,
-      loadingBuilder: (_) {
-        loading++;
-        return const Text('loading');
-      },
-    );
-    loading = 0;
-    goRouterNavigateHandle(router, loader: loader).push!('/screens/detail');
-    await tester.idle();
-    expect(sink.views.where((e) => e.screenId == 'detail'), isEmpty);
-    await tester.pump();
-    expect(sink.views.where((e) => e.screenId == 'detail').length, 1);
-    expect(find.text('detail', skipOffstage: false), findsOneWidget);
-    expect(loading, 0);
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('preload_timeout_pushes_with_default_and_same_future', (
-    tester,
-  ) async {
-    final pending = Completer<LoadedScreen>();
-    final loader = _Loader(detail: () => pending.future);
-    final router = await _pump(tester, loader);
-    goRouterNavigateHandle(router, loader: loader).push!('/screens/detail');
-    await tester.pump(const Duration(milliseconds: 99));
-    expect(router.canPop(), isFalse);
-    await tester.pump(const Duration(milliseconds: 2));
-    await tester.pump();
-    expect(router.canPop(), isTrue);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(loader.calls.where((id) => id == 'detail').length, 1);
-    pending.complete(_screen('detail', transition: {'type': 'none'}));
-    await tester.pumpAndSettle();
-    expect(find.text('detail'), findsOneWidget);
-    expect(_fade(tester).opacity.value, 1);
-    expect(loader.calls.where((id) => id == 'detail').length, 1);
-  });
-
-  testWidgets('preload_overtaken_settles_null_and_never_pushes_late', (
-    tester,
-  ) async {
-    final pending = Completer<LoadedScreen>();
-    final loader = _Loader(detail: () => pending.future);
-    final router = await _pump(tester, loader);
-    final push = _Push(
-      goRouterNavigateHandle(router, loader: loader).push!('/screens/detail'),
-    );
-    router.go('/screens/mission');
-    await tester.pump();
-    expect(push.done, isTrue);
-    expect(push.result, isNull);
-    pending.complete(_screen('detail'));
-    await tester.pumpAndSettle();
-    expect(find.text('mission'), findsOneWidget);
-    expect(find.text('detail'), findsNothing);
-    expect(router.canPop(), isFalse);
-  });
-
-  testWidgets('second_preload_overtakes_first_without_late_push', (
-    tester,
-  ) async {
-    final pending = Completer<LoadedScreen>();
-    final loader = _Loader(detail: () => pending.future);
-    final router = await _pump(tester, loader);
-    final handle = goRouterNavigateHandle(router, loader: loader);
-    final push = _Push(handle.push!('/screens/detail'));
-    handle.push!('/screens/mission');
-    await tester.pumpAndSettle();
-    expect(push.done, isTrue);
-    pending.complete(_screen('detail'));
-    await tester.pumpAndSettle();
-    expect(find.text('mission'), findsOneWidget);
-    expect(find.text('detail'), findsNothing);
-  });
-
-  for (final afterTimeout in [false, true]) {
-    testWidgets('preload_error_shows_error_ui_once timeout=$afterTimeout', (
-      tester,
-    ) async {
-      final errors = _Errors();
-      EngineErrors.observer = errors;
-      final pending = Completer<LoadedScreen>();
-      var fail = true;
-      final loader = _Loader(
-        detail: () => fail ? pending.future : Future.value(_screen('detail')),
-      );
-      final router = await _pump(tester, loader);
-      goRouterNavigateHandle(router, loader: loader).push!('/screens/detail');
-      if (afterTimeout) {
-        await tester.pump(const Duration(milliseconds: 110));
-      }
-      pending.completeError(StateError('offline'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Failed to load'), findsOneWidget);
-      expect(errors.errors.length, 1);
-      expect(errors.errors.single.scope, SduiErrorScope.screenLoad);
-      expect(tester.takeException(), isNull);
-      fail = false;
-      await tester.tap(find.byType(TextButton));
-      await tester.pumpAndSettle();
-      expect(find.text('detail'), findsOneWidget);
-      expect(loader.calls.where((id) => id == 'detail').length, 2);
-    });
-  }
-
-  testWidgets('abandoned_preload_late_error_is_handled', (tester) async {
-    final pending = Completer<LoadedScreen>();
-    final loader = _Loader(detail: () => pending.future);
-    final router = await _pump(tester, loader);
-    final push = _Push(
-      goRouterNavigateHandle(router, loader: loader).push!('/screens/detail'),
-    );
-    router.go('/screens/mission');
-    await tester.pumpAndSettle();
-    pending.completeError(StateError('late'));
-    await tester.pumpAndSettle();
-    expect(push.done, isTrue);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('invalid_transition_reported_once_and_uses_default', (
-    tester,
-  ) async {
-    final errors = _Errors();
-    EngineErrors.observer = errors;
-    final loader = _Loader(
-      detail: () async => _screen('detail', transition: {'type': 'missing'}),
-    );
-    final router = await _pump(tester, loader);
-    await _open(tester, router, loader);
-    expect(find.text('detail'), findsOneWidget);
-    expect(errors.errors.length, 1);
-    expect(errors.errors.single.scope, SduiErrorScope.templateCompile);
-    expect(_fade(tester).opacity.value, 1);
-  });
-
-  testWidgets(
-    'late_timeout_invalid_transition_reports_once_and_keeps_default',
-    (tester) async {
-      final pending = Completer<LoadedScreen>();
-      final errors = _Errors();
-      EngineErrors.observer = errors;
-      final loader = _Loader(detail: () => pending.future);
-      final router = await _pump(tester, loader);
-      goRouterNavigateHandle(router, loader: loader).push!('/screens/detail');
-      await tester.pump(const Duration(milliseconds: 110));
-      await tester.pump();
-      pending.complete(_screen('detail', transition: {'type': 'missing'}));
-      await tester.pumpAndSettle();
-      expect(find.text('detail'), findsOneWidget);
-      expect(errors.errors.length, 1);
-      expect(errors.errors.single.scope, SduiErrorScope.templateCompile);
-      expect(_fade(tester).opacity.value, 1);
-      expect(loader.calls.where((id) => id == 'detail').length, 1);
-    },
-  );
-
-  testWidgets('page_builder_rebuild_preserves_preload_and_transition', (
-    tester,
-  ) async {
-    _style(type: 'none');
-    final loader = _Loader(
-      detail: () async => _screen('detail', transition: {'type': 'fade'}),
-    );
-    final router = await _pump(tester, loader);
-    await _open(tester, router, loader);
-    final page = _page(tester);
-    router.refresh();
-    await tester.pumpAndSettle();
-    expect(_page(tester).runtimeType, page.runtimeType);
-    expect(_fade(tester).opacity.value, 1);
-    expect(loader.calls.where((id) => id == 'detail').length, 1);
   });
 
   testWidgets('pop_plays_reverse', (tester) async {
@@ -606,11 +421,15 @@ void main() {
             home: () async => shared('home'),
             detail: () async => shared('detail'),
           );
+          await SduiState.cache.warm(['home', 'detail'], loader);
           final router = await _pump(tester, loader);
           visible('home');
           await _open(tester, router, loader);
           visible('detail');
-          expect(loader.calls, ['home', 'detail']);
+          // Warm load plus one background refresh after each first hit.
+          int loads(String id) => loader.calls.where((c) => c == id).length;
+          expect(loads('home'), 2);
+          expect(loads('detail'), 2);
           final navigator = tester.state<NavigatorState>(
             find.byType(Navigator).first,
           );
@@ -634,6 +453,8 @@ void main() {
           expect(navigator.userGestureInProgress, isFalse);
           expect(router.canPop(), !commit);
           visible(commit ? 'home' : 'detail');
+          expect(loads('home'), 2);
+          expect(loads('detail'), 2);
           if (!commit) {
             router.pop();
             await tester.pumpAndSettle();
@@ -659,51 +480,6 @@ void main() {
     });
   }
 
-  testWidgets('store_cleared_on_consume_and_settle', (tester) async {
-    final loader = _Loader();
-    final router = await _pump(tester, loader);
-    final push = _Push(
-      goRouterNavigateHandle(router, loader: loader).push!('/screens/detail'),
-    );
-    await tester.pumpAndSettle();
-    final token =
-        (router.routerDelegate.currentConfiguration.matches.last
-                as ImperativeRouteMatch)
-            .matches
-            .extra;
-    expect(token, isA<String>());
-    final store = TransitionPreloads.of(router)!;
-    final key = _page(tester).key!;
-    expect(
-      store.bind(token, const ValueKey('other'), Uri.parse('/screens/detail')),
-      isNull,
-    );
-    expect(store.bind(token, key, Uri.parse('/screens/detail')), isNotNull);
-    router.pop('picked');
-    await tester.pumpAndSettle();
-    expect(push.result, 'picked');
-    expect(store.bind(token, key, Uri.parse('/screens/detail')), isNull);
-  });
-
-  testWidgets('go_preloads_once_and_removes_binding_on_departure', (
-    tester,
-  ) async {
-    final loader = _Loader();
-    final router = await _pump(tester, loader);
-    goRouterNavigateHandle(router, loader: loader).go!('/screens/detail');
-    await tester.pumpAndSettle();
-    final token = router.routerDelegate.currentConfiguration.extra;
-    final store = TransitionPreloads.of(router)!;
-    final key = _page(tester).key!;
-    expect(store.bind(token, key, Uri.parse('/screens/detail')), isNotNull);
-    expect(router.canPop(), isFalse);
-    expect(_fade(tester).opacity.value, 1);
-    router.go('/screens/mission');
-    await tester.pumpAndSettle();
-    expect(store.bind(token, key, Uri.parse('/screens/detail')), isNull);
-    expect(loader.calls.where((id) => id == 'detail').length, 1);
-  });
-
   testWidgets('app_route_does_not_preload', (tester) async {
     final loader = _Loader();
     final router = await _pump(
@@ -726,7 +502,7 @@ void main() {
       final loader = _Loader();
       final router = await _pump(tester, loader);
       final push = _Push(
-        goRouterNavigateHandle(router, loader: loader).push!('/screens/detail'),
+        goRouterNavigateHandle(router).push!('/screens/detail'),
       );
       await tester.pumpAndSettle();
       expect(push.done, isFalse);
@@ -747,7 +523,7 @@ void main() {
   testWidgets('push_with_token_same_location_only_top_settles', (tester) async {
     final loader = _Loader();
     final router = await _pump(tester, loader);
-    final handle = goRouterNavigateHandle(router, loader: loader);
+    final handle = goRouterNavigateHandle(router);
     final lower = _Push(handle.push!('/screens/detail'));
     await tester.pumpAndSettle();
     final upper = _Push(handle.push!('/screens/detail'));
@@ -812,8 +588,9 @@ void main() {
         },
       ),
     );
+    await SduiState.cache.warm(['detail'], loader);
     final router = await _pump(tester, loader);
-    goRouterNavigateHandle(router, loader: loader).push!('/screens/detail');
+    goRouterNavigateHandle(router).push!('/screens/detail');
     await tester.idle();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
@@ -850,41 +627,6 @@ void main() {
     expect(_fade(tester).opacity.value, 1);
   });
 
-  testWidgets('go_same_location_adopts_new_preload_and_visit', (tester) async {
-    var count = 0;
-    final sink = _Sink();
-    Telemetry.install(sink);
-    final loader = _Loader(detail: () async => _screen('detail-${++count}'));
-    final router = await _pump(tester, loader);
-    final handle = goRouterNavigateHandle(router, loader: loader);
-    handle.go!('/screens/detail');
-    await tester.pumpAndSettle();
-    expect(find.text('detail-1'), findsOneWidget);
-    handle.go!('/screens/detail');
-    await tester.pumpAndSettle();
-    expect(find.text('detail-2'), findsOneWidget);
-    expect(sink.views.where((e) => e.screenId == 'detail').length, 2);
-    final token = router.routerDelegate.currentConfiguration.extra;
-    expect(
-      TransitionPreloads.of(
-        router,
-      )!.bind(token, _page(tester).key!, Uri.parse('/screens/detail')),
-      isNotNull,
-    );
-  });
-
-  testWidgets('unknown_extra_on_same_location_returns_legacy_page', (
-    tester,
-  ) async {
-    final loader = _Loader();
-    final router = await _pump(tester, loader);
-    goRouterNavigateHandle(router, loader: loader).go!('/screens/detail');
-    await tester.pumpAndSettle();
-    router.go('/screens/detail', extra: 'unknown');
-    await tester.pumpAndSettle();
-    expect(_page(tester), isA<MaterialPage<void>>());
-  });
-
   for (final overtaken in [false, true]) {
     testWidgets('push_with_token_async_redirect overtaken=$overtaken', (
       tester,
@@ -900,24 +642,26 @@ void main() {
           return null;
         },
       );
-      final store = TransitionPreloads.of(facade)!;
       final router = GoRouter(
         initialLocation: '/screens/home',
         routes: [route],
       );
-      store.attach(router, route);
       facade.dispose();
       addTearDown(router.dispose);
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pumpAndSettle();
       final push = _Push(
-        goRouterNavigateHandle(router, loader: loader).push!('/screens/detail'),
+        goRouterNavigateHandle(router).push!('/screens/detail'),
       );
       await tester.idle();
       if (overtaken) router.go('/screens/mission');
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pumpAndSettle();
+      expect(
+        loader.calls.where((id) => id == 'detail').length,
+        overtaken ? 0 : 1,
+      );
       if (overtaken) {
         expect(push.done, isTrue);
         expect(push.result, isNull);
@@ -930,7 +674,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(push.result, 'picked');
       }
-      expect(loader.calls.where((id) => id == 'detail').length, 1);
     });
   }
 
@@ -954,9 +697,7 @@ void main() {
     addTearDown(router.dispose);
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
-    final push = _Push(
-      goRouterNavigateHandle(router, loader: loader).push!('/screens/detail'),
-    );
+    final push = _Push(goRouterNavigateHandle(router).push!('/screens/detail'));
     await tester.pumpAndSettle();
     expect(_fade(tester).opacity.value, 1);
     expect(push.done, isFalse);
@@ -966,56 +707,4 @@ void main() {
     expect(push.result, isNull);
     expect(find.text('tab-mission'), findsOneWidget);
   });
-
-  testWidgets('redirected_destination_does_not_adopt_original_preload', (
-    tester,
-  ) async {
-    final loader = _Loader();
-    final facade = Sdui.router(loader: loader);
-    final original = facade.configuration.routes.last as GoRoute;
-    final route = GoRoute(
-      path: original.path,
-      pageBuilder: original.pageBuilder,
-      redirect: (_, state) =>
-          state.pathParameters['id'] == 'detail' ? '/screens/mission' : null,
-    );
-    final store = TransitionPreloads.of(facade)!;
-    final router = GoRouter(initialLocation: '/screens/home', routes: [route]);
-    store.attach(router, route);
-    facade.dispose();
-    addTearDown(router.dispose);
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-    await tester.pumpAndSettle();
-    await _open(tester, router, loader);
-    expect(find.text('mission'), findsOneWidget);
-    expect(find.text('detail'), findsNothing);
-    expect(_page(tester), isA<MaterialPage<void>>());
-  });
-
-  testWidgets('preload_invalid_reporting_navigation_never_pushes_late', (
-    tester,
-  ) async {
-    final loader = _Loader(
-      detail: () async => _screen('detail', transition: {'type': 'missing'}),
-    );
-    final router = await _pump(tester, loader);
-    EngineErrors.observer = _NavigatingErrorObserver(
-      () => router.go('/screens/mission'),
-    );
-    final push = _Push(
-      goRouterNavigateHandle(router, loader: loader).push!('/screens/detail'),
-    );
-    await tester.pumpAndSettle();
-    expect(push.done, isTrue);
-    expect(push.result, isNull);
-    expect(find.text('mission'), findsOneWidget);
-    expect(router.canPop(), isFalse);
-  });
-}
-
-final class _NavigatingErrorObserver extends SduiErrorObserver {
-  _NavigatingErrorObserver(this.navigate);
-  final VoidCallback navigate;
-  @override
-  void onError(SduiError error) => navigate();
 }

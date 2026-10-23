@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0
+
+- **Breaking:** navigation-time preload is replaced by an init-time screen
+  cache. `Sdui.initialize(preloadScreens: [...])` loads the listed screens
+  through the `ScreenLoader` and now returns a `Future<void>` that completes
+  when those loads settle (failures are reported as `screenLoad` and leave the
+  id uncached). A cached screen renders on its first frame, applies its root
+  `_transition`, and is refreshed in the background for the next open; any
+  other screen loads as before and uses `defaultType`.
+- New `Sdui.page(context, state, screenId:, child:)` builds the page for an
+  engine screen; the generic `/screens/:id` route uses it and app routes can
+  too. The page decision is frozen per page and released when it leaves;
+  when `go` reuses a page for another screen id, the child is remounted.
+- Removed: `PageTransitionStyle.preloadTimeout`, `SduiScreenPage.preloaded`,
+  and the navigation handle's preload wait, timeout and abandonment. Push and
+  go now navigate immediately; push still settles with the pop result or
+  `null`. Tap origins (`container_transform`, `tap_zoom`) are consumed by the
+  destination route from its own Navigator.
+- **Breaking:** a pending `image` without a `loading` slot now holds a
+  transparent box sized from width/height; the shimmer placeholder is opt-in
+  with `shimmer: true`.
+
 ## 0.2.3
 
 - Fix: an `image` that is still loading (the pending path) now receives its

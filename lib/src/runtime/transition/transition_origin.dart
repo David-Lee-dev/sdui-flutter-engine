@@ -3,7 +3,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
-/// Pointer origins are isolated by Navigator and consumed by a single push.
+/// Pointer origins are isolated by Navigator and consumed once by the engine
+/// transition route installed on that Navigator.
 final class TransitionOrigins {
   static final _registries = Expando<TransitionOrigins>();
 
@@ -112,7 +113,7 @@ final class TransitionOrigin {
   }
 }
 
-/// Supplies the selected push's origin to built-in effects without changing IR
+/// Supplies the destination route's origin to built-in effects without changing IR
 /// or the app navigation contract.
 class TransitionOriginScope extends InheritedWidget {
   const TransitionOriginScope({

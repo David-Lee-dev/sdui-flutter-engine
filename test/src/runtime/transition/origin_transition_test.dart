@@ -360,13 +360,13 @@ void main() {
           ios: true,
           shared: true,
         );
-        final source = await _capture(tester, navigator);
+        // The route consumes the origin armed by this tap when installed.
+        await tester.tap(find.byKey(_sourceKey));
         pages.value = [
           ...pages.value,
           sduiTransitionPage(
             key: const ValueKey('top'),
             spec: PageTransitionSpec(type: 'container_transform'),
-            origin: source,
             child: const SharedElement(
               tag: 'nested',
               child: SizedBox.expand(key: _destinationKey),
@@ -374,6 +374,14 @@ void main() {
           ),
         ];
         await tester.pump();
+        final source = tester
+            .widget<TransitionOriginScope>(
+              find.ancestor(
+                of: find.byKey(_destinationKey),
+                matching: find.byType(TransitionOriginScope),
+              ),
+            )
+            .source!;
         await tester.pump(const Duration(milliseconds: 125));
         expect(source.hidden.value, isTrue);
         expect(

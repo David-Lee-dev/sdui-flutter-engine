@@ -1,7 +1,5 @@
-import 'package:flutter/foundation.dart' show ValueKey;
-import 'package:flutter/material.dart' show MaterialApp, MaterialPage;
-import 'package:flutter/cupertino.dart' show CupertinoApp, CupertinoPage;
-import 'package:flutter/widgets.dart' show MediaQuery, Builder, Widget;
+import 'package:flutter/widgets.dart'
+    show BuildContext, Builder, Page, ValueKey, Widget;
 import 'package:go_router/go_router.dart';
 
 import '../contract/error_observer.dart';
@@ -22,11 +20,8 @@ import '../engine.dart';
 import '../runtime/log/engine_log.dart';
 import '../runtime/telemetry/telemetry.dart';
 import '../runtime/widget/factory.dart';
-import '../runtime/engine_presentation.dart';
-import '../ir/model/page_transition.dart';
+import 'sdui_screen_page_builder.dart';
 import 'sdui_state.dart';
-import 'sdui_transition_page.dart';
-import 'transition_preload.dart';
 
 /// Batteries-included entry point for an SDUI app.
 ///
@@ -75,8 +70,16 @@ final class Sdui {
   /// App-specific capability ships as [services] ([SduiService] bundling
   /// [ExternalCommand]s): each command `type` becomes a template-callable
   /// `{ _type: ... }` and the engine routes to it knowing nothing else.
-  static void initialize({
+  ///
+  /// [preloadScreens] are loaded through [screenLoader] into an SDK-owned
+  /// cache once configuration succeeds: a cached screen renders on its first
+  /// frame and applies its root `_transition`. The returned future completes
+  /// when every listed load has settled; failures are reported through the
+  /// error observer and leave that id uncached. Configuration errors still
+  /// throw synchronously.
+  static Future<void> initialize({
     required ScreenLoader screenLoader,
+    List<String> preloadScreens = const [],
     required NetworkClient networkClient,
     Map<String, NetworkClient> networkProtocols = const {},
     required ImageSource imageSource,
@@ -126,6 +129,7 @@ final class Sdui {
       debugLogLevel: debugLogLevel,
       logOutput: logOutput,
     );
+    return SduiState.cache.warm(preloadScreens, screenLoader);
   }
 
   /// Builds the app router.
@@ -151,89 +155,51 @@ final class Sdui {
     SduiLoadingBuilder? loadingBuilder,
     SduiErrorBuilder? errorBuilder,
   }) {
-    final store = TransitionPreloads();
     final route = GoRoute(
       path: '/screens/:id',
       pageBuilder: (context, state) {
-        final style = EnginePresentation.value.transitions;
-        final preload = style.enabled
-            ? store.bind(state.extra, state.pageKey, state.uri)
-            : null;
-        Widget child = Builder(
+        final child = Builder(
           builder: (context) => SduiScreenPage(
             key: ValueKey(state.uri.toString()),
             screenId: state.pathParameters['id']!,
             loader: loader ?? screenLoader,
             params: state.uri.queryParameters,
-            preloaded: preload?.screen,
             loadingBuilder: loadingBuilder,
             errorBuilder: errorBuilder,
           ),
         );
-        if (preload != null) {
-          child = PreloadedPage(
-            key: ValueKey(preload),
-            store: store,
-            pageKey: state.pageKey,
-            uri: state.uri,
-            preload: preload,
-            child: child,
-          );
-        }
-        final spec = preload == null
-            ? null
-            : style.respectReducedMotion &&
-                  MediaQuery.maybeOf(context)?.disableAnimations == true
-            ? PageTransitionSpec(type: 'none')
-            : preload.transition;
-        if (spec?.type != 'container_transform') preload?.origin?.dispose();
-        if (spec != null && spec.type != 'platform') {
-          return sduiTransitionPage(
-            key: state.pageKey,
-            child: child,
-            spec: spec,
-            origin: spec.type == 'container_transform' ? preload?.origin : null,
-            tapPoint: preload?.tapPoint,
-            originNavigator: preload?.originNavigator,
-          );
-        }
-        final name = state.name ?? state.path;
-        final arguments = <String, String>{
-          ...state.pathParameters,
-          ...state.uri.queryParameters,
-        };
-        if (context.findAncestorWidgetOfExactType<MaterialApp>() != null) {
-          return MaterialPage<void>(
-            key: state.pageKey,
-            name: name,
-            arguments: arguments,
-            restorationId: state.pageKey.value,
-            child: child,
-          );
-        }
-        if (context.findAncestorWidgetOfExactType<CupertinoApp>() != null) {
-          return CupertinoPage<void>(
-            key: state.pageKey,
-            name: name,
-            arguments: arguments,
-            restorationId: state.pageKey.value,
-            child: child,
-          );
-        }
-        return NoTransitionPage<void>(
-          key: state.pageKey,
-          name: name,
-          arguments: arguments,
-          restorationId: state.pageKey.value,
+        return page(
+          context,
+          state,
+          screenId: state.pathParameters['id']!,
           child: child,
         );
       },
     );
-    final router = GoRouter(
+    return GoRouter(
       initialLocation: initialLocation,
       routes: [...routes, route],
     );
-    store.attach(router, route);
-    return router;
   }
+
+  /// Builds the [Page] for an engine screen, for app routes that serve
+  /// engine screens outside the generic `/screens/:id` route:
+  ///
+  /// ```dart
+  /// GoRoute(
+  ///   path: '/:screenId',
+  ///   pageBuilder: (context, state) => Sdui.page(
+  ///     context,
+  ///     state,
+  ///     screenId: state.pathParameters['screenId']!,
+  ///     child: SduiScreenPage(...),
+  ///   ),
+  /// )
+  /// ```
+  static Page<void> page(
+    BuildContext context,
+    GoRouterState state, {
+    required String screenId,
+    required Widget child,
+  }) => buildScreenPage(context, state, screenId: screenId, child: child);
 }

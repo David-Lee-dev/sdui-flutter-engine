@@ -10,8 +10,8 @@ import '../runtime/engine_errors.dart';
 import '../runtime/engine_presentation.dart';
 import '../runtime/telemetry/screen_visit.dart';
 import 'go_router_navigate.dart';
+import 'screen_cache.dart';
 import 'sdui_state.dart';
-import 'transition_preload.dart';
 
 /// Builds the widget shown while a screen's template is loading.
 typedef SduiLoadingBuilder = Widget Function(BuildContext context);
@@ -36,7 +36,6 @@ final class SduiScreenPage extends StatefulWidget {
     required this.screenId,
     required this.loader,
     this.params = const {},
-    this.preloaded,
     this.loadingBuilder,
     this.errorBuilder,
   });
@@ -47,7 +46,6 @@ final class SduiScreenPage extends StatefulWidget {
   /// Route query parameters, forwarded into the engine's root scope state
   /// (they override `_state` defaults with the same key).
   final Map<String, Object?> params;
-  final Future<LoadedScreen>? preloaded;
 
   final SduiLoadingBuilder? loadingBuilder;
   final SduiErrorBuilder? errorBuilder;
@@ -70,27 +68,33 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
   @override
   void initState() {
     super.initState();
-    final preloaded = widget.preloaded;
-    if (preloaded is CompletedScreen) {
-      _loaded = preloaded.value;
-      _screenViewId = ScreenVisit.begin(widget.screenId).id;
-    } else {
-      _load(preloaded);
+    // An engine page hands over the entry its transition was decided from;
+    // direct use reads the cache.
+    final snapshot = context.getInheritedWidgetOfExactType<ScreenSnapshot>();
+    final cached = snapshot != null && snapshot.screenId == widget.screenId
+        ? snapshot.screen
+        : SduiState.cache.peek(widget.screenId);
+    if (cached == null) {
+      _load();
+      return;
     }
+    _loaded = cached.screen;
+    _screenViewId = ScreenVisit.begin(widget.screenId).id;
+    final cache = SduiState.cache;
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => cache.refresh(widget.screenId, widget.loader),
+    );
   }
 
-  void _load([Future<LoadedScreen>? preloaded]) {
-    final future = preloaded ?? widget.loader.load(widget.screenId);
+  void _load() {
+    final future = widget.loader.load(widget.screenId);
     _pending = future;
     future.then(
       (screen) {
         if (!mounted || !identical(future, _pending)) return;
-        final loaded = preloaded == null
-            ? screen
-            : decodePreloadedScreen(screen, widget.screenId).screen;
         final visit = ScreenVisit.begin(widget.screenId);
         setState(() {
-          _loaded = loaded;
+          _loaded = screen;
           _error = null;
           _screenViewId = visit.id;
         });
@@ -169,11 +173,7 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
         rootData: widget.params,
         template: loaded.template,
         modalTemplates: loaded.modals,
-        navigate: goRouterNavigateHandle(
-          GoRouter.of(context),
-          loader: widget.loader,
-          navigator: Navigator.maybeOf(context),
-        ),
+        navigate: goRouterNavigateHandle(GoRouter.of(context)),
         toast: _toastHandle(),
         errorBuilder: (context, error) => _errorView(context, error),
       ),
