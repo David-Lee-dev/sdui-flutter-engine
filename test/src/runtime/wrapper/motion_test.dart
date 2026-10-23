@@ -1,6 +1,12 @@
-import 'package:flutter/widgets.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
+import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
+import 'package:sdui_engine/src/runtime/widget/catalog/custom/swipe_pane_widget.dart';
+import 'package:sdui_engine/src/runtime/widget/swipe/swipe_controller.dart';
+import 'package:sdui_engine/src/runtime/widget/swipe/swipe_controller_scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/motion.dart';
 
 /// 테스트용 모션 — 애니값 t를 Opacity로 노출해 컨트롤러 진행을 관측 가능하게 한다.
@@ -106,6 +112,351 @@ void main() {
       await tester.pumpWidget(const SizedBox()); // 언마운트
       await tester.pump(const Duration(milliseconds: 200)); // 늦은 콜백에도 안전
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('MotionWrapper — scroll-aware start gate', () {
+    // 아직 lazy-build 되지 않은(화면 밖) 위젯은 "시작 전"과 동치이므로 0.0으로 본다.
+    double opacityOf(WidgetTester tester, Key key) {
+      final finder = find.descendant(
+        of: find.byKey(key),
+        matching: find.byType(Opacity),
+      );
+      if (finder.evaluate().isEmpty) return 0.0;
+      return tester.widget<Opacity>(finder).opacity;
+    }
+
+    testWidgets('B: PageView 2쪽 모션은 드래그 중엔 대기, 정착 후 delay부터 시작', (
+      tester,
+    ) async {
+      const probeKey = ValueKey('probe');
+      final pageController = PageController();
+      addTearDown(pageController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 400,
+            child: PageView(
+              controller: pageController,
+              children: [
+                const SizedBox(key: ValueKey('page0')),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(
+                      delay: Duration(milliseconds: 100),
+                    ),
+                    params: const MotionParams({}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // 페이지2로 애니메이션 이동 중 — 아직 settle 전.
+      unawaited(
+        pageController.animateToPage(
+          1,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.linear,
+        ),
+      );
+      await tester.pump();
+      expect(opacityOf(tester, probeKey), 0.0);
+      // 이동 도중 추가로 펌프해도 settle 전이라 시작하지 않는다.
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(opacityOf(tester, probeKey), 0.0);
+
+      // 정착(애니메이션 완료)까지 펌프.
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(opacityOf(tester, probeKey), 0.0); // settle 직후, delay 아직
+
+      await tester.pump(const Duration(milliseconds: 110)); // delay(100ms) 넘김
+      await tester.pump(const Duration(milliseconds: 40)); // 애니 진행 틱(기준점)
+      await tester.pump(const Duration(milliseconds: 40)); // 애니 진행 틱(실제 전진)
+      expect(opacityOf(tester, probeKey), greaterThan(0.0));
+    });
+
+    testWidgets('C: swipe_layout 두 pane — follower(jumpTo)도 settle까지 대기', (
+      tester,
+    ) async {
+      const probeKey = ValueKey('probe-follower');
+      final controller = SwipeController(length: 2);
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EngineMetrics(
+            scale: 1.0,
+            child: Center(
+              child: SizedBox(
+                width: 400,
+                height: 300,
+                child: SwipeControllerScope(
+                  controller: controller,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Builder(
+                          builder: (context) =>
+                              SwipePaneWidget.build(context, const {}, const [
+                                SizedBox(key: ValueKey('driver-0')),
+                                SizedBox(key: ValueKey('driver-1')),
+                              ]),
+                        ),
+                      ),
+                      Expanded(
+                        child: Builder(
+                          builder: (context) =>
+                              SwipePaneWidget.build(context, const {}, [
+                                const SizedBox(key: ValueKey('follower-0')),
+                                KeyedSubtree(
+                                  key: probeKey,
+                                  child: MotionWrapper(
+                                    motion: const _ProbeMotion(
+                                      delay: Duration(milliseconds: 100),
+                                    ),
+                                    params: const MotionParams({}),
+                                    child: const SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                    ),
+                                  ),
+                                ),
+                              ]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      unawaited(controller.goTo(1));
+      await tester.pump();
+      expect(opacityOf(tester, probeKey), 0.0);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(opacityOf(tester, probeKey), 0.0); // moveTo(300ms) 아직 진행 중
+
+      // 정착 + delay(100ms)까지 여유 있게.
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      await tester.pump(const Duration(milliseconds: 40)); // 기준점 틱
+      await tester.pump(const Duration(milliseconds: 40)); // 실제 전진 틱
+      expect(opacityOf(tester, probeKey), greaterThan(0.0));
+    });
+
+    testWidgets('D: ListView 화면 밖 항목 — 보이고 스크롤이 멈출 때까지 대기', (tester) async {
+      const probeKey = ValueKey('probe-list');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              controller: scrollController,
+              children: [
+                const SizedBox(key: ValueKey('spacer'), height: 1000),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(),
+                    params: const MotionParams({}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(opacityOf(tester, probeKey), 0.0); // 화면 밖 — 시작 안 함
+
+      scrollController.jumpTo(1000);
+      await tester.pump();
+      expect(opacityOf(tester, probeKey), 0.0); // 보이지만 아직 틱 중일 수 있음
+
+      await tester.pumpAndSettle();
+      expect(opacityOf(tester, probeKey), greaterThan(0.0)); // 보이고 멈춤 → 시작
+    });
+
+    testWidgets('E: settle 이후라도 trigger 변경은 즉시 재생', (tester) async {
+      const probeKey = ValueKey('probe-trigger');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      Widget host(int trigger) => MaterialApp(
+        home: SizedBox(
+          width: 400,
+          height: 300,
+          child: ListView(
+            controller: scrollController,
+            children: [
+              KeyedSubtree(
+                key: probeKey,
+                child: MotionWrapper(
+                  motion: const _ProbeMotion(),
+                  params: MotionParams({'trigger': trigger}),
+                  child: const SizedBox(width: 10, height: 10),
+                ),
+              ),
+              const SizedBox(height: 1000),
+            ],
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(host(1));
+      await tester.pumpAndSettle();
+      expect(opacityOf(tester, probeKey), 1.0); // 첫 재생 완료(화면 안, 정지 상태)
+
+      await tester.pumpWidget(host(2));
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(opacityOf(tester, probeKey), lessThan(1.0)); // trigger로 즉시 재시작
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('F: 시작 후 스크롤로 밖으로 나갔다 돌아와도 재시작하지 않는다', (tester) async {
+      const probeKey = ValueKey('probe-norestart');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              controller: scrollController,
+              children: [
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(),
+                    params: const MotionParams({}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(opacityOf(tester, probeKey), 1.0); // 끝까지 재생 완료
+
+      scrollController.jumpTo(900); // 화면 밖으로
+      await tester.pumpAndSettle();
+      scrollController.jumpTo(0); // 다시 화면 안으로
+      await tester.pumpAndSettle();
+
+      expect(opacityOf(tester, probeKey), 1.0); // 재시작 없이 그대로 완료 상태
+    });
+
+    testWidgets('G: repeat 모션도 같은 gate를 따른다', (tester) async {
+      const probeKey = ValueKey('probe-repeat');
+      final pageController = PageController();
+      addTearDown(pageController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 400,
+            child: PageView(
+              controller: pageController,
+              children: [
+                const SizedBox(key: ValueKey('rpage0')),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(repeat: true, reverse: true),
+                    params: const MotionParams({}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      unawaited(
+        pageController.animateToPage(
+          1,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.linear,
+        ),
+      );
+      await tester.pump();
+      expect(opacityOf(tester, probeKey), 0.0);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(opacityOf(tester, probeKey), 0.0); // 정착 전에는 repeat도 대기
+
+      await tester.pump(const Duration(milliseconds: 150)); // 정착
+      await tester.pump(const Duration(milliseconds: 40)); // 기준점 틱
+      await tester.pump(const Duration(milliseconds: 40)); // 실제 전진 틱
+      expect(
+        opacityOf(tester, probeKey),
+        greaterThan(0.0),
+      ); // settle 후 repeat 진행
+
+      await tester.pumpWidget(const SizedBox()); // 무한 애니라 정리
+    });
+
+    testWidgets('H: 화면 밖 모션은 정착 후 유휴 상태 — 보류 중인 프레임/타이머 없음', (tester) async {
+      const probeKey = ValueKey('probe-idle');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              controller: scrollController,
+              children: [
+                const SizedBox(key: ValueKey('spacer-idle'), height: 1000),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(),
+                    params: const MotionParams({}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // pumpAndSettle must return without timing out even though the gate
+      // never passes (the motion stays off-screen) — proving there is no
+      // periodic polling keeping frames/timers alive.
+      await tester.pumpAndSettle();
+      expect(opacityOf(tester, probeKey), 0.0); // still gated — never started
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(tester.binding.transientCallbackCount, 0);
     });
   });
 }

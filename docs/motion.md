@@ -26,10 +26,25 @@ _motion:
 | --- | --- | --- | --- |
 | `duration` | non-negative finite milliseconds | `300` (`shimmer`: `1200`) | One animation leg. |
 | `curve` | name | `ease_out` (`shimmer`: `linear`) | `linear`, `ease`, `ease_in`, `ease_out`, `ease_in_out`, `fast_out_slow_in`, `bounce_out`, `elastic_out`, `decelerate`. Unknown names use the atom fallback. |
-| `delay` | non-negative finite milliseconds | `0` | Initial delay. |
+| `delay` | non-negative finite milliseconds | `0` | Initial delay, measured from when the start gate opens (see below). |
 | `repeat` | bool | `false` (`shimmer`: `true`) | Repeats until disposal/change. |
 | `reverse` | bool | `false` | Alternates direction when repeating. |
 | `trigger` | any | `null` | Runtime restart identity. |
+
+## Start gate inside a scrollable
+
+Without an ancestor `Scrollable`, a motion starts as soon as it mounts, exactly as its
+scheduling parameters describe.
+
+With one or more ancestor `Scrollable`s (a `ListView`/`PageView` page, a `swipe_pane` page
+including one only mirrored by another pane's drag via `jumpTo`, etc.), the motion instead
+waits for a start gate: it begins (and starts counting `delay`) the first time its render box
+is visible in every ancestor scrollable's viewport *and* every ancestor scroll position has
+stopped moving. This keeps an off-screen or mid-drag `delay`/`duration` from elapsing before the
+user can see the motion. Once the gate has opened and the motion has started, scrolling it off
+screen and back never restarts it. A `trigger` change still restarts the motion immediately,
+bypassing the gate, exactly as before. `repeat: true` motions wait on the same gate before their
+first run.
 
 ## Atoms
 

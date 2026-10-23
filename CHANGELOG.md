@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1
+
+- Fix: motions inside a `Scrollable` ancestor (any depth, including `swipe_pane`
+  followers moved by `jumpTo`) no longer start on mount. They wait until the
+  widget is actually visible in every ancestor viewport and scrolling has
+  settled, then run their `delay` from that point. Motions outside any
+  scrollable are unaffected. A `trigger` change still restarts immediately,
+  bypassing the wait; once a motion has started, scrolling it away and back
+  never restarts it.
+
 ## 0.2.0
 
 - Page transitions: `_transition` decoder and effect registry with `slide_up`, `zoom`,
