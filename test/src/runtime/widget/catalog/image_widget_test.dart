@@ -1,5 +1,8 @@
-import 'package:flutter/widgets.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/primitive/image_widget.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
 import 'package:sdui_engine/src/contract/image_source.dart';
@@ -13,6 +16,14 @@ class _CaptureImageSource implements ImageSource {
     onResolve(request);
     return const NoImage();
   }
+}
+
+/// Never settles, so the widget stays on its loading placeholder.
+class _PendingImageSource implements ImageSource {
+  const _PendingImageSource();
+  @override
+  ImageResult resolve(ImageRequest request) =>
+      PendingImage(Completer<Widget?>().future);
 }
 
 Future<void> _pump(
@@ -131,6 +142,54 @@ void main() {
         expect(image.repeat, ImageRepeat.repeatX);
         expect(image.semanticLabel, '상품 이미지');
         tester.takeException();
+      });
+    });
+
+    group('pending placeholder', () {
+      // Skeletonizer reads its shimmer config from the ambient Theme.
+      Future<void> pumpPending(
+        WidgetTester tester,
+        Map<String, Object?> props,
+      ) {
+        ImageSourceRegistry.install(const _PendingImageSource());
+        return tester.pumpWidget(
+          MaterialApp(
+            home: Center(
+              child: Builder(
+                builder: (context) =>
+                    ImageWidget.build(context, props, const {}),
+              ),
+            ),
+          ),
+        );
+      }
+
+      final bone = find.byWidgetPredicate((widget) => widget is Bone);
+
+      testWidgets('기본값은 shimmer 없이 width·height만큼 투명하게 자리를 잡는다', (
+        tester,
+      ) async {
+        await pumpPending(tester, const {
+          'src': 'https://example.com/a.png',
+          'width': 120,
+          'height': 80,
+        });
+        expect(bone, findsNothing);
+        expect(
+          tester.getSize(find.byType(FutureBuilder<Widget?>)),
+          const Size(120, 80),
+        );
+      });
+
+      testWidgets('shimmer: true면 skeleton bone을 보여준다', (tester) async {
+        await pumpPending(tester, const {
+          'src': 'https://example.com/a.png',
+          'width': 120,
+          'height': 80,
+          'shimmer': true,
+        });
+        expect(bone, findsOneWidget);
+        expect(tester.getSize(bone), const Size(120, 80));
       });
     });
   });

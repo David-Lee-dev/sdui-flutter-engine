@@ -17,6 +17,7 @@ Resolves an `image` node through the installed [ImageSource]. This primitive mir
 | `semantic_label` | `text` | — | `null` | Yes | accessibility label. |
 | `cache_width` | `integer` | — | `null` | Yes | target decoded image width in physical pixels. |
 | `cache_height` | `integer` | — | `null` | Yes | target decoded image height in physical pixels. |
+| `shimmer` | `flag` | — | `false` | Yes | shows a shimmer skeleton while a remote image loads; otherwise the box stays transparent. |
 | `_slots` | map of widget nodes | error, loading | `{}` | No | Named children consumed by this slot widget; positional children are rejected. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 

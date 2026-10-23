@@ -28,6 +28,7 @@ import '../../../media/loading_image.dart';
 /// - `semantic_label` (`text`, default `null`) — accessibility label.
 /// - `cache_width` (`integer`, default `null`) — target decoded image width in physical pixels.
 /// - `cache_height` (`integer`, default `null`) — target decoded image height in physical pixels.
+/// - `shimmer` (`flag`, default `false`) — shows a shimmer skeleton while a remote image loads; otherwise the box stays transparent.
 ///
 /// Child: `_slots: { error, loading }`.
 ///
@@ -45,6 +46,7 @@ final class ImageWidget {
     if (src is! String || src.isEmpty) return const SizedBox.shrink();
     final width = PropsResolver.size(context, props['width']);
     final height = PropsResolver.size(context, props['height']);
+    final shimmer = PropsResolver.flag(props['shimmer']) ?? false;
     final result = ImageSourceRegistry.current.resolve(
       ImageRequest(
         src: src,
@@ -74,7 +76,9 @@ final class ImageWidget {
           final placeholder = done
               ? slots['error'] ?? const SizedBox.shrink()
               : slots['loading'] ??
-                    shimmerPlaceholder(width: width, height: height);
+                    (shimmer
+                        ? shimmerPlaceholder(width: width, height: height)
+                        : SizedBox(width: width, height: height));
           return loadingImageTransition(
             loaded: loaded,
             placeholder: placeholder,
