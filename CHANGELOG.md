@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.4
+
+- Fix: inside nested scrollables (e.g. a list in a `tab_bar_view` under a
+  scrolling header) the start gate added each viewport's offset on top of the
+  previous one, so items in the lower part of the screen counted as off-screen
+  and started only once scrolled near the top. The slot is now mapped into each
+  ancestor viewport on its own. The wait-until-visible-and-settled rule is
+  unchanged.
+
 ## 0.3.3
 
 - Fix: the scroll-aware start gate decides visibility from the slot the

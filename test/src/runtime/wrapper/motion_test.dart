@@ -598,5 +598,127 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 1.0);
     });
+
+    // 중첩 스크롤(세로 → 탭뷰 → 세로) 안의 목록 항목.
+    Widget probe(Key key) => KeyedSubtree(
+      key: key,
+      child: MotionWrapper(
+        motion: const _ProbeMotion(),
+        params: const MotionParams({}),
+        child: const SizedBox(height: 80),
+      ),
+    );
+
+    testWidgets('M: 중첩 스크롤 안에서 화면에 보이는 항목은 모두 시작한다', (tester) async {
+      final keys = [for (var i = 0; i < 6; i++) ValueKey('item-$i')];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 600,
+            child: ListView(
+              children: [
+                const SizedBox(height: 100),
+                SizedBox(
+                  height: 500,
+                  child: PageView(
+                    children: [
+                      ListView(children: [for (final k in keys) probe(k)]),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      for (final k in keys) {
+        expect(opacityOf(tester, k), 1.0, reason: '$k');
+      }
+    });
+
+    testWidgets('N: 중첩 스크롤 안 PageView 2쪽은 넘기는 중엔 대기, 정착 후 시작', (tester) async {
+      const key = ValueKey('page-2');
+      final pages = PageController();
+      addTearDown(pages.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 600,
+            child: ListView(
+              children: [
+                const SizedBox(height: 100),
+                SizedBox(
+                  height: 500,
+                  child: PageView(
+                    controller: pages,
+                    allowImplicitScrolling: true,
+                    children: [
+                      const SizedBox(),
+                      ListView(children: [probe(key)]),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(opacityOf(tester, key), 0.0);
+
+      unawaited(
+        pages.animateToPage(
+          1,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.linear,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(opacityOf(tester, key), 0.0); // 넘기는 중
+
+      await tester.pumpAndSettle();
+      expect(opacityOf(tester, key), 1.0);
+    });
+
+    testWidgets('O: 바깥 스크롤 화면 밖의 중첩 항목은 보일 때까지 대기', (tester) async {
+      const key = ValueKey('below');
+      final outer = ScrollController();
+      addTearDown(outer.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 600,
+            child: ListView(
+              controller: outer,
+              cacheExtent: 2000,
+              children: [
+                const SizedBox(height: 700),
+                SizedBox(
+                  height: 500,
+                  child: PageView(
+                    children: [
+                      ListView(children: [probe(key)]),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(opacityOf(tester, key), 0.0);
+
+      outer.jumpTo(400);
+      await tester.pumpAndSettle();
+      expect(opacityOf(tester, key), 1.0);
+    });
   });
 }

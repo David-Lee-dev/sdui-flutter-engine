@@ -166,7 +166,7 @@ class _MotionWrapperState extends State<MotionWrapper>
     if (box == null || !box.attached || !box.hasSize) return false;
     final size = box.size.isEmpty ? _contentSize(box) : box.size;
     if (size == null) return false;
-    var rect = Offset.zero & size;
+    final rect = Offset.zero & size;
     for (final s in _scrollables) {
       final viewport = s.context.findRenderObject() as RenderBox?;
       if (viewport == null || !viewport.attached) return false;
@@ -176,7 +176,6 @@ class _MotionWrapperState extends State<MotionWrapper>
       );
       final viewportRect = Offset.zero & viewport.size;
       if (!transformed.overlaps(viewportRect)) return false;
-      rect = transformed;
     }
     return true;
   }
