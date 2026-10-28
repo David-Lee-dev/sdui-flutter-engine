@@ -252,6 +252,216 @@ void main() {
       });
     });
 
+    group('continuous', () {
+      const pattern = [
+        {'intensity': 0.4},
+      ];
+
+      test(
+        'continuous 지원 기기는 pattern·variant를 무시하고 곡선·tap을 play 한 번 한다',
+        () async {
+          final both = _FakeHapticPlayer(taps: true, continuous: true);
+          await HapticDriver(player: both).run(
+            _ctx(const {
+              'variant': 'error',
+              'pattern': pattern,
+              'continuous': {
+                'intensity': [
+                  [0, -1],
+                  [5, 1.5],
+                  [150.4, 0.3],
+                  [500, 0],
+                ],
+                'sharpness': [
+                  [0, 0.5],
+                  [500, 0.2],
+                ],
+                'taps': [
+                  {'intensity': 1.0, 'sharpness': 0.2},
+                  {'intensity': 2, 'delay': 100},
+                ],
+              },
+            }),
+          );
+
+          expect(both.calls, ['play']);
+          final played = both.played.single;
+          expect(played.intensity, [
+            (0, 0.0),
+            (5, 1.0),
+            (150, 0.3),
+            (500, 0.0),
+          ]);
+          expect(played.sharpness, [(0, 0.5), (500, 0.2)]);
+          expect(
+            [for (final t in played.taps) (t.intensity, t.sharpness, t.delay)],
+            [
+              (1.0, 0.2, Duration.zero),
+              (1.0, 0.5, const Duration(milliseconds: 100)),
+            ],
+          );
+        },
+      );
+
+      const valid = {
+        'intensity': [
+          [0, 1],
+          [100, 0],
+        ],
+      };
+
+      test('tap만 되는 기기는 continuous 대신 pattern을 친다', () async {
+        final taps = _FakeHapticPlayer(taps: true);
+        await HapticDriver(player: taps).run(
+          _ctx(const {
+            'variant': 'error',
+            'pattern': pattern,
+            'continuous': valid,
+          }),
+        );
+        expect(taps.calls, ['tap:0.4/0.5']);
+      });
+
+      test('미지원 기기에 pattern이 없으면 variant로 친다', () async {
+        await driver.run(
+          _ctx(const {'variant': 'success', 'continuous': valid}),
+        );
+        expect(player.calls, ['impact:light', 'impact:medium']);
+      });
+
+      test('형식이 틀린 continuous는 없는 것으로 보고 pattern·variant로 친다', () async {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        const curve = [
+          [0, 1],
+          [100, 0],
+        ];
+        const malformed = <String, Object?>{
+          'map 아님': [curve],
+          'intensity 없음': {'sharpness': curve},
+          'intensity 빈 목록': {'intensity': <Object?>[]},
+          '점이 숫자 둘이 아님': {
+            'intensity': [
+              [0, 1],
+              [100, 'x'],
+            ],
+          },
+          '점이 셋': {
+            'intensity': [
+              [0, 1, 2],
+              [100, 0],
+            ],
+          },
+          '음수 시간': {
+            'intensity': [
+              [-10, 1],
+              [100, 0],
+            ],
+          },
+          '시간 역행': {
+            'intensity': [
+              [0, 1],
+              [100, 0.5],
+              [50, 0],
+            ],
+          },
+          'sharpness 형식 틀림': {
+            'intensity': curve,
+            'sharpness': [
+              [0, 0.5],
+              [-1, 0.2],
+            ],
+          },
+          'sharpness 빈 목록': {'intensity': curve, 'sharpness': <Object?>[]},
+          'taps 형식 틀림': {
+            'intensity': curve,
+            'taps': [
+              {'intensity': 1.0},
+              3,
+            ],
+          },
+          'taps 빈 목록': {'intensity': curve, 'taps': <Object?>[]},
+        };
+        for (final MapEntry(:key, :value) in malformed.entries) {
+          both.calls.clear();
+          await HapticDriver(
+            player: both,
+          ).run(_ctx({'pattern': pattern, 'continuous': value}));
+          expect(both.calls, ['tap:0.4/0.5'], reason: key);
+
+          both.calls.clear();
+          await HapticDriver(
+            player: both,
+          ).run(_ctx({'variant': 'medium', 'continuous': value}));
+          expect(both.calls, ['impact:medium'], reason: key);
+        }
+        expect(both.played, isEmpty);
+      });
+
+      test('sharpness를 빼면 마지막 intensity 시각까지 0.5 평탄 곡선, taps를 빼면 없음', () async {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        await HapticDriver(player: both).run(
+          _ctx(const {
+            'continuous': {
+              'intensity': [
+                [0, 1],
+                [80, 0.5],
+                [240, 0],
+              ],
+            },
+          }),
+        );
+
+        final played = both.played.single;
+        expect(played.sharpness, [(0, 0.5), (240, 0.5)]);
+        expect(played.taps, isEmpty);
+      });
+
+      const long = {
+        'intensity': [
+          [0, 1],
+          [500, 0],
+        ],
+      };
+
+      test('재생 중 취소되면 50ms 안에 stop한다', () {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        var cancelled = false;
+        fakeAsync((async) {
+          HapticDriver(player: both).run(
+            DriverContext(
+              params: const {'continuous': long},
+              state: _NoState(),
+              isCancelled: () => cancelled,
+            ),
+          );
+
+          async.elapse(const Duration(milliseconds: 200));
+          expect(both.calls, ['play']);
+          cancelled = true;
+          async.elapse(const Duration(milliseconds: 50));
+          expect(both.calls, ['play', 'stop']);
+          async.elapse(const Duration(seconds: 1));
+          expect(both.calls, ['play', 'stop']);
+        });
+      });
+
+      test('재생은 패턴 길이(500ms)만큼 기다리고 stop하지 않는다', () {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        fakeAsync((async) {
+          var done = false;
+          HapticDriver(
+            player: both,
+          ).run(_ctx(const {'continuous': long})).then((_) => done = true);
+
+          async.elapse(const Duration(milliseconds: 449));
+          expect(done, isFalse);
+          async.elapse(const Duration(milliseconds: 51));
+          expect(done, isTrue);
+          expect(both.calls, ['play']);
+        });
+      });
+    });
+
     group('preset variant', () {
       const legacy = {
         'success',

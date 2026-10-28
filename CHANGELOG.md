@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0
+
+- New `sys_haptic` parameter `continuous`: a custom continuous vibration with
+  an `intensity` curve, an optional `sharpness` curve (flat 0.5 when absent)
+  and optional `taps` in the `pattern` item format. Curve points are
+  `[ms, value]` with times rounded, ≥ 0 and non-decreasing, and values
+  clamped to 0–1. It plays before `pattern` and `variant` on devices with
+  continuous haptics (iOS Core Haptics, Android 16+ with envelope effects).
+  An invalid `continuous` or an unsupported device falls through to
+  `pattern`, then `variant`. Older engines ignore `continuous`.
+
 ## 0.5.1
 
 - Internal: the Pulsar presets are split into a basic (45 tap-only) table and

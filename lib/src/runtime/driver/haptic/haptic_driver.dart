@@ -234,6 +234,52 @@ class HapticSemantics {
     ];
   }
 
+  /// Reads a template `continuous` into a pattern, clamping curve values.
+  ///
+  /// @returns null unless [value] is a map with a valid `intensity` curve and,
+  /// when present, a valid `sharpness` curve and `taps` pattern
+  static HapticPattern? continuous(Object? value) {
+    if (value is! Map) return null;
+    final intensity = _curve(value['intensity']);
+    if (intensity == null) return null;
+
+    final sharpness = value.containsKey('sharpness')
+        ? _curve(value['sharpness'])
+        : [(0, 0.5), (intensity.last.$1, 0.5)];
+    if (sharpness == null) return null;
+
+    final taps = value.containsKey('taps')
+        ? pulses(value['taps'])
+        : const <HapticPulse>[];
+    if (taps == null) return null;
+
+    return HapticPattern(
+      taps: taps,
+      intensity: intensity,
+      sharpness: sharpness,
+    );
+  }
+
+  /// Reads `[[ms, value], ...]`, rounding times and clamping values.
+  ///
+  /// @returns null unless every point is two numbers and times are >= 0 and
+  /// non-decreasing
+  static List<(int, double)>? _curve(Object? value) {
+    if (value is! List || value.isEmpty) return null;
+
+    final curve = <(int, double)>[];
+    for (final p in value) {
+      if (p is! List || p.length != 2) return null;
+      final [ms, v] = p;
+      if (ms is! num || v is! num) return null;
+
+      final at = ms.round();
+      if (at < 0 || (curve.isNotEmpty && at < curve.last.$1)) return null;
+      curve.add((at, v.toDouble().clamp(0.0, 1.0)));
+    }
+    return curve;
+  }
+
   /// Plays [pulses] as native taps, each after its delay.
   ///
   /// An intensity-0 pulse only keeps its delay: Android plays scale 0 as the
@@ -308,6 +354,12 @@ class HapticDriver extends Driver {
   @override
   Future<Object?> run(DriverContext ctx) async {
     if (ctx.isCancelled) return null;
+
+    final shaped = HapticSemantics.continuous(ctx.params['continuous']);
+    if (shaped != null && await _player.supportsContinuous()) {
+      await _playContinuous(shaped, ctx);
+      return null;
+    }
 
     final pulses = HapticSemantics.pulses(ctx.params['pattern']);
     if (pulses != null && await _player.supportsTaps()) {
