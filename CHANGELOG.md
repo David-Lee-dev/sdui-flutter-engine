@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- iOS podspec version now matches the package version (it stayed at 0.4.0)
+  and its summary covers continuous haptics. No behavior change.
+
 ## 0.6.0
 
 - New `sys_haptic` parameter `continuous`: a custom continuous vibration with

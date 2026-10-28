@@ -3,10 +3,10 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'sdui_engine'
-  s.version          = '0.4.0'
-  s.summary          = 'Native taps for the sdui_engine sys_haptic command.'
+  s.version          = '0.6.1'
+  s.summary          = 'Native haptics for the sdui_engine sys_haptic command.'
   s.description      = <<-DESC
-Core Haptics transient taps for sdui_engine sys_haptic patterns.
+Core Haptics taps and continuous patterns for sdui_engine sys_haptic.
                        DESC
   s.homepage         = 'https://github.com/David-Lee-dev/sdui-flutter-engine'
   s.license          = { :file => '../LICENSE' }
