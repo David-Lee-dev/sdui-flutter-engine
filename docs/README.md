@@ -9,9 +9,10 @@ This reference documents the template language implemented by the engine, from s
 3. [State](state.md) — scopes, reactive reads, binding writes, and root data.
 4. [Actions](actions.md) and [commands](commands/net.md) — flows, handlers, and drivers.
 5. [Control flow](control-flow.md), [loops](loops.md), and [lifecycle](lifecycle.md).
-6. [Interaction](interaction.md), [motion](motion.md), and [media](media.md).
-7. [Widget catalog](widgets/README.md) — all 103 registered widget types and the internal catalog helper.
-8. [Errors](errors.md) — the domain-vs-engine-error split, error surfaces, and `SduiErrorObserver`.
+6. [Interaction](interaction.md), [motion](motion.md), [haptics](haptic.md), and [media](media.md).
+7. [Haptic preset catalog](haptic-presets.md) — all legacy, basic, and continuous preset variants.
+8. [Widget catalog](widgets/README.md) — all 103 registered widget types and the internal catalog helper.
+9. [Errors](errors.md) — the domain-vs-engine-error split, error surfaces, and `SduiErrorObserver`.
 
 ## Language guides
 
@@ -24,6 +25,8 @@ This reference documents the template language implemented by the engine, from s
 - [Control flow](control-flow.md) — `cond`, `switch`, node `_if`, and `_morph`.
 - [Loops](loops.md) — `_loop`, stable keys, all 14 wrappers, lazy/eager behavior, and mutation.
 - [Motion](motion.md) — nine atoms, every composite preset, curves, and scheduling parameters.
+- [Haptics](haptic.md) — tap and continuous haptics, playback order, device support, and authoring guidance.
+- [Haptic presets](haptic-presets.md) — legacy, basic, and continuous preset catalog with timing details.
 - [Page transitions](transitions.md) — screen effects, preloading, reverse playback, and custom registrations.
 - [Media](media.md) — image/video source policies, placeholders, cross-fades, and controls.
 - [Widget catalog](widgets/README.md) — categorized widget index with protocol and loop-wrapper status.
@@ -40,5 +43,5 @@ This reference documents the template language implemented by the engine, from s
 - [`set`](commands/set.md) — commit values to the defining scope.
 - [`app_storage`](commands/app-storage.md) — get/set values and calendar-day throttling stamps.
 - [`secure_storage`](commands/secure-storage.md) — read/write/delete secure strings.
-- [`sys_haptic`](commands/sys-haptic.md) — native tap patterns, platform haptic impulses and semantic rhythms.
+- [`sys_haptic`](commands/sys-haptic.md) — custom taps and continuous haptics, presets, platform impulses, and semantic rhythms.
 - [External commands](commands/external.md) — app-owned commands registered through `SduiService`.
