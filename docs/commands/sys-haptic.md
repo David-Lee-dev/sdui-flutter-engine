@@ -1,6 +1,6 @@
 # `sys_haptic`
 
-The `sys_haptic` command plays a pattern of native taps, a named tap preset, a semantic multi-pulse rhythm, or a single platform haptic.
+The `sys_haptic` command plays a pattern of native taps, a named preset (taps, or a continuous vibration with taps), a semantic multi-pulse rhythm, or a single platform haptic.
 
 | Parameter | Type | Allowed values | Default | Bindable (`${}`) | Description |
 | --- | --- | --- | --- | --- | --- |
@@ -21,7 +21,7 @@ Out-of-range values are clamped; a missing or non-numeric key takes its default.
 ## Which haptic plays
 
 1. `pattern` is present and valid and the device supports native taps → the taps play; `variant` is ignored.
-2. Otherwise `variant` names a [preset](#presets) → its taps play if the device supports native taps; otherwise nothing plays.
+2. Otherwise `variant` names a [preset](#presets) → a tap preset plays its taps if the device supports native taps; a continuous preset plays if the device supports [continuous haptics](#continuous-haptic-support). Otherwise nothing plays — a continuous preset never plays only its taps.
 3. Otherwise `variant` names a [legacy tap preset](#legacy-tap-presets) (`light`, `success`, `warning`, `error`) and the device supports native taps → its taps play.
 4. Otherwise `variant` names a rhythm or impulse → it plays as before 0.4.0 (this is where devices without native taps play `light` / `success` / `warning` / `error`).
 5. Otherwise nothing plays.
@@ -45,18 +45,26 @@ On Android this means `error` no longer uses vibrate on such devices. `medium`, 
 
 ## Presets
 
-Since 0.5.0 `variant` also accepts these 45 tap presets:
+Since 0.5.0 `variant` also accepts the 151 presets of Software Mansion's [Pulsar](https://github.com/software-mansion/pulsar) (MIT, © 2025 Krzysztof Piaskowy), with names in snake_case. A preset name never falls back to a rhythm or impulse.
+
+**Tap presets** (45) are taps only and play like a `pattern`: Android plays click primitives scaled by intensity, and sharpness is iOS only, so presets that differ only in sharpness feel the same on Android. A device without native taps plays nothing.
 
 `afterglow`, `aftershock`, `barrage`, `bass_drop`, `bell_toll`, `bongo`, `boulder`, `breaking_wave`, `buildup`, `cadence`, `canter`, `cascade`, `castanets`, `cat_paw`, `chip`, `crescendo`, `fade_out`, `finger_drum`, `firecracker`, `gallop`, `gavel`, `herald`, `hoof_beat`, `ignition`, `jolt`, `murmur`, `patter`, `piston`, `plunk`, `rap`, `ratchet`, `rebound`, `rivet`, `stampede`, `stomp`, `stone_skip`, `syncopate`, `thump`, `thunder_roll`, `tick_tock`, `tidal_surge`, `tide_swell`, `tremor`, `war_drum`, `waterfall`
 
-They are the tap-only (discrete-only) presets of Software Mansion's [Pulsar](https://github.com/software-mansion/pulsar) (MIT, © 2025 Krzysztof Piaskowy), with names in snake_case. Each plays like a `pattern`:
+**Continuous presets** (106) are a continuous vibration whose intensity and sharpness follow curves, with taps on top. They need [continuous haptics](#continuous-haptic-support) and otherwise play nothing — also on devices that support taps; the taps are never played alone.
 
-- Taps only, so Android plays click primitives scaled by intensity. Sharpness is iOS only, so presets that differ only in sharpness feel the same on Android.
-- A device without native taps plays nothing for a preset name; there is no rhythm fallback.
+`alarm`, `anvil`, `applause`, `ascent`, `balloon_pop`, `batter`, `blip`, `bloom`, `breath`, `burst`, `buzz`, `camera_shutter`, `charge`, `chime`, `chirp`, `clamor`, `clasp`, `cleave`, `coil`, `coin_drop`, `combination_lock`, `dewdrop`, `dirge`, `dissolve`, `dog_bark`, `drone`, `engine_rev`, `exhale`, `explosion`, `fanfare`, `feather`, `finale`, `fizz`, `flare`, `flick`, `flinch`, `flourish`, `flurry`, `flush`, `glitch`, `guitar_strum`, `hail`, `hammer`, `heartbeat`, `impact`, `keyboard_mechanical`, `keyboard_membrane`, `knell`, `knock`, `lament`, `latch`, `lighthouse`, `lilt`, `lock`, `lope`, `march`, `metronome`, `nudge`, `passing_car`, `peal`, `peck`, `pendulum`, `ping`, `pip`, `plink`, `plummet`, `poke`, `pound`, `power_down`, `propel`, `pulse`, `pummel`, `push`, `radar`, `rain`, `ramp`, `ripple`, `rustle`, `shockwave`, `snap`, `sonar`, `spark`, `spin`, `stagger`, `stamp`, `strike`, `summon`, `surge`, `sway`, `sweep`, `swell`, `throb`, `thud`, `thunder`, `trigger`, `triumph`, `trumpet`, `typewriter`, `unfurl`, `vortex`, `wane`, `wave`, `wisp`, `wobble`, `woodpecker`, `zipper`
+
+A continuous preset is handed to the device as a whole; the command lasts as long as the preset, checks cancellation at least every 50 ms, and stops the vibration when cancelled.
 
 ```yaml
 _type: sys_haptic
 variant: crescendo
+```
+
+```yaml
+_type: sys_haptic
+variant: heartbeat
 ```
 
 ## Native tap support
@@ -68,6 +76,16 @@ variant: crescendo
 | Web, desktop, tests | never | — |
 
 The engine asks once per process. There is no fallback to waveform or one-shot vibration: an unsupported device uses `variant`.
+
+## Continuous haptic support
+
+| Platform | Supported when | Continuous preset |
+| --- | --- | --- |
+| iOS | `CHHapticEngine.capabilitiesForHardware().supportsHaptics` | one Core Haptics pattern: a continuous event shaped by intensity and sharpness control curves, plus a transient event per tap |
+| Android | Android 16+ (API 36) and `Vibrator.areEnvelopeEffectsSupported()` | one `VibrationEffect.BasicEnvelopeBuilder` envelope; taps are merged into it as short peaks, as Pulsar does |
+| Web, desktop, tests | never | — |
+
+The engine asks once per process. Android never falls back to waveform, amplitude, one-shot or timing vibration for continuous presets: a device without envelope effects plays nothing for them.
 
 The engine is a Flutter plugin since 0.4.0 (it declares `android.permission.VIBRATE`), so apps must be rebuilt, not hot-restarted, after upgrading.
 

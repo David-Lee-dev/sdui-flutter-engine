@@ -2,11 +2,19 @@
 
 ## 0.5.0
 
-- New `sys_haptic` `variant` presets: the 45 tap-only presets of Software
-  Mansion's Pulsar (MIT), in snake_case (e.g. `crescendo`, `bass_drop`,
-  `tick_tock`). They play as native taps on devices that support them
-  (Android plays click primitives; sharpness is iOS only) and play nothing on
-  devices without native taps. A valid `pattern` still takes precedence.
+- New `sys_haptic` `variant` presets: all 151 presets of Software Mansion's
+  Pulsar (MIT), in snake_case (e.g. `crescendo`, `bass_drop`, `heartbeat`).
+  A valid `pattern` still takes precedence.
+  - The 45 tap presets play as native taps on devices that support them
+    (Android plays click primitives; sharpness is iOS only) and play nothing
+    on devices without native taps.
+  - The 106 continuous presets play a continuous vibration shaped by
+    intensity and sharpness curves, with taps on top, on devices with
+    continuous haptics: iOS Core Haptics, or Android 16+ with envelope effects
+    (`VibrationEffect.BasicEnvelopeBuilder`). Elsewhere they play nothing,
+    even where taps are supported. Android never falls back to waveform,
+    amplitude or one-shot vibration. Cancelling the command stops the
+    vibration.
 - **Changed:** on devices with native taps, `sys_haptic` `variant` `light`,
   `success`, `warning` and `error` now play native taps (light 0.5; success
   0.5 then 0.7 after 70 ms; warning two 0.7 taps 130 ms apart; error three 1.0

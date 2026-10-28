@@ -27,6 +27,38 @@ class HapticPulse {
   final Duration delay;
 }
 
+/// A named preset: transient [taps], optionally over a continuous vibration
+/// shaped by the [intensity] and [sharpness] curves.
+///
+/// Curve points are (milliseconds from the pattern start, 0–1).
+class HapticPattern {
+  const HapticPattern({
+    this.taps = const [],
+    this.intensity = const [],
+    this.sharpness = const [],
+  });
+
+  final List<HapticPulse> taps;
+  final List<(int, double)> intensity;
+  final List<(int, double)> sharpness;
+
+  /// Whether it needs continuous haptics rather than taps alone.
+  bool get isContinuous => intensity.isNotEmpty;
+
+  /// Until the last tap or curve point, whichever is later.
+  Duration get duration {
+    var tapsEnd = Duration.zero;
+    for (final tap in taps) {
+      tapsEnd += tap.delay;
+    }
+    final curvesEnd = [
+      for (final curve in [intensity, sharpness])
+        if (curve.isNotEmpty) curve.last.$1,
+    ].fold(0, math.max);
+    return Duration(milliseconds: math.max(tapsEnd.inMilliseconds, curvesEnd));
+  }
+}
+
 /// Plays one haptic impulse at the requested strength.
 abstract class HapticPlayer {
   Future<void> impact(HapticLevel level);
@@ -38,6 +70,16 @@ abstract class HapticPlayer {
 
   /// Plays one native transient tap.
   Future<void> tap(double intensity, double sharpness);
+
+  /// Whether the device can [play] a continuous pattern.
+  Future<bool> supportsContinuous();
+
+  /// Starts [pattern] natively — taps and curves together — and returns
+  /// without waiting for it to finish.
+  Future<void> play(HapticPattern pattern);
+
+  /// Stops a pattern started by [play].
+  Future<void> stop();
 }
 
 /// Maps engine haptic strengths to Flutter platform feedback and native taps
@@ -45,20 +87,26 @@ abstract class HapticPlayer {
 class SystemHapticPlayer implements HapticPlayer {
   SystemHapticPlayer();
 
-  /// The engine's player; asks the device for tap support once per process.
+  /// The engine's player; asks the device for tap and continuous support once
+  /// per process.
   static final shared = SystemHapticPlayer();
 
   static const _channel = MethodChannel('sdui_engine/haptic');
 
   Future<bool>? _supported;
+  Future<bool>? _continuous;
 
   @override
-  Future<bool> supportsTaps() => _supported ??= _askSupport();
+  Future<bool> supportsTaps() => _supported ??= _askSupport('isSupported');
+
+  @override
+  Future<bool> supportsContinuous() =>
+      _continuous ??= _askSupport('isContinuousSupported');
 
   /// No plugin (tests, web, desktop) or a platform failure means unsupported.
-  static Future<bool> _askSupport() async {
+  static Future<bool> _askSupport(String method) async {
     try {
-      return await _channel.invokeMethod<bool>('isSupported') ?? false;
+      return await _channel.invokeMethod<bool>(method) ?? false;
     } on MissingPluginException {
       return false;
     } on PlatformException {
@@ -72,6 +120,29 @@ class SystemHapticPlayer implements HapticPlayer {
         'intensity': intensity,
         'sharpness': sharpness,
       });
+
+  /// Sends taps at absolute times (ms from start) so the native side can
+  /// schedule them in one pattern with the curves.
+  @override
+  Future<void> play(HapticPattern pattern) {
+    var at = 0;
+    final taps = [
+      for (final tap in pattern.taps)
+        [at += tap.delay.inMilliseconds, tap.intensity, tap.sharpness],
+    ];
+    return _channel.invokeMethod<void>('play', {
+      'taps': taps,
+      'intensity': [
+        for (final (ms, v) in pattern.intensity) [ms, v],
+      ],
+      'sharpness': [
+        for (final (ms, v) in pattern.sharpness) [ms, v],
+      ],
+    });
+  }
+
+  @override
+  Future<void> stop() => _channel.invokeMethod<void>('stop');
 
   @override
   Future<void> impact(HapticLevel level) => switch (level) {
@@ -253,12 +324,19 @@ class HapticDriver extends Driver {
 
     final variant = _str(ctx.params['variant']);
 
-    // A preset is taps only; without tap support it plays nothing.
+    // A continuous preset needs continuous support and a tap-only one tap
+    // support; without it a preset plays nothing, never just its taps.
     final preset = hapticPresets[variant];
     if (preset != null) {
+      if (preset.isContinuous) {
+        if (await _player.supportsContinuous()) {
+          await _playContinuous(preset, ctx);
+        }
+        return null;
+      }
       if (await _player.supportsTaps()) {
         await HapticSemantics.tap(
-          preset,
+          preset.taps,
           player: _player,
           isCancelled: () => ctx.isCancelled,
         );
@@ -299,6 +377,25 @@ class HapticDriver extends Driver {
         await _player.vibrate();
     }
     return null;
+  }
+
+  static const _cancelPoll = Duration(milliseconds: 50);
+
+  /// Starts [pattern] natively and holds the run for its length, stopping
+  /// the vibration as soon as the run is cancelled.
+  Future<void> _playContinuous(HapticPattern pattern, DriverContext ctx) async {
+    await _player.play(pattern);
+
+    var left = pattern.duration;
+    while (left > Duration.zero) {
+      final step = left < _cancelPoll ? left : _cancelPoll;
+      await Future<void>.delayed(step);
+      left -= step;
+      if (ctx.isCancelled) {
+        await _player.stop();
+        return;
+      }
+    }
   }
 
   static String? _str(Object? value) => value is String ? value : null;

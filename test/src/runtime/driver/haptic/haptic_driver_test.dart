@@ -6,14 +6,30 @@ import 'package:sdui_engine/src/runtime/environment/state_writer.dart';
 
 /// 실제 진동 없이 호출 시퀀스를 기록하는 fake player.
 class _FakeHapticPlayer implements HapticPlayer {
-  _FakeHapticPlayer({this.taps = false});
+  _FakeHapticPlayer({this.taps = false, this.continuous = false});
 
   /// 기기가 native tap을 지원하는지.
   final bool taps;
+
+  /// 기기가 continuous 패턴을 지원하는지.
+  final bool continuous;
   final calls = <String>[];
+  final played = <HapticPattern>[];
 
   @override
   Future<bool> supportsTaps() async => taps;
+
+  @override
+  Future<bool> supportsContinuous() async => continuous;
+
+  @override
+  Future<void> play(HapticPattern pattern) async {
+    played.add(pattern);
+    calls.add('play');
+  }
+
+  @override
+  Future<void> stop() async => calls.add('stop');
 
   @override
   Future<void> tap(double intensity, double sharpness) async =>
@@ -276,6 +292,75 @@ void main() {
         });
       });
 
+      test('continuous 지원 기기에서 anvil은 play 한 번 — tap은 치지 않는다', () async {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        await HapticDriver(player: both).run(_ctx(const {'variant': 'anvil'}));
+        expect(both.calls, ['play']);
+        expect(both.played.single, same(hapticPresets['anvil']));
+      });
+
+      test('continuous 재생 중 취소되면 50ms 안에 stop한다', () {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        var cancelled = false;
+        fakeAsync((async) {
+          HapticDriver(player: both).run(
+            DriverContext(
+              params: const {'variant': 'anvil'},
+              state: _NoState(),
+              isCancelled: () => cancelled,
+            ),
+          );
+
+          async.elapse(const Duration(milliseconds: 200));
+          expect(both.calls, ['play']);
+          cancelled = true;
+          async.elapse(const Duration(milliseconds: 50));
+          expect(both.calls, ['play', 'stop']);
+          async.elapse(const Duration(seconds: 1));
+          expect(both.calls, ['play', 'stop']);
+        });
+      });
+
+      test('continuous 재생은 패턴 길이(anvil 500ms)만큼 기다리고 stop하지 않는다', () {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        fakeAsync((async) {
+          var done = false;
+          HapticDriver(
+            player: both,
+          ).run(_ctx(const {'variant': 'anvil'})).then((_) => done = true);
+
+          async.elapse(const Duration(milliseconds: 449));
+          expect(done, isFalse);
+          async.elapse(const Duration(milliseconds: 51));
+          expect(done, isTrue);
+          expect(both.calls, ['play']);
+        });
+      });
+
+      test('시작 전에 취소되면 continuous preset도 아무것도 안 친다', () async {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        await HapticDriver(
+          player: both,
+        ).run(_ctx(const {'variant': 'anvil'}, cancelled: true));
+        expect(both.calls, isEmpty);
+      });
+
+      test('continuous 지원 기기에서도 tap 전용 crescendo는 tap으로만 친다', () async {
+        final both = _FakeHapticPlayer(taps: true, continuous: true);
+        await HapticDriver(
+          player: both,
+        ).run(_ctx(const {'variant': 'crescendo'}));
+        expect(both.calls, hasLength(7));
+        expect(both.calls, everyElement(startsWith('tap:')));
+        expect(both.played, isEmpty);
+      });
+
+      test('tap만 되는 기기에서 continuous preset은 아무것도 안 친다', () async {
+        final taps = _FakeHapticPlayer(taps: true);
+        await HapticDriver(player: taps).run(_ctx(const {'variant': 'anvil'}));
+        expect(taps.calls, isEmpty);
+      });
+
       test('미지원 기기에서 preset 이름은 아무것도 안 친다', () async {
         await driver.run(_ctx(const {'variant': 'crescendo'}));
         expect(player.calls, isEmpty);
@@ -294,19 +379,38 @@ void main() {
         expect(taps.calls, ['tap:0.4/0.5']);
       });
 
-      test('표 무결성 — 45개, 비어 있지 않음, 값 범위, snake_case, legacy와 안 겹침', () {
-        expect(hapticPresets, hasLength(45));
-        for (final MapEntry(:key, :value) in hapticPresets.entries) {
-          expect(key, matches(RegExp(r'^[a-z]+(_[a-z]+)*$')));
-          expect(legacy, isNot(contains(key)), reason: key);
-          expect(value, isNotEmpty, reason: key);
-          for (final p in value) {
-            expect(p.intensity, inInclusiveRange(0, 1), reason: key);
-            expect(p.sharpness, inInclusiveRange(0, 1), reason: key);
-            expect(p.delay, greaterThanOrEqualTo(Duration.zero), reason: key);
+      test(
+        '표 무결성 — 151개(continuous 106), 값 범위, 시간 순서, snake_case, legacy와 안 겹침',
+        () {
+          expect(hapticPresets, hasLength(151));
+          expect(
+            hapticPresets.values.where((p) => p.isContinuous),
+            hasLength(106),
+          );
+          for (final MapEntry(:key, :value) in hapticPresets.entries) {
+            expect(key, matches(RegExp(r'^[a-z]+(_[a-z]+)*$')));
+            expect(legacy, isNot(contains(key)), reason: key);
+            expect(
+              value.taps.isNotEmpty || value.isContinuous,
+              isTrue,
+              reason: key,
+            );
+            for (final p in value.taps) {
+              expect(p.intensity, inInclusiveRange(0, 1), reason: key);
+              expect(p.sharpness, inInclusiveRange(0, 1), reason: key);
+              expect(p.delay, greaterThanOrEqualTo(Duration.zero), reason: key);
+            }
+            for (final curve in [value.intensity, value.sharpness]) {
+              var last = 0;
+              for (final (ms, v) in curve) {
+                expect(ms, greaterThanOrEqualTo(last), reason: key);
+                expect(v, inInclusiveRange(0, 1), reason: key);
+                last = ms;
+              }
+            }
           }
-        }
-      });
+        },
+      );
     });
 
     group('legacy preset (지원 기기)', () {
