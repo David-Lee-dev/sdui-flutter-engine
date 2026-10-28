@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 
-import '_base.dart';
+import '../_base.dart';
+
+part 'haptic_presets.dart';
 
 /// Selects the platform feedback strength for a haptic step.
 enum HapticLevel { light, medium, strong }
@@ -205,6 +207,25 @@ class HapticSemantics {
   }
 }
 
+/// Tap versions of the legacy names templates use; intensity tiers light 0.5 /
+/// medium 0.7 / strong 1.0 follow Android guidance, values to be tuned on device.
+const Map<String, List<HapticPulse>> legacyPresets = {
+  'light': [HapticPulse(intensity: 0.5)],
+  'success': [
+    HapticPulse(intensity: 0.5),
+    HapticPulse(intensity: 0.7, delay: Duration(milliseconds: 70)),
+  ],
+  'warning': [
+    HapticPulse(intensity: 0.7),
+    HapticPulse(intensity: 0.7, delay: Duration(milliseconds: 130)),
+  ],
+  'error': [
+    HapticPulse(intensity: 1.0),
+    HapticPulse(intensity: 1.0, delay: Duration(milliseconds: 130)),
+    HapticPulse(intensity: 1.0, delay: Duration(milliseconds: 130)),
+  ],
+};
+
 /// Plays a single haptic or a timed pattern without retaining widget state.
 class HapticDriver extends Driver {
   const HapticDriver({HapticPlayer? player}) : _custom = player;
@@ -231,6 +252,30 @@ class HapticDriver extends Driver {
     }
 
     final variant = _str(ctx.params['variant']);
+
+    // A preset is taps only; without tap support it plays nothing.
+    final preset = hapticPresets[variant];
+    if (preset != null) {
+      if (await _player.supportsTaps()) {
+        await HapticSemantics.tap(
+          preset,
+          player: _player,
+          isCancelled: () => ctx.isCancelled,
+        );
+      }
+      return null;
+    }
+
+    // Without tap support a legacy name keeps its platform feedback below.
+    final legacy = legacyPresets[variant];
+    if (legacy != null && await _player.supportsTaps()) {
+      await HapticSemantics.tap(
+        legacy,
+        player: _player,
+        isCancelled: () => ctx.isCancelled,
+      );
+      return null;
+    }
 
     final played = await HapticSemantics.play(
       variant,

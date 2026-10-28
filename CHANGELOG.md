@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+
+- New `sys_haptic` `variant` presets: the 45 tap-only presets of Software
+  Mansion's Pulsar (MIT), in snake_case (e.g. `crescendo`, `bass_drop`,
+  `tick_tock`). They play as native taps on devices that support them
+  (Android plays click primitives; sharpness is iOS only) and play nothing on
+  devices without native taps. A valid `pattern` still takes precedence.
+- **Changed:** on devices with native taps, `sys_haptic` `variant` `light`,
+  `success`, `warning` and `error` now play native taps (light 0.5; success
+  0.5 then 0.7 after 70 ms; warning two 0.7 taps 130 ms apart; error three 1.0
+  taps 130 ms apart) instead of platform impulses, so Android `error` no
+  longer uses vibrate there. `intensity` does not change these taps. Devices
+  without native taps play the same impulses as before, and `medium`,
+  `heavy`, `strong`, `selection` and `vibrate` are unchanged everywhere.
+
 ## 0.4.0
 
 - New `sys_haptic` parameter `pattern`: a list of short native taps, each with

@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/runtime/driver/haptic_driver.dart';
+import 'package:sdui_engine/src/runtime/driver/haptic/haptic_driver.dart';
 
 const _channel = MethodChannel('sdui_engine/haptic');
 

@@ -1,12 +1,12 @@
 # `sys_haptic`
 
-The `sys_haptic` command plays a pattern of native taps, a semantic multi-pulse rhythm, or a single platform haptic.
+The `sys_haptic` command plays a pattern of native taps, a named tap preset, a semantic multi-pulse rhythm, or a single platform haptic.
 
 | Parameter | Type | Allowed values | Default | Bindable (`${}`) | Description |
 | --- | --- | --- | --- | --- | --- |
 | `pattern` | list of maps | pulses (below) | none | Yes | Native taps. Played instead of `variant` when the device supports native taps. |
-| `variant` | string | `success`, `warning`, `error`, `light`, `medium`, `heavy`, `strong`, `selection`, `vibrate` | none | Yes | Rhythm or impulse vocabulary. A missing or unknown value plays nothing. |
-| `intensity` | string | `light`, `medium`, `strong`, `heavy` | rhythm base | Yes | Overrides the strength of `success` / `warning` / `error`; `heavy` aliases strong. |
+| `variant` | string | a [preset](#presets), or `success`, `warning`, `error`, `light`, `medium`, `heavy`, `strong`, `selection`, `vibrate` | none | Yes | Preset, rhythm or impulse vocabulary. A missing or unknown value plays nothing. |
+| `intensity` | string | `light`, `medium`, `strong`, `heavy` | rhythm base | Yes | Overrides the strength of the `success` / `warning` / `error` rhythms (devices without native taps); `heavy` aliases strong. |
 
 Each `pattern` item is one short transient tap (never a continuous buzz):
 
@@ -21,12 +21,43 @@ Out-of-range values are clamped; a missing or non-numeric key takes its default.
 ## Which haptic plays
 
 1. `pattern` is present and valid and the device supports native taps → the taps play; `variant` is ignored.
-2. Otherwise `variant` names a rhythm or impulse → it plays as before 0.4.0.
-3. Otherwise nothing plays.
+2. Otherwise `variant` names a [preset](#presets) → its taps play if the device supports native taps; otherwise nothing plays.
+3. Otherwise `variant` names a [legacy tap preset](#legacy-tap-presets) (`light`, `success`, `warning`, `error`) and the device supports native taps → its taps play.
+4. Otherwise `variant` names a rhythm or impulse → it plays as before 0.4.0 (this is where devices without native taps play `light` / `success` / `warning` / `error`).
+5. Otherwise nothing plays.
 
-Give a `variant` beside a `pattern` when devices without native taps should still feel something.
+Give a rhythm or impulse `variant` beside a `pattern` when devices without native taps should still feel something.
 
-`success` is two pulses 70 ms apart (light then medium by default); `warning` is two medium pulses 130 ms apart; `error` is three strong pulses 130 ms apart. `light`, `medium`, `heavy`/`strong`, `selection` and `vibrate` are single impulses. Strong uses vibrate on Android and heavy impact elsewhere. Cancellation is checked before each pulse and after each delay.
+Without native taps, `success` is two pulses 70 ms apart (light then medium by default); `warning` is two medium pulses 130 ms apart; `error` is three strong pulses 130 ms apart. `light`, `medium`, `heavy`/`strong`, `selection` and `vibrate` are single impulses. Strong uses vibrate on Android and heavy impact elsewhere. `intensity` applies only to these platform impulses, not to taps. Cancellation is checked before each pulse and after each delay.
+
+## Legacy tap presets
+
+Since 0.5.0, on devices with native taps, four legacy names play taps instead of platform impulses (sharpness 0.5; strengths light 0.5 / medium 0.7 / strong 1.0, subject to tuning on devices):
+
+| `variant` | Taps |
+| --- | --- |
+| `light` | 0.5 |
+| `success` | 0.5, then 0.7 after 70 ms |
+| `warning` | 0.7, then 0.7 after 130 ms |
+| `error` | 1.0, then 1.0 after 130 ms, then 1.0 after 130 ms |
+
+On Android this means `error` no longer uses vibrate on such devices. `medium`, `heavy`, `strong`, `selection` and `vibrate` keep their platform impulses everywhere, and devices without native taps are unchanged.
+
+## Presets
+
+Since 0.5.0 `variant` also accepts these 45 tap presets:
+
+`afterglow`, `aftershock`, `barrage`, `bass_drop`, `bell_toll`, `bongo`, `boulder`, `breaking_wave`, `buildup`, `cadence`, `canter`, `cascade`, `castanets`, `cat_paw`, `chip`, `crescendo`, `fade_out`, `finger_drum`, `firecracker`, `gallop`, `gavel`, `herald`, `hoof_beat`, `ignition`, `jolt`, `murmur`, `patter`, `piston`, `plunk`, `rap`, `ratchet`, `rebound`, `rivet`, `stampede`, `stomp`, `stone_skip`, `syncopate`, `thump`, `thunder_roll`, `tick_tock`, `tidal_surge`, `tide_swell`, `tremor`, `war_drum`, `waterfall`
+
+They are the tap-only (discrete-only) presets of Software Mansion's [Pulsar](https://github.com/software-mansion/pulsar) (MIT, © 2025 Krzysztof Piaskowy), with names in snake_case. Each plays like a `pattern`:
+
+- Taps only, so Android plays click primitives scaled by intensity. Sharpness is iOS only, so presets that differ only in sharpness feel the same on Android.
+- A device without native taps plays nothing for a preset name; there is no rhythm fallback.
+
+```yaml
+_type: sys_haptic
+variant: crescendo
+```
 
 ## Native tap support
 

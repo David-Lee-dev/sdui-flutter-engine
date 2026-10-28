@@ -1,6 +1,6 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_engine/src/runtime/driver/haptic_driver.dart';
+import 'package:sdui_engine/src/runtime/driver/haptic/haptic_driver.dart';
 import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/environment/state_writer.dart';
 
@@ -236,7 +236,150 @@ void main() {
       });
     });
 
-    group('legacy variant (지원 기기, pattern 없음)', () {
+    group('preset variant', () {
+      const legacy = {
+        'success',
+        'warning',
+        'error',
+        'light',
+        'medium',
+        'heavy',
+        'strong',
+        'selection',
+        'vibrate',
+      };
+
+      test('지원 기기에서 crescendo는 표의 세기·날카로움·간격대로 7번 친다', () {
+        final taps = _FakeHapticPlayer(taps: true);
+        const expected = [
+          (1, 'tap:0.303/0.303'),
+          (98, 'tap:0.397/0.397'),
+          (103, 'tap:0.506/0.506'),
+          (98, 'tap:0.609/0.609'),
+          (99, 'tap:0.703/0.703'),
+          (103, 'tap:0.809/0.809'),
+          (99, 'tap:0.981/0.981'),
+        ];
+        fakeAsync((async) {
+          HapticDriver(player: taps).run(_ctx(const {'variant': 'crescendo'}));
+
+          async.flushMicrotasks();
+          for (var i = 0; i < expected.length; i++) {
+            final (delay, call) = expected[i];
+            async.elapse(Duration(milliseconds: delay - 1));
+            expect(taps.calls, hasLength(i), reason: call);
+            async.elapse(const Duration(milliseconds: 1));
+            expect(taps.calls, [for (final e in expected.take(i + 1)) e.$2]);
+          }
+          async.elapse(const Duration(seconds: 1));
+          expect(taps.calls, hasLength(7));
+        });
+      });
+
+      test('미지원 기기에서 preset 이름은 아무것도 안 친다', () async {
+        await driver.run(_ctx(const {'variant': 'crescendo'}));
+        expect(player.calls, isEmpty);
+      });
+
+      test('pattern이 있으면 preset 대신 pattern을 친다', () async {
+        final taps = _FakeHapticPlayer(taps: true);
+        await HapticDriver(player: taps).run(
+          _ctx(const {
+            'variant': 'crescendo',
+            'pattern': [
+              {'intensity': 0.4},
+            ],
+          }),
+        );
+        expect(taps.calls, ['tap:0.4/0.5']);
+      });
+
+      test('표 무결성 — 45개, 비어 있지 않음, 값 범위, snake_case, legacy와 안 겹침', () {
+        expect(hapticPresets, hasLength(45));
+        for (final MapEntry(:key, :value) in hapticPresets.entries) {
+          expect(key, matches(RegExp(r'^[a-z]+(_[a-z]+)*$')));
+          expect(legacy, isNot(contains(key)), reason: key);
+          expect(value, isNotEmpty, reason: key);
+          for (final p in value) {
+            expect(p.intensity, inInclusiveRange(0, 1), reason: key);
+            expect(p.sharpness, inInclusiveRange(0, 1), reason: key);
+            expect(p.delay, greaterThanOrEqualTo(Duration.zero), reason: key);
+          }
+        }
+      });
+    });
+
+    group('legacy preset (지원 기기)', () {
+      test('success는 0.5 tap, 정확히 70ms 뒤 0.7 tap', () {
+        final taps = _FakeHapticPlayer(taps: true);
+        fakeAsync((async) {
+          HapticDriver(player: taps).run(_ctx(const {'variant': 'success'}));
+
+          async.flushMicrotasks();
+          expect(taps.calls, ['tap:0.5/0.5']);
+          async.elapse(const Duration(milliseconds: 69));
+          expect(taps.calls, ['tap:0.5/0.5']);
+          async.elapse(const Duration(milliseconds: 1));
+          expect(taps.calls, ['tap:0.5/0.5', 'tap:0.7/0.5']);
+          async.elapse(const Duration(seconds: 1));
+          expect(taps.calls, hasLength(2));
+        });
+      });
+
+      test('error는 1.0 tap 3번, warning은 0.7 tap 2번 — 130ms 간격', () {
+        final taps = _FakeHapticPlayer(taps: true);
+        fakeAsync((async) {
+          for (final (variant, call, count) in [
+            ('error', 'tap:1.0/0.5', 3),
+            ('warning', 'tap:0.7/0.5', 2),
+          ]) {
+            taps.calls.clear();
+            HapticDriver(player: taps).run(_ctx({'variant': variant}));
+
+            async.flushMicrotasks();
+            expect(taps.calls, [call], reason: variant);
+            for (var i = 2; i <= count; i++) {
+              async.elapse(const Duration(milliseconds: 129));
+              expect(taps.calls, hasLength(i - 1), reason: variant);
+              async.elapse(const Duration(milliseconds: 1));
+              expect(taps.calls, List.filled(i, call), reason: variant);
+            }
+            async.elapse(const Duration(seconds: 1));
+            expect(taps.calls, hasLength(count), reason: variant);
+          }
+        });
+      });
+
+      test('light는 0.5 tap 한 번', () async {
+        final taps = _FakeHapticPlayer(taps: true);
+        await HapticDriver(player: taps).run(_ctx(const {'variant': 'light'}));
+        expect(taps.calls, ['tap:0.5/0.5']);
+      });
+
+      test('intensity 이름은 legacy preset tap을 바꾸지 않는다', () async {
+        final taps = _FakeHapticPlayer(taps: true);
+        await HapticDriver(
+          player: taps,
+        ).run(_ctx(const {'variant': 'warning', 'intensity': 'heavy'}));
+        expect(taps.calls, ['tap:0.7/0.5', 'tap:0.7/0.5']);
+      });
+
+      test('표 무결성 — 4개 키, 값 범위, delay >= 0', () {
+        expect(
+          legacyPresets.keys,
+          unorderedEquals(const ['light', 'success', 'warning', 'error']),
+        );
+        for (final MapEntry(:key, :value) in legacyPresets.entries) {
+          for (final p in value) {
+            expect(p.intensity, inInclusiveRange(0, 1), reason: key);
+            expect(p.sharpness, inInclusiveRange(0, 1), reason: key);
+            expect(p.delay, greaterThanOrEqualTo(Duration.zero), reason: key);
+          }
+        }
+      });
+    });
+
+    group('legacy variant (지원 기기, legacy preset 밖)', () {
       late _FakeHapticPlayer taps;
 
       setUp(() => taps = _FakeHapticPlayer(taps: true));
@@ -248,6 +391,22 @@ void main() {
       }
 
       test('각 이름은 예전 호출 그대로', () async {
+        expect(await play({'variant': 'medium'}), ['impact:medium']);
+        expect(await play({'variant': 'heavy'}), ['impact:strong']);
+        expect(await play({'variant': 'strong'}), ['impact:strong']);
+        expect(await play({'variant': 'selection'}), ['selection']);
+        expect(await play({'variant': 'vibrate'}), ['vibrate']);
+      });
+    });
+
+    group('legacy variant (미지원 기기)', () {
+      Future<List<String>> play(Map<String, Object?> params) async {
+        player.calls.clear();
+        await driver.run(_ctx(params));
+        return List.of(player.calls);
+      }
+
+      test('legacy preset 이름도 예전 호출 그대로', () async {
         expect(await play({'variant': 'success'}), [
           'impact:light',
           'impact:medium',
@@ -262,11 +421,6 @@ void main() {
           'impact:strong',
         ]);
         expect(await play({'variant': 'light'}), ['impact:light']);
-        expect(await play({'variant': 'medium'}), ['impact:medium']);
-        expect(await play({'variant': 'heavy'}), ['impact:strong']);
-        expect(await play({'variant': 'strong'}), ['impact:strong']);
-        expect(await play({'variant': 'selection'}), ['selection']);
-        expect(await play({'variant': 'vibrate'}), ['vibrate']);
       });
 
       test('리듬 간격 — success 70ms, warning·error 130ms', () {
@@ -276,14 +430,14 @@ void main() {
             ('warning', 130),
             ('error', 130),
           ]) {
-            taps.calls.clear();
-            HapticDriver(player: taps).run(_ctx({'variant': variant}));
+            player.calls.clear();
+            driver.run(_ctx({'variant': variant}));
             async.flushMicrotasks();
-            expect(taps.calls, hasLength(1), reason: variant);
+            expect(player.calls, hasLength(1), reason: variant);
             async.elapse(Duration(milliseconds: gap - 1));
-            expect(taps.calls, hasLength(1), reason: variant);
+            expect(player.calls, hasLength(1), reason: variant);
             async.elapse(const Duration(milliseconds: 1));
-            expect(taps.calls, hasLength(2), reason: variant);
+            expect(player.calls, hasLength(2), reason: variant);
             async.elapse(const Duration(seconds: 1));
           }
         });

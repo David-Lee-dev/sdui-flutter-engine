@@ -6,7 +6,7 @@ import '_base.dart';
 import 'anchoring_driver.dart';
 import 'net_driver.dart';
 import 'app_storage_driver.dart';
-import 'haptic_driver.dart';
+import 'haptic/haptic_driver.dart';
 import 'secure_storage_driver.dart';
 import 'navigate_driver.dart';
 import 'scroll_driver.dart';
