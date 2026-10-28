@@ -40,5 +40,5 @@ This reference documents the template language implemented by the engine, from s
 - [`set`](commands/set.md) — commit values to the defining scope.
 - [`app_storage`](commands/app-storage.md) — get/set values and calendar-day throttling stamps.
 - [`secure_storage`](commands/secure-storage.md) — read/write/delete secure strings.
-- [`sys_haptic`](commands/sys-haptic.md) — platform haptic impulses and semantic patterns.
+- [`sys_haptic`](commands/sys-haptic.md) — native tap patterns, platform haptic impulses and semantic rhythms.
 - [External commands](commands/external.md) — app-owned commands registered through `SduiService`.

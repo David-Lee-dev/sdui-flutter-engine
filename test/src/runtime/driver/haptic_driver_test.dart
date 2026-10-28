@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/driver/haptic_driver.dart';
 import 'package:sdui_engine/src/runtime/driver/_base.dart';
@@ -5,7 +6,18 @@ import 'package:sdui_engine/src/runtime/environment/state_writer.dart';
 
 /// 실제 진동 없이 호출 시퀀스를 기록하는 fake player.
 class _FakeHapticPlayer implements HapticPlayer {
+  _FakeHapticPlayer({this.taps = false});
+
+  /// 기기가 native tap을 지원하는지.
+  final bool taps;
   final calls = <String>[];
+
+  @override
+  Future<bool> supportsTaps() async => taps;
+
+  @override
+  Future<void> tap(double intensity, double sharpness) async =>
+      calls.add('tap:$intensity/$sharpness');
 
   @override
   Future<void> impact(HapticLevel level) async =>
@@ -40,10 +52,255 @@ void main() {
       driver = HapticDriver(player: player);
     });
 
+    group('pattern', () {
+      test('지원 기기는 variant를 무시하고 tap을 값 clamp·delay대로 친다', () {
+        final taps = _FakeHapticPlayer(taps: true);
+        fakeAsync((async) {
+          HapticDriver(player: taps).run(
+            _ctx(const {
+              'variant': 'error',
+              'pattern': [
+                {'intensity': 0.4},
+                {'intensity': 1.5, 'sharpness': 0.7, 'delay': 90},
+                {'intensity': 0.2, 'sharpness': 2, 'delay': 90},
+              ],
+            }),
+          );
+
+          async.flushMicrotasks();
+          expect(taps.calls, ['tap:0.4/0.5']);
+          async.elapse(const Duration(milliseconds: 89));
+          expect(taps.calls, hasLength(1));
+          async.elapse(const Duration(milliseconds: 1));
+          expect(taps.calls, ['tap:0.4/0.5', 'tap:1.0/0.7']);
+          async.elapse(const Duration(milliseconds: 90));
+          expect(taps.calls, ['tap:0.4/0.5', 'tap:1.0/0.7', 'tap:0.2/1.0']);
+          async.elapse(const Duration(seconds: 1));
+          expect(taps.calls, hasLength(3));
+        });
+      });
+
+      test('첫 펄스의 delay는 그 앞의 대기, 음수 delay는 0', () {
+        final taps = _FakeHapticPlayer(taps: true);
+        fakeAsync((async) {
+          HapticDriver(player: taps).run(
+            _ctx(const {
+              'pattern': [
+                {'delay': 50},
+                {'delay': -30},
+              ],
+            }),
+          );
+
+          async.elapse(const Duration(milliseconds: 49));
+          expect(taps.calls, isEmpty);
+          async.elapse(const Duration(milliseconds: 1));
+          expect(taps.calls, ['tap:1.0/0.5', 'tap:1.0/0.5']);
+        });
+      });
+
+      test('intensity 0(음수 clamp 포함) 펄스는 치지 않고 delay만 지킨다', () {
+        final taps = _FakeHapticPlayer(taps: true);
+        fakeAsync((async) {
+          HapticDriver(player: taps).run(
+            _ctx(const {
+              'pattern': [
+                {'intensity': 0.5},
+                {'intensity': 0, 'delay': 100},
+                {'intensity': 0.7, 'delay': 100},
+                {'intensity': -1, 'delay': 100},
+              ],
+            }),
+          );
+
+          async.flushMicrotasks();
+          expect(taps.calls, ['tap:0.5/0.5']);
+          async.elapse(const Duration(milliseconds: 199));
+          expect(taps.calls, ['tap:0.5/0.5']);
+          async.elapse(const Duration(milliseconds: 1));
+          expect(taps.calls, ['tap:0.5/0.5', 'tap:0.7/0.5']);
+          async.elapse(const Duration(seconds: 1));
+          expect(taps.calls, ['tap:0.5/0.5', 'tap:0.7/0.5']);
+        });
+      });
+
+      test('빠졌거나 숫자가 아닌 키는 기본값 intensity 1, sharpness 0.5, delay 0', () {
+        final taps = _FakeHapticPlayer(taps: true);
+        fakeAsync((async) {
+          HapticDriver(player: taps).run(
+            _ctx(const {
+              'pattern': [
+                <String, Object?>{},
+                {'intensity': 'x', 'sharpness': null, 'delay': '90'},
+              ],
+            }),
+          );
+
+          async.flushMicrotasks();
+          expect(taps.calls, ['tap:1.0/0.5', 'tap:1.0/0.5']);
+        });
+      });
+
+      test('미지원 기기는 legacy variant로 친다', () async {
+        await driver.run(
+          _ctx(const {
+            'variant': 'success',
+            'pattern': [
+              {'intensity': 0.4},
+            ],
+          }),
+        );
+        expect(player.calls, ['impact:light', 'impact:medium']);
+      });
+
+      test('미지원 기기에 variant가 없거나 모르는 이름이면 아무것도 안 친다', () async {
+        const pattern = [
+          {'intensity': 0.4},
+        ];
+        await driver.run(_ctx(const {'pattern': pattern}));
+        await driver.run(_ctx(const {'pattern': pattern, 'variant': 'wave'}));
+        expect(player.calls, isEmpty);
+      });
+
+      test('비어 있지 않은 map 목록이 아니면 pattern이 없는 것으로 본다', () async {
+        final taps = _FakeHapticPlayer(taps: true);
+        const malformed = <Object?>[
+          'buzz',
+          <Object?>[],
+          [1, 2],
+          {'intensity': 0.4},
+          [
+            {'intensity': 0.4},
+            3,
+          ],
+        ];
+        for (final pattern in malformed) {
+          await HapticDriver(
+            player: taps,
+          ).run(_ctx({'variant': 'medium', 'pattern': pattern}));
+        }
+        expect(taps.calls, List.filled(malformed.length, 'impact:medium'));
+      });
+
+      test('첫 펄스 전에 취소되면 아무것도 안 친다', () async {
+        final taps = _FakeHapticPlayer(taps: true);
+        await HapticDriver(player: taps).run(
+          _ctx(const {
+            'pattern': [
+              {'intensity': 0.4},
+            ],
+          }, cancelled: true),
+        );
+        expect(taps.calls, isEmpty);
+      });
+
+      test('펄스 사이에 취소되면 남은 펄스를 멈춘다', () async {
+        final taps = _FakeHapticPlayer(taps: true);
+        await HapticDriver(player: taps).run(
+          DriverContext(
+            params: const {
+              'pattern': [
+                {'intensity': 0.4},
+                {'intensity': 0.9},
+              ],
+            },
+            state: _NoState(),
+            isCancelled: () => taps.calls.isNotEmpty,
+          ),
+        );
+        expect(taps.calls, ['tap:0.4/0.5']);
+      });
+
+      test('delay 동안 취소되면 그 뒤 펄스를 치지 않는다', () {
+        final taps = _FakeHapticPlayer(taps: true);
+        var cancelled = false;
+        fakeAsync((async) {
+          HapticDriver(player: taps).run(
+            DriverContext(
+              params: const {
+                'pattern': [
+                  {'intensity': 0.4},
+                  {'intensity': 0.9, 'delay': 90},
+                ],
+              },
+              state: _NoState(),
+              isCancelled: () => cancelled,
+            ),
+          );
+
+          async.elapse(const Duration(milliseconds: 40));
+          cancelled = true;
+          async.elapse(const Duration(seconds: 1));
+          expect(taps.calls, ['tap:0.4/0.5']);
+        });
+      });
+    });
+
+    group('legacy variant (지원 기기, pattern 없음)', () {
+      late _FakeHapticPlayer taps;
+
+      setUp(() => taps = _FakeHapticPlayer(taps: true));
+
+      Future<List<String>> play(Map<String, Object?> params) async {
+        taps.calls.clear();
+        await HapticDriver(player: taps).run(_ctx(params));
+        return List.of(taps.calls);
+      }
+
+      test('각 이름은 예전 호출 그대로', () async {
+        expect(await play({'variant': 'success'}), [
+          'impact:light',
+          'impact:medium',
+        ]);
+        expect(await play({'variant': 'warning'}), [
+          'impact:medium',
+          'impact:medium',
+        ]);
+        expect(await play({'variant': 'error'}), [
+          'impact:strong',
+          'impact:strong',
+          'impact:strong',
+        ]);
+        expect(await play({'variant': 'light'}), ['impact:light']);
+        expect(await play({'variant': 'medium'}), ['impact:medium']);
+        expect(await play({'variant': 'heavy'}), ['impact:strong']);
+        expect(await play({'variant': 'strong'}), ['impact:strong']);
+        expect(await play({'variant': 'selection'}), ['selection']);
+        expect(await play({'variant': 'vibrate'}), ['vibrate']);
+      });
+
+      test('리듬 간격 — success 70ms, warning·error 130ms', () {
+        fakeAsync((async) {
+          for (final (variant, gap) in [
+            ('success', 70),
+            ('warning', 130),
+            ('error', 130),
+          ]) {
+            taps.calls.clear();
+            HapticDriver(player: taps).run(_ctx({'variant': variant}));
+            async.flushMicrotasks();
+            expect(taps.calls, hasLength(1), reason: variant);
+            async.elapse(Duration(milliseconds: gap - 1));
+            expect(taps.calls, hasLength(1), reason: variant);
+            async.elapse(const Duration(milliseconds: 1));
+            expect(taps.calls, hasLength(2), reason: variant);
+            async.elapse(const Duration(seconds: 1));
+          }
+        });
+      });
+
+      test('intensity 이름이 리듬의 base를 덮는다 — heavy는 strong', () async {
+        expect(await play({'variant': 'warning', 'intensity': 'heavy'}), [
+          'impact:strong',
+          'impact:strong',
+        ]);
+      });
+    });
+
     group('run', () {
-      test('variant 없으면 light 단발', () async {
+      test('variant 없으면 아무것도 안 친다 (0.4.0부터, 예전엔 light 단발)', () async {
         await driver.run(_ctx(const {}));
-        expect(player.calls, ['impact:light']);
+        expect(player.calls, isEmpty);
       });
 
       test(
@@ -86,9 +343,9 @@ void main() {
         expect(player.calls, ['impact:strong']);
       });
 
-      test('미지 variant는 light로 폴백', () async {
+      test('미지 variant는 아무것도 안 친다 (0.4.0부터, 예전엔 light 폴백)', () async {
         await driver.run(_ctx(const {'variant': 'nonsense'}));
-        expect(player.calls, ['impact:light']);
+        expect(player.calls, isEmpty);
       });
 
       test('반환은 null', () async {

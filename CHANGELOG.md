@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0
+
+- New `sys_haptic` parameter `pattern`: a list of short native taps, each with
+  `intensity` and `sharpness` (0–1, sharpness iOS only) and `delay` (ms after
+  the previous tap). It plays on devices with native taps (iOS Core Haptics;
+  Android 11+ with the click composition primitive) and overrides `variant`
+  there; elsewhere `variant` plays as before. A tap with intensity 0 is
+  skipped but keeps its delay.
+- **Changed:** a `sys_haptic` with a missing or unknown `variant` (and no
+  playable `pattern`) now plays nothing instead of a light impact. Write
+  `variant: light` for a light impact.
+- The package is now a Flutter plugin (Android and iOS native code; Android
+  declares `android.permission.VIBRATE`). Apps must do a full rebuild after
+  upgrading.
+
 ## 0.3.4
 
 - Fix: inside nested scrollables (e.g. a list in a `tab_bar_view` under a
