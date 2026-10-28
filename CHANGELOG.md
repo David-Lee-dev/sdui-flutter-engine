@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1
+
+- Internal: the Pulsar presets are split into a basic (45 tap-only) table and
+  a continuous (106) table; preset values and `sys_haptic` behavior are
+  unchanged.
+- Docs: `sys_haptic` lists basic and continuous presets separately and notes
+  that most Android devices are silent for continuous presets (e.g. a Galaxy
+  Z Flip6 on Android 16 reports no envelope effects).
+
 ## 0.5.0
 
 - New `sys_haptic` `variant` presets: all 151 presets of Software Mansion's

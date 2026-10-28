@@ -296,7 +296,7 @@ void main() {
         final both = _FakeHapticPlayer(taps: true, continuous: true);
         await HapticDriver(player: both).run(_ctx(const {'variant': 'anvil'}));
         expect(both.calls, ['play']);
-        expect(both.played.single, same(hapticPresets['anvil']));
+        expect(both.played.single, same(continuousPresets['anvil']));
       });
 
       test('continuous 재생 중 취소되면 50ms 안에 stop한다', () {
@@ -379,38 +379,54 @@ void main() {
         expect(taps.calls, ['tap:0.4/0.5']);
       });
 
-      test(
-        '표 무결성 — 151개(continuous 106), 값 범위, 시간 순서, snake_case, legacy와 안 겹침',
-        () {
-          expect(hapticPresets, hasLength(151));
-          expect(
-            hapticPresets.values.where((p) => p.isContinuous),
-            hasLength(106),
-          );
-          for (final MapEntry(:key, :value) in hapticPresets.entries) {
-            expect(key, matches(RegExp(r'^[a-z]+(_[a-z]+)*$')));
-            expect(legacy, isNot(contains(key)), reason: key);
-            expect(
-              value.taps.isNotEmpty || value.isContinuous,
-              isTrue,
-              reason: key,
-            );
-            for (final p in value.taps) {
-              expect(p.intensity, inInclusiveRange(0, 1), reason: key);
-              expect(p.sharpness, inInclusiveRange(0, 1), reason: key);
-              expect(p.delay, greaterThanOrEqualTo(Duration.zero), reason: key);
-            }
-            for (final curve in [value.intensity, value.sharpness]) {
-              var last = 0;
-              for (final (ms, v) in curve) {
-                expect(ms, greaterThanOrEqualTo(last), reason: key);
-                expect(v, inInclusiveRange(0, 1), reason: key);
-                last = ms;
-              }
+      void expectPulses(String key, List<HapticPulse> pulses) {
+        for (final p in pulses) {
+          expect(p.intensity, inInclusiveRange(0, 1), reason: key);
+          expect(p.sharpness, inInclusiveRange(0, 1), reason: key);
+          expect(p.delay, greaterThanOrEqualTo(Duration.zero), reason: key);
+        }
+      }
+
+      final snakeCase = matches(RegExp(r'^[a-z]+(_[a-z]+)*$'));
+
+      test('basic 표 무결성 — 45개, 비어 있지 않음, 값 범위, delay >= 0, snake_case', () {
+        expect(basicPresets, hasLength(45));
+        for (final MapEntry(:key, :value) in basicPresets.entries) {
+          expect(key, snakeCase);
+          expect(value, isNotEmpty, reason: key);
+          expectPulses(key, value);
+        }
+      });
+
+      test('continuous 표 무결성 — 106개, 두 곡선 모두 있음, 값 범위, 시간 순서, snake_case', () {
+        expect(continuousPresets, hasLength(106));
+        for (final MapEntry(:key, :value) in continuousPresets.entries) {
+          expect(key, snakeCase);
+          expect(value.intensity, isNotEmpty, reason: key);
+          expect(value.sharpness, isNotEmpty, reason: key);
+          expectPulses(key, value.taps);
+          for (final curve in [value.intensity, value.sharpness]) {
+            var last = 0;
+            for (final (ms, v) in curve) {
+              expect(ms, greaterThanOrEqualTo(last), reason: key);
+              expect(v, inInclusiveRange(0, 1), reason: key);
+              last = ms;
             }
           }
-        },
-      );
+        }
+      });
+
+      test('basic·continuous·legacy 표끼리, legacy 이름과 이름이 겹치지 않는다', () {
+        final names = [
+          ...basicPresets.keys,
+          ...continuousPresets.keys,
+          ...legacyPresets.keys,
+        ];
+        expect(names.toSet(), hasLength(names.length));
+        for (final key in [...basicPresets.keys, ...continuousPresets.keys]) {
+          expect(legacy, isNot(contains(key)), reason: key);
+        }
+      });
     });
 
     group('legacy preset (지원 기기)', () {

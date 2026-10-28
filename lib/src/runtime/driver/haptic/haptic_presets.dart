@@ -1,8 +1,10 @@
 // The 151 presets of Software Mansion's Pulsar
 // (https://github.com/software-mansion/pulsar, commit
-// abdee706282598ab0194ba739dce835dc828f164). Names are converted to
-// snake_case, absolute tap event times to per-pulse delays, and continuous
-// curves are kept as (ms from start, value) points.
+// abdee706282598ab0194ba739dce835dc828f164), split into the 45 tap-only
+// presets (basicPresets) and the 106 presets with continuous curves
+// (continuousPresets). Names are converted to snake_case, absolute tap event
+// times to per-pulse delays, and continuous curves are kept as (ms from
+// start, value) points.
 //
 // MIT License
 //
@@ -28,50 +30,883 @@
 
 part of 'haptic_driver.dart';
 
-/// Named patterns a `sys_haptic` `variant` can play: tap-only presets on a
-/// tap-capable device, continuous ones on a device with continuous haptics.
-const Map<String, HapticPattern> hapticPresets = {
-  'afterglow': HapticPattern(
+/// Tap-only presets: short native taps, played on a tap-capable device.
+const Map<String, List<HapticPulse>> basicPresets = {
+  'afterglow': [
     // Afterglow
-    taps: [
-      HapticPulse(intensity: 1, sharpness: 0.3),
-      HapticPulse(
-        intensity: 0.703,
-        sharpness: 0.203,
-        delay: Duration(milliseconds: 75),
-      ),
-      HapticPulse(
-        intensity: 0.5,
-        sharpness: 0.1,
-        delay: Duration(milliseconds: 75),
-      ),
-    ],
-  ),
-  'aftershock': HapticPattern(
+    HapticPulse(intensity: 1, sharpness: 0.3),
+    HapticPulse(
+      intensity: 0.703,
+      sharpness: 0.203,
+      delay: Duration(milliseconds: 75),
+    ),
+    HapticPulse(
+      intensity: 0.5,
+      sharpness: 0.1,
+      delay: Duration(milliseconds: 75),
+    ),
+  ],
+  'aftershock': [
     // Aftershock
-    taps: [
-      HapticPulse(
-        intensity: 0.8,
-        sharpness: 0.8,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.5,
-        sharpness: 0.247,
-        delay: Duration(milliseconds: 298),
-      ),
-      HapticPulse(
-        intensity: 0.494,
-        sharpness: 0.266,
-        delay: Duration(milliseconds: 100),
-      ),
-      HapticPulse(
-        intensity: 0.497,
-        sharpness: 0.263,
-        delay: Duration(milliseconds: 101),
-      ),
-    ],
-  ),
+    HapticPulse(
+      intensity: 0.8,
+      sharpness: 0.8,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.5,
+      sharpness: 0.247,
+      delay: Duration(milliseconds: 298),
+    ),
+    HapticPulse(
+      intensity: 0.494,
+      sharpness: 0.266,
+      delay: Duration(milliseconds: 100),
+    ),
+    HapticPulse(
+      intensity: 0.497,
+      sharpness: 0.263,
+      delay: Duration(milliseconds: 101),
+    ),
+  ],
+  'barrage': [
+    // Barrage
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.994,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.994,
+      delay: Duration(milliseconds: 50),
+    ),
+    HapticPulse(
+      intensity: 0.991,
+      sharpness: 0.991,
+      delay: Duration(milliseconds: 49),
+    ),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 56)),
+    HapticPulse(
+      intensity: 0.991,
+      sharpness: 0.991,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 52)),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 49)),
+  ],
+  'bass_drop': [
+    // BassDrop
+    HapticPulse(intensity: 1, sharpness: 0.509),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.069,
+      delay: Duration(milliseconds: 71),
+    ),
+  ],
+  'bell_toll': [
+    // BellToll
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.903,
+      delay: Duration(milliseconds: 10),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.513,
+      delay: Duration(milliseconds: 191),
+    ),
+    HapticPulse(
+      intensity: 0.997,
+      sharpness: 0.147,
+      delay: Duration(milliseconds: 198),
+    ),
+  ],
+  'bongo': [
+    // Bongo
+    HapticPulse(
+      intensity: 0.594,
+      sharpness: 0.594,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.588,
+      sharpness: 0.588,
+      delay: Duration(milliseconds: 72),
+    ),
+    HapticPulse(
+      intensity: 0.588,
+      sharpness: 0.588,
+      delay: Duration(milliseconds: 78),
+    ),
+    HapticPulse(
+      intensity: 0.4,
+      sharpness: 0.4,
+      delay: Duration(milliseconds: 148),
+    ),
+    HapticPulse(
+      intensity: 0.394,
+      sharpness: 0.394,
+      delay: Duration(milliseconds: 81),
+    ),
+    HapticPulse(
+      intensity: 0.394,
+      sharpness: 0.394,
+      delay: Duration(milliseconds: 71),
+    ),
+  ],
+  'boulder': [
+    // Boulder
+    HapticPulse(intensity: 1, sharpness: 0.2),
+  ],
+  'breaking_wave': [
+    // BreakingWave
+    HapticPulse(intensity: 0.497, sharpness: 0.497),
+    HapticPulse(
+      intensity: 0.497,
+      sharpness: 0.497,
+      delay: Duration(milliseconds: 89),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.1,
+      delay: Duration(milliseconds: 113),
+    ),
+  ],
+  'buildup': [
+    // Buildup
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.053,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.122,
+      delay: Duration(milliseconds: 50),
+    ),
+    HapticPulse(
+      intensity: 0.991,
+      sharpness: 0.228,
+      delay: Duration(milliseconds: 49),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.394,
+      delay: Duration(milliseconds: 56),
+    ),
+    HapticPulse(
+      intensity: 0.991,
+      sharpness: 0.613,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.803,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 49)),
+  ],
+  'cadence': [
+    // Cadence
+    HapticPulse(
+      intensity: 0.809,
+      sharpness: 0.897,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.413,
+      delay: Duration(milliseconds: 198),
+    ),
+  ],
+  'canter': [
+    // Canter
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.203,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.697,
+      sharpness: 0.5,
+      delay: Duration(milliseconds: 76),
+    ),
+    HapticPulse(
+      intensity: 0.703,
+      sharpness: 0.244,
+      delay: Duration(milliseconds: 96),
+    ),
+  ],
+  'cascade': [
+    // Cascade
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.994,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.997,
+      sharpness: 0.997,
+      delay: Duration(milliseconds: 98),
+    ),
+    HapticPulse(
+      intensity: 0.997,
+      sharpness: 0.997,
+      delay: Duration(milliseconds: 100),
+    ),
+    HapticPulse(
+      intensity: 0.8,
+      sharpness: 0.8,
+      delay: Duration(milliseconds: 352),
+    ),
+    HapticPulse(
+      intensity: 0.803,
+      sharpness: 0.803,
+      delay: Duration(milliseconds: 98),
+    ),
+    HapticPulse(
+      intensity: 0.797,
+      sharpness: 0.797,
+      delay: Duration(milliseconds: 102),
+    ),
+    HapticPulse(
+      intensity: 0.5,
+      sharpness: 0.5,
+      delay: Duration(milliseconds: 367),
+    ),
+    HapticPulse(
+      intensity: 0.491,
+      sharpness: 0.491,
+      delay: Duration(milliseconds: 101),
+    ),
+    HapticPulse(
+      intensity: 0.494,
+      sharpness: 0.494,
+      delay: Duration(milliseconds: 99),
+    ),
+    HapticPulse(
+      intensity: 0.497,
+      sharpness: 0.213,
+      delay: Duration(milliseconds: 342),
+    ),
+    HapticPulse(
+      intensity: 0.506,
+      sharpness: 0.209,
+      delay: Duration(milliseconds: 102),
+    ),
+    HapticPulse(
+      intensity: 0.488,
+      sharpness: 0.213,
+      delay: Duration(milliseconds: 101),
+    ),
+  ],
+  'castanets': [
+    // Castanets
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.897,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.9,
+      delay: Duration(milliseconds: 198),
+    ),
+  ],
+  'cat_paw': [
+    // CatPaw
+    HapticPulse(
+      intensity: 0.6,
+      sharpness: 0.3,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.6,
+      sharpness: 0.08,
+      delay: Duration(milliseconds: 74),
+    ),
+  ],
+  'chip': [
+    // Chip
+    HapticPulse(intensity: 0.75, sharpness: 1),
+  ],
+  'crescendo': [
+    // Crescendo
+    HapticPulse(
+      intensity: 0.303,
+      sharpness: 0.303,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.397,
+      sharpness: 0.397,
+      delay: Duration(milliseconds: 98),
+    ),
+    HapticPulse(
+      intensity: 0.506,
+      sharpness: 0.506,
+      delay: Duration(milliseconds: 103),
+    ),
+    HapticPulse(
+      intensity: 0.609,
+      sharpness: 0.609,
+      delay: Duration(milliseconds: 98),
+    ),
+    HapticPulse(
+      intensity: 0.703,
+      sharpness: 0.703,
+      delay: Duration(milliseconds: 99),
+    ),
+    HapticPulse(
+      intensity: 0.809,
+      sharpness: 0.809,
+      delay: Duration(milliseconds: 103),
+    ),
+    HapticPulse(
+      intensity: 0.981,
+      sharpness: 0.981,
+      delay: Duration(milliseconds: 99),
+    ),
+  ],
+  'fade_out': [
+    // FadeOut
+    HapticPulse(intensity: 1, sharpness: 1),
+    HapticPulse(
+      intensity: 0.8,
+      sharpness: 0.8,
+      delay: Duration(milliseconds: 86),
+    ),
+    HapticPulse(
+      intensity: 0.603,
+      sharpness: 0.603,
+      delay: Duration(milliseconds: 106),
+    ),
+    HapticPulse(
+      intensity: 0.406,
+      sharpness: 0.406,
+      delay: Duration(milliseconds: 106),
+    ),
+    HapticPulse(
+      intensity: 0.291,
+      sharpness: 0.209,
+      delay: Duration(milliseconds: 110),
+    ),
+    HapticPulse(
+      intensity: 0.297,
+      sharpness: 0.075,
+      delay: Duration(milliseconds: 98),
+    ),
+  ],
+  'finger_drum': [
+    // FingerDrum
+    HapticPulse(intensity: 0.591, sharpness: 0.591),
+    HapticPulse(
+      intensity: 0.588,
+      sharpness: 0.588,
+      delay: Duration(milliseconds: 100),
+    ),
+    HapticPulse(
+      intensity: 0.6,
+      sharpness: 0.328,
+      delay: Duration(milliseconds: 131),
+    ),
+  ],
+  'firecracker': [
+    // Firecracker
+    HapticPulse(intensity: 1, sharpness: 1),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 75)),
+  ],
+  'gallop': [
+    // Gallop
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.603,
+      delay: Duration(milliseconds: 10),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.163,
+      delay: Duration(milliseconds: 145),
+    ),
+    HapticPulse(
+      intensity: 0.997,
+      sharpness: 0.609,
+      delay: Duration(milliseconds: 446),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.153,
+      delay: Duration(milliseconds: 149),
+    ),
+  ],
+  'gavel': [
+    // Gavel
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.106,
+      delay: Duration(milliseconds: 10),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.609,
+      delay: Duration(milliseconds: 191),
+    ),
+  ],
+  'herald': [
+    // Herald
+    HapticPulse(intensity: 0.497, sharpness: 0.497),
+    HapticPulse(
+      intensity: 0.497,
+      sharpness: 0.497,
+      delay: Duration(milliseconds: 89),
+    ),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 119)),
+  ],
+  'hoof_beat': [
+    // HoofBeat
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.106,
+      delay: Duration(milliseconds: 10),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.109,
+      delay: Duration(milliseconds: 191),
+    ),
+  ],
+  'ignition': [
+    // Ignition
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.203,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.697,
+      sharpness: 0.5,
+      delay: Duration(milliseconds: 76),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.703,
+      delay: Duration(milliseconds: 96),
+    ),
+  ],
+  'jolt': [
+    // Jolt
+    HapticPulse(intensity: 1, sharpness: 1),
+  ],
+  'murmur': [
+    // Murmur
+    HapticPulse(intensity: 0.6, sharpness: 0.303),
+    HapticPulse(
+      intensity: 0.6,
+      sharpness: 0.3,
+      delay: Duration(milliseconds: 80),
+    ),
+  ],
+  'patter': [
+    // Patter
+    HapticPulse(intensity: 0.603, sharpness: 0.2),
+    HapticPulse(
+      intensity: 0.606,
+      sharpness: 0.197,
+      delay: Duration(milliseconds: 82),
+    ),
+    HapticPulse(
+      intensity: 0.609,
+      sharpness: 0.594,
+      delay: Duration(milliseconds: 97),
+    ),
+  ],
+  'piston': [
+    // Piston
+    HapticPulse(intensity: 1, sharpness: 0.397),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.397,
+      delay: Duration(milliseconds: 73),
+    ),
+  ],
+  'plunk': [
+    // Plunk
+    HapticPulse(intensity: 0.5, sharpness: 0.2),
+  ],
+  'rap': [
+    // Rap
+    HapticPulse(intensity: 0.6, sharpness: 0.5),
+    HapticPulse(
+      intensity: 0.4,
+      sharpness: 0.5,
+      delay: Duration(milliseconds: 120),
+    ),
+  ],
+  'ratchet': [
+    // Ratchet
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.9,
+      delay: Duration(milliseconds: 10),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.906,
+      delay: Duration(milliseconds: 191),
+    ),
+    HapticPulse(
+      intensity: 0.997,
+      sharpness: 0.906,
+      delay: Duration(milliseconds: 197),
+    ),
+  ],
+  'rebound': [
+    // Rebound
+    HapticPulse(intensity: 1, sharpness: 1),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.3,
+      delay: Duration(milliseconds: 80),
+    ),
+  ],
+  'rivet': [
+    // Rivet
+    HapticPulse(intensity: 1, sharpness: 1),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 75)),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 75)),
+  ],
+  'stampede': [
+    // Stampede
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.306,
+      delay: Duration(milliseconds: 10),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.163,
+      delay: Duration(milliseconds: 145),
+    ),
+    HapticPulse(
+      intensity: 0.997,
+      sharpness: 0.303,
+      delay: Duration(milliseconds: 446),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.153,
+      delay: Duration(milliseconds: 149),
+    ),
+  ],
+  'stomp': [
+    // Stomp
+    HapticPulse(intensity: 1, sharpness: 0.3),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.3,
+      delay: Duration(milliseconds: 75),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.3,
+      delay: Duration(milliseconds: 75),
+    ),
+  ],
+  'stone_skip': [
+    // StoneSkip
+    HapticPulse(
+      intensity: 0.706,
+      sharpness: 0.706,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.697,
+      sharpness: 0.5,
+      delay: Duration(milliseconds: 76),
+    ),
+    HapticPulse(
+      intensity: 0.703,
+      sharpness: 0.244,
+      delay: Duration(milliseconds: 104),
+    ),
+  ],
+  'syncopate': [
+    // Syncopate
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.903,
+      delay: Duration(milliseconds: 10),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.513,
+      delay: Duration(milliseconds: 191),
+    ),
+    HapticPulse(
+      intensity: 0.997,
+      sharpness: 0.906,
+      delay: Duration(milliseconds: 198),
+    ),
+  ],
+  'thump': [
+    // Thump
+    HapticPulse(intensity: 1, sharpness: 0.45),
+  ],
+  'thunder_roll': [
+    // ThunderRoll
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.053,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.122,
+      delay: Duration(milliseconds: 50),
+    ),
+    HapticPulse(
+      intensity: 0.991,
+      sharpness: 0.228,
+      delay: Duration(milliseconds: 49),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.394,
+      delay: Duration(milliseconds: 56),
+    ),
+    HapticPulse(
+      intensity: 0.991,
+      sharpness: 0.613,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.803,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 49)),
+    HapticPulse(intensity: 1, sharpness: 1, delay: Duration(milliseconds: 59)),
+    HapticPulse(
+      intensity: 0.8,
+      sharpness: 0.8,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(
+      intensity: 0.606,
+      sharpness: 0.606,
+      delay: Duration(milliseconds: 62),
+    ),
+    HapticPulse(
+      intensity: 0.394,
+      sharpness: 0.394,
+      delay: Duration(milliseconds: 62),
+    ),
+    HapticPulse(
+      intensity: 0.194,
+      sharpness: 0.194,
+      delay: Duration(milliseconds: 61),
+    ),
+    HapticPulse(
+      intensity: 0.091,
+      sharpness: 0.091,
+      delay: Duration(milliseconds: 65),
+    ),
+  ],
+  'tick_tock': [
+    // TickTock
+    HapticPulse(
+      intensity: 0.8,
+      sharpness: 0.8,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.4,
+      sharpness: 0.4,
+      delay: Duration(milliseconds: 399),
+    ),
+    HapticPulse(
+      intensity: 0.8,
+      sharpness: 0.8,
+      delay: Duration(milliseconds: 400),
+    ),
+    HapticPulse(
+      intensity: 0.4,
+      sharpness: 0.4,
+      delay: Duration(milliseconds: 400),
+    ),
+  ],
+  'tidal_surge': [
+    // TidalSurge
+    HapticPulse(
+      intensity: 0.594,
+      sharpness: 0.594,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.588,
+      sharpness: 0.588,
+      delay: Duration(milliseconds: 72),
+    ),
+    HapticPulse(
+      intensity: 0.588,
+      sharpness: 0.588,
+      delay: Duration(milliseconds: 78),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.3,
+      delay: Duration(milliseconds: 148),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.303,
+      delay: Duration(milliseconds: 81),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.3,
+      delay: Duration(milliseconds: 75),
+    ),
+  ],
+  'tide_swell': [
+    // TideSwell
+    HapticPulse(
+      intensity: 0.775,
+      sharpness: 0.053,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.722,
+      sharpness: 0.122,
+      delay: Duration(milliseconds: 50),
+    ),
+    HapticPulse(
+      intensity: 0.7,
+      sharpness: 0.228,
+      delay: Duration(milliseconds: 49),
+    ),
+    HapticPulse(
+      intensity: 0.653,
+      sharpness: 0.394,
+      delay: Duration(milliseconds: 56),
+    ),
+    HapticPulse(
+      intensity: 0.638,
+      sharpness: 0.613,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(
+      intensity: 0.622,
+      sharpness: 0.803,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(
+      intensity: 0.606,
+      sharpness: 1,
+      delay: Duration(milliseconds: 49),
+    ),
+    HapticPulse(
+      intensity: 0.6,
+      sharpness: 1,
+      delay: Duration(milliseconds: 59),
+    ),
+    HapticPulse(
+      intensity: 0.606,
+      sharpness: 0.8,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(
+      intensity: 0.609,
+      sharpness: 0.606,
+      delay: Duration(milliseconds: 62),
+    ),
+    HapticPulse(
+      intensity: 0.647,
+      sharpness: 0.394,
+      delay: Duration(milliseconds: 67),
+    ),
+    HapticPulse(
+      intensity: 0.684,
+      sharpness: 0.181,
+      delay: Duration(milliseconds: 56),
+    ),
+    HapticPulse(
+      intensity: 0.728,
+      sharpness: 0.075,
+      delay: Duration(milliseconds: 65),
+    ),
+    HapticPulse(
+      intensity: 0.775,
+      sharpness: 0.034,
+      delay: Duration(milliseconds: 57),
+    ),
+  ],
+  'tremor': [
+    // Tremor
+    HapticPulse(intensity: 1, sharpness: 0),
+  ],
+  'war_drum': [
+    // WarDrum
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.106,
+      delay: Duration(milliseconds: 10),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.109,
+      delay: Duration(milliseconds: 191),
+    ),
+    HapticPulse(
+      intensity: 0.997,
+      sharpness: 0.103,
+      delay: Duration(milliseconds: 197),
+    ),
+  ],
+  'waterfall': [
+    // Waterfall
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.994,
+      delay: Duration(milliseconds: 1),
+    ),
+    HapticPulse(
+      intensity: 0.994,
+      sharpness: 0.806,
+      delay: Duration(milliseconds: 50),
+    ),
+    HapticPulse(
+      intensity: 0.991,
+      sharpness: 0.597,
+      delay: Duration(milliseconds: 49),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.394,
+      delay: Duration(milliseconds: 56),
+    ),
+    HapticPulse(
+      intensity: 0.991,
+      sharpness: 0.203,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.094,
+      delay: Duration(milliseconds: 52),
+    ),
+    HapticPulse(
+      intensity: 1,
+      sharpness: 0.072,
+      delay: Duration(milliseconds: 49),
+    ),
+  ],
+};
+
+/// Continuous presets: a vibration shaped by intensity and sharpness curves
+/// with taps on top, played only on a device with continuous haptics.
+const Map<String, HapticPattern> continuousPresets = {
   'alarm': HapticPattern(
     // Alarm
     taps: [
@@ -344,57 +1179,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.2), (1380, 0.5), (1400, 1.0), (1700, 0.3)],
   ),
-  'barrage': HapticPattern(
-    // Barrage
-    taps: [
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.994,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.994,
-        delay: Duration(milliseconds: 50),
-      ),
-      HapticPulse(
-        intensity: 0.991,
-        sharpness: 0.991,
-        delay: Duration(milliseconds: 49),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 56),
-      ),
-      HapticPulse(
-        intensity: 0.991,
-        sharpness: 0.991,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 49),
-      ),
-    ],
-  ),
-  'bass_drop': HapticPattern(
-    // BassDrop
-    taps: [
-      HapticPulse(intensity: 1, sharpness: 0.509),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.069,
-        delay: Duration(milliseconds: 71),
-      ),
-    ],
-  ),
   'batter': HapticPattern(
     // Batter
     taps: [
@@ -435,26 +1219,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.35), (225, 0.38), (380, 0.32)],
   ),
-  'bell_toll': HapticPattern(
-    // BellToll
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.903,
-        delay: Duration(milliseconds: 10),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.513,
-        delay: Duration(milliseconds: 191),
-      ),
-      HapticPulse(
-        intensity: 0.997,
-        sharpness: 0.147,
-        delay: Duration(milliseconds: 198),
-      ),
-    ],
-  ),
   'blip': HapticPattern(
     // Blip
     taps: [HapticPulse(intensity: 0.55, sharpness: 0.6)],
@@ -481,61 +1245,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.48), (200, 0.62), (300, 0.58)],
   ),
-  'bongo': HapticPattern(
-    // Bongo
-    taps: [
-      HapticPulse(
-        intensity: 0.594,
-        sharpness: 0.594,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.588,
-        sharpness: 0.588,
-        delay: Duration(milliseconds: 72),
-      ),
-      HapticPulse(
-        intensity: 0.588,
-        sharpness: 0.588,
-        delay: Duration(milliseconds: 78),
-      ),
-      HapticPulse(
-        intensity: 0.4,
-        sharpness: 0.4,
-        delay: Duration(milliseconds: 148),
-      ),
-      HapticPulse(
-        intensity: 0.394,
-        sharpness: 0.394,
-        delay: Duration(milliseconds: 81),
-      ),
-      HapticPulse(
-        intensity: 0.394,
-        sharpness: 0.394,
-        delay: Duration(milliseconds: 71),
-      ),
-    ],
-  ),
-  'boulder': HapticPattern(
-    // Boulder
-    taps: [HapticPulse(intensity: 1, sharpness: 0.2)],
-  ),
-  'breaking_wave': HapticPattern(
-    // BreakingWave
-    taps: [
-      HapticPulse(intensity: 0.497, sharpness: 0.497),
-      HapticPulse(
-        intensity: 0.497,
-        sharpness: 0.497,
-        delay: Duration(milliseconds: 89),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.1,
-        delay: Duration(milliseconds: 113),
-      ),
-    ],
-  ),
   'breath': HapticPattern(
     // Breath
     intensity: [(0, 0.0), (800, 0.5), (1600, 0.05), (2400, 0.5), (3200, 0.0)],
@@ -545,46 +1254,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (1600, 0.1),
       (2400, 0.25),
       (3200, 0.15),
-    ],
-  ),
-  'buildup': HapticPattern(
-    // Buildup
-    taps: [
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.053,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.122,
-        delay: Duration(milliseconds: 50),
-      ),
-      HapticPulse(
-        intensity: 0.991,
-        sharpness: 0.228,
-        delay: Duration(milliseconds: 49),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.394,
-        delay: Duration(milliseconds: 56),
-      ),
-      HapticPulse(
-        intensity: 0.991,
-        sharpness: 0.613,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.803,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 49),
-      ),
     ],
   ),
   'burst': HapticPattern(
@@ -625,21 +1294,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.85), (350, 0.8)],
   ),
-  'cadence': HapticPattern(
-    // Cadence
-    taps: [
-      HapticPulse(
-        intensity: 0.809,
-        sharpness: 0.897,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.413,
-        delay: Duration(milliseconds: 198),
-      ),
-    ],
-  ),
   'camera_shutter': HapticPattern(
     // CameraShutter
     taps: [
@@ -659,121 +1313,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (150, 0.0),
     ],
     sharpness: [(0, 0.78), (30, 0.6), (60, 0.72), (150, 0.65)],
-  ),
-  'canter': HapticPattern(
-    // Canter
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.203,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.697,
-        sharpness: 0.5,
-        delay: Duration(milliseconds: 76),
-      ),
-      HapticPulse(
-        intensity: 0.703,
-        sharpness: 0.244,
-        delay: Duration(milliseconds: 96),
-      ),
-    ],
-  ),
-  'cascade': HapticPattern(
-    // Cascade
-    taps: [
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.994,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.997,
-        sharpness: 0.997,
-        delay: Duration(milliseconds: 98),
-      ),
-      HapticPulse(
-        intensity: 0.997,
-        sharpness: 0.997,
-        delay: Duration(milliseconds: 100),
-      ),
-      HapticPulse(
-        intensity: 0.8,
-        sharpness: 0.8,
-        delay: Duration(milliseconds: 352),
-      ),
-      HapticPulse(
-        intensity: 0.803,
-        sharpness: 0.803,
-        delay: Duration(milliseconds: 98),
-      ),
-      HapticPulse(
-        intensity: 0.797,
-        sharpness: 0.797,
-        delay: Duration(milliseconds: 102),
-      ),
-      HapticPulse(
-        intensity: 0.5,
-        sharpness: 0.5,
-        delay: Duration(milliseconds: 367),
-      ),
-      HapticPulse(
-        intensity: 0.491,
-        sharpness: 0.491,
-        delay: Duration(milliseconds: 101),
-      ),
-      HapticPulse(
-        intensity: 0.494,
-        sharpness: 0.494,
-        delay: Duration(milliseconds: 99),
-      ),
-      HapticPulse(
-        intensity: 0.497,
-        sharpness: 0.213,
-        delay: Duration(milliseconds: 342),
-      ),
-      HapticPulse(
-        intensity: 0.506,
-        sharpness: 0.209,
-        delay: Duration(milliseconds: 102),
-      ),
-      HapticPulse(
-        intensity: 0.488,
-        sharpness: 0.213,
-        delay: Duration(milliseconds: 101),
-      ),
-    ],
-  ),
-  'castanets': HapticPattern(
-    // Castanets
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.897,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.9,
-        delay: Duration(milliseconds: 198),
-      ),
-    ],
-  ),
-  'cat_paw': HapticPattern(
-    // CatPaw
-    taps: [
-      HapticPulse(
-        intensity: 0.6,
-        sharpness: 0.3,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.6,
-        sharpness: 0.08,
-        delay: Duration(milliseconds: 74),
-      ),
-    ],
   ),
   'charge': HapticPattern(
     // Charge
@@ -836,10 +1375,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (380, 0.0),
     ],
     sharpness: [(0, 0.48), (150, 0.48), (180, 0.65), (380, 0.6)],
-  ),
-  'chip': HapticPattern(
-    // Chip
-    taps: [HapticPulse(intensity: 0.75, sharpness: 1)],
   ),
   'chirp': HapticPattern(
     // Chirp
@@ -1078,46 +1613,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.75), (900, 0.75), (980, 0.7)],
   ),
-  'crescendo': HapticPattern(
-    // Crescendo
-    taps: [
-      HapticPulse(
-        intensity: 0.303,
-        sharpness: 0.303,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.397,
-        sharpness: 0.397,
-        delay: Duration(milliseconds: 98),
-      ),
-      HapticPulse(
-        intensity: 0.506,
-        sharpness: 0.506,
-        delay: Duration(milliseconds: 103),
-      ),
-      HapticPulse(
-        intensity: 0.609,
-        sharpness: 0.609,
-        delay: Duration(milliseconds: 98),
-      ),
-      HapticPulse(
-        intensity: 0.703,
-        sharpness: 0.703,
-        delay: Duration(milliseconds: 99),
-      ),
-      HapticPulse(
-        intensity: 0.809,
-        sharpness: 0.809,
-        delay: Duration(milliseconds: 103),
-      ),
-      HapticPulse(
-        intensity: 0.981,
-        sharpness: 0.981,
-        delay: Duration(milliseconds: 99),
-      ),
-    ],
-  ),
   'dewdrop': HapticPattern(
     // Dewdrop
     taps: [
@@ -1327,37 +1822,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.2), (5, 0.15), (1000, 0.05)],
   ),
-  'fade_out': HapticPattern(
-    // FadeOut
-    taps: [
-      HapticPulse(intensity: 1, sharpness: 1),
-      HapticPulse(
-        intensity: 0.8,
-        sharpness: 0.8,
-        delay: Duration(milliseconds: 86),
-      ),
-      HapticPulse(
-        intensity: 0.603,
-        sharpness: 0.603,
-        delay: Duration(milliseconds: 106),
-      ),
-      HapticPulse(
-        intensity: 0.406,
-        sharpness: 0.406,
-        delay: Duration(milliseconds: 106),
-      ),
-      HapticPulse(
-        intensity: 0.291,
-        sharpness: 0.209,
-        delay: Duration(milliseconds: 110),
-      ),
-      HapticPulse(
-        intensity: 0.297,
-        sharpness: 0.075,
-        delay: Duration(milliseconds: 98),
-      ),
-    ],
-  ),
   'fanfare': HapticPattern(
     // Fanfare
     taps: [
@@ -1418,33 +1882,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (680, 0.0),
     ],
     sharpness: [(0, 0.55), (400, 0.65), (680, 0.6)],
-  ),
-  'finger_drum': HapticPattern(
-    // FingerDrum
-    taps: [
-      HapticPulse(intensity: 0.591, sharpness: 0.591),
-      HapticPulse(
-        intensity: 0.588,
-        sharpness: 0.588,
-        delay: Duration(milliseconds: 100),
-      ),
-      HapticPulse(
-        intensity: 0.6,
-        sharpness: 0.328,
-        delay: Duration(milliseconds: 131),
-      ),
-    ],
-  ),
-  'firecracker': HapticPattern(
-    // Firecracker
-    taps: [
-      HapticPulse(intensity: 1, sharpness: 1),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 75),
-      ),
-    ],
   ),
   'fizz': HapticPattern(
     // Fizz
@@ -1674,46 +2111,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (380, 0.0),
     ],
     sharpness: [(0, 0.3), (100, 0.35), (150, 0.28), (380, 0.22)],
-  ),
-  'gallop': HapticPattern(
-    // Gallop
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.603,
-        delay: Duration(milliseconds: 10),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.163,
-        delay: Duration(milliseconds: 145),
-      ),
-      HapticPulse(
-        intensity: 0.997,
-        sharpness: 0.609,
-        delay: Duration(milliseconds: 446),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.153,
-        delay: Duration(milliseconds: 149),
-      ),
-    ],
-  ),
-  'gavel': HapticPattern(
-    // Gavel
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.106,
-        delay: Duration(milliseconds: 10),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.609,
-        delay: Duration(milliseconds: 191),
-      ),
-    ],
   ),
   'glitch': HapticPattern(
     // Glitch
@@ -1947,57 +2344,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.2), (1000, 0.2)],
   ),
-  'herald': HapticPattern(
-    // Herald
-    taps: [
-      HapticPulse(intensity: 0.497, sharpness: 0.497),
-      HapticPulse(
-        intensity: 0.497,
-        sharpness: 0.497,
-        delay: Duration(milliseconds: 89),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 119),
-      ),
-    ],
-  ),
-  'hoof_beat': HapticPattern(
-    // HoofBeat
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.106,
-        delay: Duration(milliseconds: 10),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.109,
-        delay: Duration(milliseconds: 191),
-      ),
-    ],
-  ),
-  'ignition': HapticPattern(
-    // Ignition
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.203,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.697,
-        sharpness: 0.5,
-        delay: Duration(milliseconds: 76),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.703,
-        delay: Duration(milliseconds: 96),
-      ),
-    ],
-  ),
   'impact': HapticPattern(
     // Impact
     taps: [
@@ -2015,10 +2361,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     intensity: [(0, 0.0), (5, 0.85), (60, 0.35), (120, 0.15), (200, 0.0)],
     sharpness: [(0, 0.6), (200, 0.35)],
-  ),
-  'jolt': HapticPattern(
-    // Jolt
-    taps: [HapticPulse(intensity: 1, sharpness: 1)],
   ),
   'keyboard_mechanical': HapticPattern(
     // KeyboardMechanical
@@ -2317,17 +2659,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.5), (280, 0.5)],
   ),
-  'murmur': HapticPattern(
-    // Murmur
-    taps: [
-      HapticPulse(intensity: 0.6, sharpness: 0.303),
-      HapticPulse(
-        intensity: 0.6,
-        sharpness: 0.3,
-        delay: Duration(milliseconds: 80),
-      ),
-    ],
-  ),
   'nudge': HapticPattern(
     // Nudge
     taps: [
@@ -2355,22 +2686,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (1100, 0.0),
     ],
     sharpness: [(0, 0.35), (200, 0.42), (450, 0.38), (700, 0.3), (1100, 0.22)],
-  ),
-  'patter': HapticPattern(
-    // Patter
-    taps: [
-      HapticPulse(intensity: 0.603, sharpness: 0.2),
-      HapticPulse(
-        intensity: 0.606,
-        sharpness: 0.197,
-        delay: Duration(milliseconds: 82),
-      ),
-      HapticPulse(
-        intensity: 0.609,
-        sharpness: 0.594,
-        delay: Duration(milliseconds: 97),
-      ),
-    ],
   ),
   'peal': HapticPattern(
     // Peal
@@ -2460,17 +2775,6 @@ const Map<String, HapticPattern> hapticPresets = {
     intensity: [(0, 0.0), (5, 0.32), (40, 0.0), (60, 0.22), (100, 0.0)],
     sharpness: [(0, 0.65), (100, 0.7)],
   ),
-  'piston': HapticPattern(
-    // Piston
-    taps: [
-      HapticPulse(intensity: 1, sharpness: 0.397),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.397,
-        delay: Duration(milliseconds: 73),
-      ),
-    ],
-  ),
   'plink': HapticPattern(
     // Plink
     taps: [
@@ -2506,10 +2810,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (1050, 0.0),
     ],
     sharpness: [(0, 0.3), (895, 0.4), (905, 0.3), (1050, 0.25)],
-  ),
-  'plunk': HapticPattern(
-    // Plunk
-    taps: [HapticPulse(intensity: 0.5, sharpness: 0.2)],
   ),
   'poke': HapticPattern(
     // Poke
@@ -2803,48 +3103,6 @@ const Map<String, HapticPattern> hapticPresets = {
     ],
     sharpness: [(0, 0.48), (380, 0.78), (650, 0.75)],
   ),
-  'rap': HapticPattern(
-    // Rap
-    taps: [
-      HapticPulse(intensity: 0.6, sharpness: 0.5),
-      HapticPulse(
-        intensity: 0.4,
-        sharpness: 0.5,
-        delay: Duration(milliseconds: 120),
-      ),
-    ],
-  ),
-  'ratchet': HapticPattern(
-    // Ratchet
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.9,
-        delay: Duration(milliseconds: 10),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.906,
-        delay: Duration(milliseconds: 191),
-      ),
-      HapticPulse(
-        intensity: 0.997,
-        sharpness: 0.906,
-        delay: Duration(milliseconds: 197),
-      ),
-    ],
-  ),
-  'rebound': HapticPattern(
-    // Rebound
-    taps: [
-      HapticPulse(intensity: 1, sharpness: 1),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.3,
-        delay: Duration(milliseconds: 80),
-      ),
-    ],
-  ),
   'ripple': HapticPattern(
     // Ripple
     taps: [
@@ -2876,22 +3134,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (420, 0.0),
     ],
     sharpness: [(0, 0.7), (140, 0.5), (260, 0.33), (420, 0.18)],
-  ),
-  'rivet': HapticPattern(
-    // Rivet
-    taps: [
-      HapticPulse(intensity: 1, sharpness: 1),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 75),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 75),
-      ),
-    ],
   ),
   'rustle': HapticPattern(
     // Rustle
@@ -3118,67 +3360,6 @@ const Map<String, HapticPattern> hapticPresets = {
     intensity: [(0, 0.0), (8, 0.55), (55, 0.0), (150, 0.55), (205, 0.0)],
     sharpness: [(0, 0.5), (205, 0.5)],
   ),
-  'stampede': HapticPattern(
-    // Stampede
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.306,
-        delay: Duration(milliseconds: 10),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.163,
-        delay: Duration(milliseconds: 145),
-      ),
-      HapticPulse(
-        intensity: 0.997,
-        sharpness: 0.303,
-        delay: Duration(milliseconds: 446),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.153,
-        delay: Duration(milliseconds: 149),
-      ),
-    ],
-  ),
-  'stomp': HapticPattern(
-    // Stomp
-    taps: [
-      HapticPulse(intensity: 1, sharpness: 0.3),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.3,
-        delay: Duration(milliseconds: 75),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.3,
-        delay: Duration(milliseconds: 75),
-      ),
-    ],
-  ),
-  'stone_skip': HapticPattern(
-    // StoneSkip
-    taps: [
-      HapticPulse(
-        intensity: 0.706,
-        sharpness: 0.706,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.697,
-        sharpness: 0.5,
-        delay: Duration(milliseconds: 76),
-      ),
-      HapticPulse(
-        intensity: 0.703,
-        sharpness: 0.244,
-        delay: Duration(milliseconds: 104),
-      ),
-    ],
-  ),
   'strike': HapticPattern(
     // Strike
     taps: [HapticPulse(intensity: 0.75, sharpness: 0.62)],
@@ -3328,26 +3509,6 @@ const Map<String, HapticPattern> hapticPresets = {
     intensity: [(0, 0.0), (10, 0.45), (75, 0.0), (350, 0.65), (425, 0.0)],
     sharpness: [(0, 0.45), (350, 0.52), (425, 0.52)],
   ),
-  'syncopate': HapticPattern(
-    // Syncopate
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.903,
-        delay: Duration(milliseconds: 10),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.513,
-        delay: Duration(milliseconds: 191),
-      ),
-      HapticPulse(
-        intensity: 0.997,
-        sharpness: 0.906,
-        delay: Duration(milliseconds: 198),
-      ),
-    ],
-  ),
   'throb': HapticPattern(
     // Throb
     taps: [
@@ -3366,10 +3527,6 @@ const Map<String, HapticPattern> hapticPresets = {
     taps: [HapticPulse(intensity: 0.5, sharpness: 0.42)],
     intensity: [(0, 0.0), (15, 0.45), (80, 0.35), (160, 0.0)],
     sharpness: [(0, 0.42), (160, 0.4)],
-  ),
-  'thump': HapticPattern(
-    // Thump
-    taps: [HapticPulse(intensity: 1, sharpness: 0.45)],
   ),
   'thunder': HapticPattern(
     // Thunder
@@ -3410,215 +3567,6 @@ const Map<String, HapticPattern> hapticPresets = {
       (2000, 0.0),
     ],
     sharpness: [(0, 0.1), (600, 0.08), (2000, 0.05)],
-  ),
-  'thunder_roll': HapticPattern(
-    // ThunderRoll
-    taps: [
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.053,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.122,
-        delay: Duration(milliseconds: 50),
-      ),
-      HapticPulse(
-        intensity: 0.991,
-        sharpness: 0.228,
-        delay: Duration(milliseconds: 49),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.394,
-        delay: Duration(milliseconds: 56),
-      ),
-      HapticPulse(
-        intensity: 0.991,
-        sharpness: 0.613,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.803,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 49),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 1,
-        delay: Duration(milliseconds: 59),
-      ),
-      HapticPulse(
-        intensity: 0.8,
-        sharpness: 0.8,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 0.606,
-        sharpness: 0.606,
-        delay: Duration(milliseconds: 62),
-      ),
-      HapticPulse(
-        intensity: 0.394,
-        sharpness: 0.394,
-        delay: Duration(milliseconds: 62),
-      ),
-      HapticPulse(
-        intensity: 0.194,
-        sharpness: 0.194,
-        delay: Duration(milliseconds: 61),
-      ),
-      HapticPulse(
-        intensity: 0.091,
-        sharpness: 0.091,
-        delay: Duration(milliseconds: 65),
-      ),
-    ],
-  ),
-  'tick_tock': HapticPattern(
-    // TickTock
-    taps: [
-      HapticPulse(
-        intensity: 0.8,
-        sharpness: 0.8,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.4,
-        sharpness: 0.4,
-        delay: Duration(milliseconds: 399),
-      ),
-      HapticPulse(
-        intensity: 0.8,
-        sharpness: 0.8,
-        delay: Duration(milliseconds: 400),
-      ),
-      HapticPulse(
-        intensity: 0.4,
-        sharpness: 0.4,
-        delay: Duration(milliseconds: 400),
-      ),
-    ],
-  ),
-  'tidal_surge': HapticPattern(
-    // TidalSurge
-    taps: [
-      HapticPulse(
-        intensity: 0.594,
-        sharpness: 0.594,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.588,
-        sharpness: 0.588,
-        delay: Duration(milliseconds: 72),
-      ),
-      HapticPulse(
-        intensity: 0.588,
-        sharpness: 0.588,
-        delay: Duration(milliseconds: 78),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.3,
-        delay: Duration(milliseconds: 148),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.303,
-        delay: Duration(milliseconds: 81),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.3,
-        delay: Duration(milliseconds: 75),
-      ),
-    ],
-  ),
-  'tide_swell': HapticPattern(
-    // TideSwell
-    taps: [
-      HapticPulse(
-        intensity: 0.775,
-        sharpness: 0.053,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.722,
-        sharpness: 0.122,
-        delay: Duration(milliseconds: 50),
-      ),
-      HapticPulse(
-        intensity: 0.7,
-        sharpness: 0.228,
-        delay: Duration(milliseconds: 49),
-      ),
-      HapticPulse(
-        intensity: 0.653,
-        sharpness: 0.394,
-        delay: Duration(milliseconds: 56),
-      ),
-      HapticPulse(
-        intensity: 0.638,
-        sharpness: 0.613,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 0.622,
-        sharpness: 0.803,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 0.606,
-        sharpness: 1,
-        delay: Duration(milliseconds: 49),
-      ),
-      HapticPulse(
-        intensity: 0.6,
-        sharpness: 1,
-        delay: Duration(milliseconds: 59),
-      ),
-      HapticPulse(
-        intensity: 0.606,
-        sharpness: 0.8,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 0.609,
-        sharpness: 0.606,
-        delay: Duration(milliseconds: 62),
-      ),
-      HapticPulse(
-        intensity: 0.647,
-        sharpness: 0.394,
-        delay: Duration(milliseconds: 67),
-      ),
-      HapticPulse(
-        intensity: 0.684,
-        sharpness: 0.181,
-        delay: Duration(milliseconds: 56),
-      ),
-      HapticPulse(
-        intensity: 0.728,
-        sharpness: 0.075,
-        delay: Duration(milliseconds: 65),
-      ),
-      HapticPulse(
-        intensity: 0.775,
-        sharpness: 0.034,
-        delay: Duration(milliseconds: 57),
-      ),
-    ],
-  ),
-  'tremor': HapticPattern(
-    // Tremor
-    taps: [HapticPulse(intensity: 1, sharpness: 0)],
   ),
   'trigger': HapticPattern(
     // Trigger
@@ -3861,66 +3809,6 @@ const Map<String, HapticPattern> hapticPresets = {
     // Wane
     intensity: [(0, 0.0), (20, 0.42), (180, 0.22), (450, 0.0)],
     sharpness: [(0, 0.5), (180, 0.4), (450, 0.35)],
-  ),
-  'war_drum': HapticPattern(
-    // WarDrum
-    taps: [
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.106,
-        delay: Duration(milliseconds: 10),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.109,
-        delay: Duration(milliseconds: 191),
-      ),
-      HapticPulse(
-        intensity: 0.997,
-        sharpness: 0.103,
-        delay: Duration(milliseconds: 197),
-      ),
-    ],
-  ),
-  'waterfall': HapticPattern(
-    // Waterfall
-    taps: [
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.994,
-        delay: Duration(milliseconds: 1),
-      ),
-      HapticPulse(
-        intensity: 0.994,
-        sharpness: 0.806,
-        delay: Duration(milliseconds: 50),
-      ),
-      HapticPulse(
-        intensity: 0.991,
-        sharpness: 0.597,
-        delay: Duration(milliseconds: 49),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.394,
-        delay: Duration(milliseconds: 56),
-      ),
-      HapticPulse(
-        intensity: 0.991,
-        sharpness: 0.203,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.094,
-        delay: Duration(milliseconds: 52),
-      ),
-      HapticPulse(
-        intensity: 1,
-        sharpness: 0.072,
-        delay: Duration(milliseconds: 49),
-      ),
-    ],
   ),
   'wave': HapticPattern(
     // Wave

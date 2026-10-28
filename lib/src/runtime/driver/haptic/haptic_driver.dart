@@ -42,9 +42,6 @@ class HapticPattern {
   final List<(int, double)> intensity;
   final List<(int, double)> sharpness;
 
-  /// Whether it needs continuous haptics rather than taps alone.
-  bool get isContinuous => intensity.isNotEmpty;
-
   /// Until the last tap or curve point, whichever is later.
   Duration get duration {
     var tapsEnd = Duration.zero;
@@ -324,22 +321,24 @@ class HapticDriver extends Driver {
 
     final variant = _str(ctx.params['variant']);
 
-    // A continuous preset needs continuous support and a tap-only one tap
-    // support; without it a preset plays nothing, never just its taps.
-    final preset = hapticPresets[variant];
-    if (preset != null) {
-      if (preset.isContinuous) {
-        if (await _player.supportsContinuous()) {
-          await _playContinuous(preset, ctx);
-        }
-        return null;
-      }
+    // Without the support it needs a preset plays nothing; a continuous one
+    // never falls back to just its taps.
+    final basic = basicPresets[variant];
+    if (basic != null) {
       if (await _player.supportsTaps()) {
         await HapticSemantics.tap(
-          preset.taps,
+          basic,
           player: _player,
           isCancelled: () => ctx.isCancelled,
         );
+      }
+      return null;
+    }
+
+    final continuous = continuousPresets[variant];
+    if (continuous != null) {
+      if (await _player.supportsContinuous()) {
+        await _playContinuous(continuous, ctx);
       }
       return null;
     }
