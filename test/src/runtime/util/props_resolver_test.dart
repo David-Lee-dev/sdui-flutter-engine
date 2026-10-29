@@ -156,6 +156,62 @@ void main() {
         expect(PropsResolver.alignment('nope'), isNull);
         expect(PropsResolver.alignment(3), isNull);
       });
+
+      test('9개 이름은 각자의 Alignment 상수로', () {
+        expect(PropsResolver.alignment('top_left'), Alignment.topLeft);
+        expect(PropsResolver.alignment('top_center'), Alignment.topCenter);
+        expect(PropsResolver.alignment('top_right'), Alignment.topRight);
+        expect(PropsResolver.alignment('center_left'), Alignment.centerLeft);
+        expect(PropsResolver.alignment('center'), Alignment.center);
+        expect(PropsResolver.alignment('center_right'), Alignment.centerRight);
+        expect(PropsResolver.alignment('bottom_left'), Alignment.bottomLeft);
+        expect(
+          PropsResolver.alignment('bottom_center'),
+          Alignment.bottomCenter,
+        );
+        expect(PropsResolver.alignment('bottom_right'), Alignment.bottomRight);
+        expect(PropsResolver.alignment(null), isNull);
+        expect(PropsResolver.alignment(' center'), isNull);
+      });
+
+      test('[x, y] 유한수 목록은 Alignment(x, y)', () {
+        expect(PropsResolver.alignment([0, 0]), Alignment.center);
+        expect(PropsResolver.alignment([-1, 1]), Alignment.bottomLeft);
+        expect(
+          PropsResolver.alignment([0.25, -0.5]),
+          const Alignment(0.25, -0.5),
+        );
+      });
+
+      test('[x, y] 각 축은 [-4, 4]로 자른다', () {
+        expect(PropsResolver.alignment([9, -1e308]), const Alignment(4, -4));
+        expect(PropsResolver.alignment([-4.5, 3]), const Alignment(-4, 3));
+      });
+
+      test('[x, y] 형식이 아니면 기존처럼 null', () {
+        for (final raw in <Object?>[
+          <Object?>[],
+          [0],
+          [0, 0, 0],
+          ['0', 0],
+          [0, null],
+          [double.nan, 0],
+          [0, double.infinity],
+          {'x': 0, 'y': 0},
+        ]) {
+          expect(PropsResolver.alignment(raw), isNull, reason: '$raw');
+        }
+      });
+
+      test('[x, y]는 alignment를 쓰는 다른 prop(그라디언트)에도 적용된다', () {
+        final gradient = PropsResolver.gradient({
+          'type': 'linear',
+          'colors': ['#000000', '#ffffff'],
+          'begin': [-0.5, 0],
+          'end': 'center_right',
+        });
+        expect((gradient! as LinearGradient).begin, const Alignment(-0.5, 0));
+      });
     });
 
     group('edge', () {

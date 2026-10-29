@@ -34,6 +34,38 @@ abstract final class EngineErrors {
     }
   }
 
+  static final _broken = Expando<bool>('EngineErrors.broken');
+
+  /// Runs paint- or tick-time [fn] on behalf of [owner], where no build-time
+  /// node boundary can catch it.
+  ///
+  /// The first throw marks [owner] broken for good and is reported once as a
+  /// [SduiErrorScope.nodeBuild] error at [path]; from then on every call
+  /// returns [fallback] without running [fn], so a failing painter or ticker
+  /// does not report every frame.
+  static T isolate<T>(
+    Object owner,
+    String? path,
+    T Function() fn, {
+    required T fallback,
+  }) {
+    if (_broken[owner] == true) return fallback;
+    try {
+      return fn();
+    } catch (error, stack) {
+      _broken[owner] = true;
+      report(
+        SduiError(
+          scope: SduiErrorScope.nodeBuild,
+          error: error,
+          stack: stack,
+          nodePath: path,
+        ),
+      );
+      return fallback;
+    }
+  }
+
   /// Restores the default for test isolation.
   static void reset() => observer = const FlutterErrorObserver();
 }

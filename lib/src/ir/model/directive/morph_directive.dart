@@ -3,7 +3,8 @@ part of '_base.dart';
 /// Supplies [child] with an animated local variable named by [as].
 ///
 /// [from], [to], and [trigger] are compiled expressions. A change to [to]
-/// transitions from the current value to the new target.
+/// transitions from the current value to the new target. A [spring] replaces
+/// the duration/curve tween with a physical simulation.
 final class MorphDirective extends Directive {
   const MorphDirective({
     required this.to,
@@ -17,6 +18,7 @@ final class MorphDirective extends Directive {
     this.repeat = false,
     this.reverse = false,
     this.trigger,
+    this.spring,
   });
 
   final Expression to;
@@ -28,6 +30,7 @@ final class MorphDirective extends Directive {
   final bool repeat;
   final bool reverse;
   final Expression? trigger;
+  final EngineSpringSpec? spring;
   final Directive child;
   final String path;
 

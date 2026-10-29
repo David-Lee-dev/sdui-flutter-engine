@@ -30,12 +30,20 @@ import 'observer/switch_observer.dart';
 final class NodeBuilder {
   const NodeBuilder._();
 
+  /// Indexes of `_motion` layers turned off per node element after their
+  /// parameters failed to evaluate; a layer stays off for the node's lifetime.
+  static final _offMotions = Expando<Set<int>>('NodeBuilder.offMotions');
+
   /// Builds the observer or scope boundary represented by [directive].
   static Widget build(Directive directive) {
     return switch (directive) {
       PlainDirective node => PlainObserver(directive: node),
       ConditionDirective cond => ConditionObserver(directive: cond),
       LoopDirective loop => LoopObserver(directive: loop),
+      MorphDirective morph when morph.spring != null => SpringMorphScope(
+        directive: morph,
+        child: build(morph.child),
+      ),
       MorphDirective morph => MorphScope(
         directive: morph,
         child: build(morph.child),
@@ -110,12 +118,30 @@ final class NodeBuilder {
       audit?.warnUnread(directive.type, directive.path);
       return true;
     }());
-    for (final motion in directive.motions) {
-      final resolved = ExpressionEvaluator.resolveMap(motion.params, env);
-      for (final atom in MotionPresets.expand(motion.type, resolved)) {
+    final off = _offMotions[context];
+    for (final (index, motion) in directive.motions.indexed) {
+      if (off != null && off.contains(index)) continue;
+      final List<(Motion, MotionParams)> atoms;
+      try {
+        final resolved = ExpressionEvaluator.resolveMap(motion.params, env);
+        atoms = [
+          for (final atom in MotionPresets.expand(motion.type, resolved))
+            (MotionFactory.resolve(atom.type), MotionParams(atom.params)),
+        ];
+      } catch (error) {
+        (_offMotions[context] ??= {}).add(index);
+        EngineLog.widget.stilled(
+          context,
+          directive.path,
+          '_motion "${motion.type}" params failed: ${error.runtimeType}',
+        );
+        continue;
+      }
+      for (final (atom, params) in atoms) {
         widget = MotionWrapper(
-          motion: MotionFactory.resolve(atom.type),
-          params: MotionParams(atom.params),
+          motion: atom,
+          params: params,
+          path: directive.path,
           child: widget,
         );
       }

@@ -91,6 +91,7 @@ abstract final class BuiltinLanguage {
   'serpentine': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'serpentine_row': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'shader_mask': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
+  'shape': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'single_child_scroll_view': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'sized_overflow_box': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'sizedbox': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
@@ -225,6 +226,15 @@ abstract final class BuiltinLanguage {
     },
   };
 
+  /// Inclusive bounds of a literal `_morph._spring` map's params. `mass` is
+  /// optional (default 1); the others are required.
+  static const Map<String, ({double? min, double? max, Set<String>? values})>
+  springParams = {
+    'stiffness': (min: 1, max: 5000, values: null),
+    'damping_ratio': (min: 0.2, max: 2, values: null),
+    'mass': (min: 0.1, max: 10, values: null),
+  };
+
   /// Registered expression function names accepted in `${...}` calls.
   static const Set<String> functions = {
   'abs',
@@ -235,6 +245,7 @@ abstract final class BuiltinLanguage {
   'comma',
   'concat',
   'contains',
+  'cos',
   'currency',
   'default',
   'ends_with',
@@ -258,12 +269,15 @@ abstract final class BuiltinLanguage {
   'pad_end',
   'pad_start',
   'percent',
+  'pow',
   'range',
+  'remap',
   'repeat',
   'replace',
   'reversed',
   'round',
   'set_path',
+  'sin',
   'sorted',
   'split',
   'starts_with',

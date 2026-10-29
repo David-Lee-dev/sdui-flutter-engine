@@ -246,6 +246,20 @@ final class _ScopeLog {
 final class _WidgetLog {
   const _WidgetLog();
 
+  static final _stilled = Expando<Set<String>>('EngineLog.widget.stilled');
+
+  /// Logs a motion or morph that stopped animating instead of failing,
+  /// at most once per [owner] and [reason].
+  void stilled(Object owner, String path, String reason) {
+    final seen = _stilled[owner] ??= {};
+    if (!seen.add(reason)) return;
+    EngineLog._emit(
+      LogLevel.debug,
+      'widget',
+      () => 'animation off ($reason) @$path',
+    );
+  }
+
   void unknownProps(String type, Iterable<String> props, String path) =>
       EngineLog._emit(
         LogLevel.warn,

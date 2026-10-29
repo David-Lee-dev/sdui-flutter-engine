@@ -155,6 +155,7 @@ Engine-specific widgets; includes the explicitly unregistered internal helper fo
 | `scratch_card` | Reveals its first child as the user rubs the second away. | box | No | [Open](custom/scratch_card.md) |
 | `serpentine` | Measures rows, draws their serpentine track, then paints cells. | box | Yes | [Open](custom/serpentine.md) |
 | `serpentine_row` | Lays out one measured row of serpentine board cells. | box | Yes | [Open](custom/serpentine_row.md) |
+| `shape` | Paints a smooth union of circles, capsules and rounded rects. | box | No | [Open](custom/shape.md) |
 | `skeleton` | One loading-placeholder bone (a rounded box) for a `_skeleton` outline. | box | No | [Open](custom/skeleton.md) |
 | `speech_balloon` | Paints a rounded balloon with an integrated bezier nip. | box | No | [Open](custom/speech_balloon.md) |
 | `spin_grid` | Lays out children in a grid and cycles one highlighted cell. | box | Yes | [Open](custom/spin_grid.md) |

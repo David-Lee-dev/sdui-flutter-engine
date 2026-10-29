@@ -55,8 +55,15 @@ final class PropsResolver {
     return value == null ? null : Color(value);
   }
 
-  static Alignment? alignment(Object? raw) =>
-      raw is String ? _alignments[raw] : null;
+  /// Decodes one of the nine alignment names or an `[x, y]` pair of finite
+  /// numbers, each axis clamped to [-4, 4].
+  static Alignment? alignment(Object? raw) {
+    if (raw is String) return _alignments[raw];
+    if (raw is! List || raw.length != 2) return null;
+    final [x, y] = raw;
+    if (x is! num || !x.isFinite || y is! num || !y.isFinite) return null;
+    return Alignment(x.clamp(-4, 4).toDouble(), y.clamp(-4, 4).toDouble());
+  }
 
   static AlignmentDirectional? alignmentDirectional(Object? raw) =>
       enumOf(raw, _alignmentDirectionals);

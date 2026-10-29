@@ -4,21 +4,29 @@ import '../util/engine_curve.dart';
 import '../util/props_resolver.dart';
 
 /// Reads typed motion options while replacing malformed dynamic input with safe defaults.
+///
+/// Numbers beyond ±[limit] count as malformed: finite but huge values would
+/// overflow the frame's transformed bounds during layout or paint.
 class MotionParams {
   const MotionParams(this._raw);
 
   final Map<String, Object?> _raw;
 
-  /// Returns a finite numeric option or [fallback].
+  /// Largest magnitude a numeric option (and a duration in ms) may take.
+  static const limit = 1e6;
+
+  static bool _sane(Object? v) => v is num && v.isFinite && v.abs() <= limit;
+
+  /// Returns a finite numeric option within ±[limit] or [fallback].
   num number(String key, num fallback) {
     final v = _raw[key];
-    return v is num && v.isFinite ? v : fallback;
+    return _sane(v) ? v as num : fallback;
   }
 
-  /// Returns a non-negative millisecond option or [fallback].
+  /// Returns a millisecond option in [0, [limit]] or [fallback].
   Duration duration(String key, Duration fallback) {
     final v = _raw[key];
-    return v is num && v.isFinite && v >= 0
+    return _sane(v) && (v as num) >= 0
         ? Duration(milliseconds: v.round())
         : fallback;
   }
@@ -50,15 +58,10 @@ class MotionParams {
   /// Returns an option without coercion.
   Object? raw(String key) => _raw[key];
 
-  /// Returns a finite two-number offset or [fallback].
+  /// Returns a two-number offset within ±[limit] or [fallback].
   Offset offset(String key, Offset fallback) {
     final v = _raw[key];
-    if (v is List &&
-        v.length == 2 &&
-        v[0] is num &&
-        v[1] is num &&
-        (v[0] as num).isFinite &&
-        (v[1] as num).isFinite) {
+    if (v is List && v.length == 2 && _sane(v[0]) && _sane(v[1])) {
       return Offset((v[0] as num).toDouble(), (v[1] as num).toDouble());
     }
     return fallback;

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
+import 'package:sdui_engine/src/ir/model/engine_spring.dart';
 import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
 import 'package:sdui_engine/src/ir/compiled_value.dart';
@@ -8,6 +9,18 @@ import 'package:sdui_engine/src/compile/invalid_template_exception.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 
 final throwsInvalidTemplate = throwsA(isA<InvalidTemplateException>());
+
+/// Asserts a `_morph` degraded to "no animation": the variable takes `_to`
+/// at once, with no tween, delay, repeat or spring.
+void expectInstant(Directive directive, {String? reason}) {
+  expect(directive, isA<MorphDirective>(), reason: reason);
+  final morph = directive as MorphDirective;
+  expect(morph.spring, isNull, reason: reason);
+  expect(morph.durationMs, 0, reason: reason);
+  expect(morph.delayMs, 0, reason: reason);
+  expect(morph.repeat, isFalse, reason: reason);
+  expect(morph.reverse, isFalse, reason: reason);
+}
 
 /// 테스트용 노드 빌더 — 파서와 똑같이 flat attr map을 sigil로 갈라 [UiNode]를 만든다.
 /// 맨몸 키 → `props`, `_` 접두 키 → `reserved`. 실제 파서 경로와 같은 분리를 태워, 컴파일러
@@ -159,6 +172,155 @@ void main() {
         expect(morph.child, isA<PlainDirective>());
       });
 
+      group('_morph._spring', () {
+        MorphDirective morph(Map<String, Object?> extra) =>
+            TemplateCompiler.buildDirectiveTree(
+                  uiNode(
+                    type: 'text',
+                    attrs: {
+                      '_morph': {'_to': r'${x}', '_as': 'n', ...extra},
+                    },
+                  ),
+                )
+                as MorphDirective;
+
+        void rejects(Map<String, Object?> extra) => expect(
+          () => morph(extra),
+          throwsA(
+            isA<InvalidTemplateException>().having(
+              (e) => e.toString(),
+              'message',
+              contains('_spring'),
+            ),
+          ),
+          reason: '$extra',
+        );
+
+        test('_spring이 없으면 spring은 null(tween)', () {
+          expect(morph(const {}).spring, isNull);
+        });
+
+        test('프리셋 이름 → 프리셋 값', () {
+          expect(
+            morph({'_spring': 'spatial_default'}).spring,
+            const EngineSpringSpec(stiffness: 700, dampingRatio: 0.75),
+          );
+          expect(
+            morph({'_spring': 'effect_default'}).spring,
+            const EngineSpringSpec(
+              stiffness: 800,
+              dampingRatio: 1,
+              carriesVelocity: false,
+            ),
+          );
+          expect(morph({'_spring': 'spatial_fast'}).spring!.stiffness, 1400);
+          expect(morph({'_spring': 'spatial_slow'}).spring!.stiffness, 300);
+        });
+
+        test('리터럴 맵 → 값, mass 기본 1', () {
+          expect(
+            morph({
+              '_spring': {'stiffness': 500, 'damping_ratio': 0.5, 'mass': 2},
+            }).spring,
+            const EngineSpringSpec(stiffness: 500, dampingRatio: 0.5, mass: 2),
+          );
+          expect(
+            morph({
+              '_spring': {'stiffness': 1, 'damping_ratio': 2},
+            }).spring,
+            const EngineSpringSpec(stiffness: 1, dampingRatio: 2),
+          );
+        });
+
+        test('_delay·_trigger·_from과는 함께 쓸 수 있다', () {
+          final m = morph({
+            '_spring': 'spatial_fast',
+            '_delay': 30,
+            '_trigger': r'${e}',
+            '_from': 0,
+          });
+          expect(m.spring, isNotNull);
+          expect(m.delayMs, 30);
+        });
+
+        // 오타(모르는 프리셋 이름·_spring 맵의 모르는 키)만 컴파일 에러다.
+        test('모르는 프리셋 이름은 컴파일 에러', () {
+          rejects({'_spring': 'bouncy'});
+        });
+
+        test('_spring 맵의 모르는 키는 컴파일 에러', () {
+          rejects({
+            '_spring': {'stiffness': 100, 'damping_ratio': 1, 'bounce': 1},
+          });
+        });
+
+        // 오타가 아닌 꼴 오류는 애니메이션 없는 morph로 내려간다.
+        test('식·비문자열/비맵 _spring은 애니메이션 없는 morph', () {
+          for (final spring in <Object?>[
+            r'${preset}',
+            3,
+            null,
+            true,
+            {'stiffness': r'${k}', 'damping_ratio': 0.5},
+          ]) {
+            expectInstant(morph({'_spring': spring}), reason: '$spring');
+          }
+        });
+
+        test('_duration·_curve·_repeat·_reverse와 함께 쓰면 애니메이션 없는 morph', () {
+          for (final extra in [
+            {'_duration': 300},
+            {'_curve': 'linear'},
+            {'_repeat': true},
+            {'_reverse': false},
+          ]) {
+            expectInstant(
+              morph({'_spring': 'spatial_default', ...extra}),
+              reason: '$extra',
+            );
+          }
+        });
+
+        test('범위 밖·비유한·비숫자·필수 누락 파라미터는 애니메이션 없는 morph', () {
+          for (final params in [
+            {'stiffness': 0.5, 'damping_ratio': 1},
+            {'stiffness': 5001, 'damping_ratio': 1},
+            {'stiffness': 100, 'damping_ratio': 0.1},
+            {'stiffness': 100, 'damping_ratio': 2.5},
+            {'stiffness': 100, 'damping_ratio': 1, 'mass': 0.05},
+            {'stiffness': 100, 'damping_ratio': 1, 'mass': 11},
+            {'stiffness': double.nan, 'damping_ratio': 1},
+            {'stiffness': double.infinity, 'damping_ratio': 1},
+            {'stiffness': '100', 'damping_ratio': 1},
+            {'stiffness': 100},
+            {'damping_ratio': 1},
+          ]) {
+            expectInstant(morph({'_spring': params}), reason: '$params');
+          }
+        });
+
+        test('에러는 템플릿 경로를 싣는다', () {
+          expect(
+            () => TemplateCompiler.buildDirectiveTree(
+              UiNode(
+                type: 'text',
+                reserved: const {
+                  '_morph': {'_to': 1, '_as': 'n', '_spring': 'nope'},
+                },
+                path: 'root/child:text',
+              ),
+            ),
+            throwsA(
+              isA<InvalidTemplateException>().having(
+                (e) => e.path,
+                'path',
+                'root/child:text',
+              ),
+            ),
+          );
+        });
+      });
+
       test('_morph는 scope 안쪽에서 node를 직접 감싼다', () {
         final directive = TemplateCompiler.buildDirectiveTree(
           uiNode(
@@ -177,19 +339,94 @@ void main() {
         expect((scope.child as MorphDirective).child, isA<PlainDirective>());
       });
 
-      test('_morph 필수 _to/_as 누락과 미지 키는 InvalidTemplateException', () {
-        for (final morph in [
-          {'_as': 'n'},
-          {'_to': 1},
-          {'_to': 1, '_as': 'n', '_unknown': true},
-        ]) {
-          expect(
-            () => TemplateCompiler.buildDirectiveTree(
-              uiNode(type: 'text', attrs: {'_morph': morph}),
+      test('_morph의 미지 키(오타)는 InvalidTemplateException', () {
+        expect(
+          () => TemplateCompiler.buildDirectiveTree(
+            uiNode(
+              type: 'text',
+              attrs: {
+                '_morph': {'_to': 1, '_as': 'n', '_unknown': true},
+              },
             ),
-            throwsInvalidTemplate,
-          );
-        }
+          ),
+          throwsInvalidTemplate,
+        );
+      });
+
+      test('바인딩할 수 없는 _as 이름(오타)은 InvalidTemplateException', () {
+        expect(
+          () => TemplateCompiler.buildDirectiveTree(
+            uiNode(
+              type: 'text',
+              attrs: {
+                '_morph': {'_to': 1, '_as': 'line-item'},
+              },
+            ),
+          ),
+          throwsInvalidTemplate,
+        );
+      });
+
+      group('_morph 꼴 오류는 컴파일 에러 대신 애니메이션 없는 morph', () {
+        Directive build(Object? morph) => TemplateCompiler.buildDirectiveTree(
+          uiNode(type: 'text', attrs: {'_morph': morph}),
+        );
+
+        test('_morph가 맵이 아니면 morph 없이 자식만 남는다', () {
+          for (final morph in <Object?>[5, 'x', null, <Object?>[]]) {
+            expect(build(morph), isA<PlainDirective>(), reason: '$morph');
+          }
+        });
+
+        test('_as가 없거나 비거나 문자열이 아니면 morph 없이 자식만 남는다', () {
+          for (final morph in <Map<String, Object?>>[
+            {'_to': 1},
+            {'_to': 1, '_as': ''},
+            {'_to': 1, '_as': 3},
+          ]) {
+            expect(build(morph), isA<PlainDirective>(), reason: '$morph');
+          }
+        });
+
+        test('_to가 없으면 null 목표의 애니메이션 없는 morph', () {
+          final morph = build({'_as': 'n', '_from': 3});
+          expectInstant(morph);
+          expect((morph as MorphDirective).to.source, 'null');
+          expect(morph.from!.source, '3');
+        });
+
+        test('값 꼴이 틀린 키는 애니메이션 없는 morph로 내린다', () {
+          for (final extra in <Map<String, Object?>>[
+            {'_to': <String, Object?>{}},
+            {'_from': <Object?>[]},
+            {'_trigger': null},
+            {'_duration': 'abc'},
+            {'_duration': -1},
+            {'_delay': 'x'},
+            {'_delay': -5},
+            {'_curve': 5},
+            {'_repeat': 'yes'},
+            {'_reverse': 1},
+            {'_duration': 0, '_repeat': true},
+          ]) {
+            final morph = build({'_to': r'${x}', '_as': 'n', ...extra});
+            expectInstant(morph, reason: '$extra');
+            expect((morph as MorphDirective).as, 'n');
+          }
+        });
+
+        test('꼴이 맞는 _from·_trigger는 내린 morph에도 남는다', () {
+          final morph = build({
+            '_to': r'${x}',
+            '_as': 'n',
+            '_from': 1,
+            '_trigger': r'${t}',
+            '_duration': 'abc',
+          });
+          expectInstant(morph);
+          expect((morph as MorphDirective).from!.source, '1');
+          expect(morph.trigger!.roots, {'t'});
+        });
       });
 
       test('_morph는 cond/switch control 노드에서 거부된다', () {
@@ -948,26 +1185,32 @@ void main() {
         expect(directive.motions[1].params, {'amplitude': 6});
       });
 
-      test('빈 _motion 리스트는 InvalidTemplateException', () {
+      test('빈 _motion 리스트는 레이어 없이 컴파일된다', () {
         expect(
-          () => TemplateCompiler.buildDirectiveTree(
-            uiNode(type: 'box', attrs: {'_motion': <Object?>[]}),
-          ),
-          throwsInvalidTemplate,
+          (TemplateCompiler.buildDirectiveTree(
+                    uiNode(type: 'box', attrs: {'_motion': <Object?>[]}),
+                  )
+                  as PlainDirective)
+              .motions
+              .map((m) => m.type),
+          isEmpty,
         );
       });
 
-      test('리스트 원소가 맵도 문자열도 아니면 InvalidTemplateException', () {
+      test('맵도 문자열도 아닌 리스트 원소는 그 레이어만 빠진다', () {
         expect(
-          () => TemplateCompiler.buildDirectiveTree(
-            uiNode(
-              type: 'box',
-              attrs: {
-                '_motion': [1],
-              },
-            ),
-          ),
-          throwsInvalidTemplate,
+          (TemplateCompiler.buildDirectiveTree(
+                    uiNode(
+                      type: 'box',
+                      attrs: {
+                        '_motion': [1, 'fade', null, <Object?>[]],
+                      },
+                    ),
+                  )
+                  as PlainDirective)
+              .motions
+              .map((m) => m.type),
+          ['fade'],
         );
       });
 
@@ -983,12 +1226,33 @@ void main() {
         expect(directive.motions.single.params, isEmpty);
       });
 
-      test('빈 문자열 _motion은 InvalidTemplateException', () {
+      test('빈 문자열·비맵·비리스트 _motion은 레이어 없이 컴파일된다', () {
         expect(
-          () => TemplateCompiler.buildDirectiveTree(
-            uiNode(type: 'box', attrs: {'_motion': ''}),
-          ),
-          throwsInvalidTemplate,
+          (TemplateCompiler.buildDirectiveTree(
+                    uiNode(type: 'box', attrs: {'_motion': ''}),
+                  )
+                  as PlainDirective)
+              .motions
+              .map((m) => m.type),
+          isEmpty,
+        );
+        expect(
+          (TemplateCompiler.buildDirectiveTree(
+                    uiNode(type: 'box', attrs: {'_motion': 5}),
+                  )
+                  as PlainDirective)
+              .motions
+              .map((m) => m.type),
+          isEmpty,
+        );
+        expect(
+          (TemplateCompiler.buildDirectiveTree(
+                    uiNode(type: 'box', attrs: {'_motion': null}),
+                  )
+                  as PlainDirective)
+              .motions
+              .map((m) => m.type),
+          isEmpty,
         );
       });
 
@@ -1012,17 +1276,20 @@ void main() {
         expect(directive.motions[1].params, {'duration': 500});
       });
 
-      test('리스트 원소의 빈 문자열은 InvalidTemplateException', () {
+      test('리스트 원소의 빈 문자열은 그 레이어만 빠진다', () {
         expect(
-          () => TemplateCompiler.buildDirectiveTree(
-            uiNode(
-              type: 'box',
-              attrs: {
-                '_motion': [''],
-              },
-            ),
-          ),
-          throwsInvalidTemplate,
+          (TemplateCompiler.buildDirectiveTree(
+                    uiNode(
+                      type: 'box',
+                      attrs: {
+                        '_motion': ['', 'fade'],
+                      },
+                    ),
+                  )
+                  as PlainDirective)
+              .motions
+              .map((m) => m.type),
+          ['fade'],
         );
       });
 
@@ -1033,17 +1300,39 @@ void main() {
         expect((directive as PlainDirective).motions, isEmpty);
       });
 
-      test('_motion.type이 없거나 비면 InvalidTemplateException', () {
+      test('_motion.type이 없거나 비거나 문자열이 아니면 그 레이어만 빠진다', () {
         expect(
-          () => TemplateCompiler.buildDirectiveTree(
-            uiNode(
-              type: 'box',
-              attrs: {
-                '_motion': {'duration': 500},
-              },
-            ),
-          ),
-          throwsInvalidTemplate,
+          (TemplateCompiler.buildDirectiveTree(
+                    uiNode(
+                      type: 'box',
+                      attrs: {
+                        '_motion': {'duration': 500},
+                      },
+                    ),
+                  )
+                  as PlainDirective)
+              .motions
+              .map((m) => m.type),
+          isEmpty,
+        );
+        expect(
+          (TemplateCompiler.buildDirectiveTree(
+                    uiNode(
+                      type: 'box',
+                      attrs: {
+                        '_motion': [
+                          {'duration': 500},
+                          {'type': ''},
+                          {'type': 3},
+                          {'type': 'float'},
+                        ],
+                      },
+                    ),
+                  )
+                  as PlainDirective)
+              .motions
+              .map((m) => m.type),
+          ['float'],
         );
       });
 
@@ -1323,7 +1612,8 @@ void main() {
       });
 
       test('null 마커는 부재가 아니라 꼴 오류다 (L3)', () {
-        for (final marker in ['_if', '_loop', '_scope', '_on', '_motion']) {
+        // `_motion: null`은 0.7.0부터 꼴 오류지만 레이어 없이 내려간다(_motion 그룹).
+        for (final marker in ['_if', '_loop', '_scope', '_on']) {
           expect(
             () => TemplateCompiler.buildDirectiveTree(
               uiNode(type: 'text', attrs: {marker: null}),

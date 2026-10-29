@@ -1,4 +1,5 @@
 import '../action/command.dart';
+import '../engine_spring.dart';
 import '../event_timing.dart';
 import '../lifecycle_hook.dart';
 import '../scope_config.dart';

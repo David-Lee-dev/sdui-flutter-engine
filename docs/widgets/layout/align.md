@@ -6,7 +6,7 @@ Builds Flutter's [Align] for an `align` node. This primitive mirrors the corresp
 
 | Name | Type | Allowed values | Default | Bindable (`${}`) | Description |
 | --- | --- | --- | --- | --- | --- |
-| `alignment` | `alignment` | top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right | `center` | Yes | positions the child or children within the available space. Values: top_left \| top_center \| top_right \| center_left \| center \| center_right \| bottom_left \| bottom_center \| bottom_right. |
+| `alignment` | `alignment` | top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right, `[x, y]` | `center` | Yes | positions the child or children within the available space. Values: top_left \| top_center \| top_right \| center_left \| center \| center_right \| bottom_left \| bottom_center \| bottom_right, or `[x, y]` (see [alignment values](../../concepts.md#alignment-values)). |
 | `width_factor` | `number` | — | `null` | Yes | sizes width to this multiple of the child width. |
 | `height_factor` | `number` | — | `null` | Yes | sizes height to this multiple of the child height. |
 | `_child` | widget node | — | `null` | No | The single positional child; cannot be combined with `_children` or `_slots`. |

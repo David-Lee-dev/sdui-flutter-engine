@@ -3,20 +3,29 @@ import 'dart:async';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import '../log/engine_log.dart';
 import '../motion/_base.dart';
 
 /// Owns the controller and lifecycle that turn a declarative [MotionPlan] into frames.
+///
+/// A throw from the motion's `plan()` or `frame()` turns this layer off for
+/// good: [child] is drawn at rest as if the layer were absent, and the
+/// failure is only debug-logged, never reported.
 class MotionWrapper extends StatefulWidget {
   const MotionWrapper({
     super.key,
     required this.motion,
     required this.params,
     required this.child,
+    this.path,
   });
 
   final Motion motion;
   final MotionParams params;
   final Widget child;
+
+  /// Template path of the owning node, for diagnostics.
+  final String? path;
 
   @override
   State<MotionWrapper> createState() => _MotionWrapperState();
@@ -61,12 +70,46 @@ class _MotionWrapperState extends State<MotionWrapper>
   /// Whether the motion has actually been started at least once.
   bool _started = false;
 
+  /// Whether a motion failure turned this layer off; it never turns back on.
+  bool _off = false;
+
+  static const _restPlan = MotionPlan(duration: Duration.zero);
+
   @override
   void initState() {
     super.initState();
-    _plan = widget.motion.plan(widget.params);
+    _plan = _planned() ?? _restPlan;
     _controller = AnimationController(vsync: this, duration: _plan.duration);
     _curved = CurvedAnimation(parent: _controller, curve: _plan.curve);
+  }
+
+  /// The motion's plan, or `null` once it failed or cannot run (a repeat
+  /// with no duration).
+  MotionPlan? _planned() {
+    if (_off) return null;
+    final MotionPlan plan;
+    try {
+      plan = widget.motion.plan(widget.params);
+    } catch (error) {
+      _turnOff('plan failed: ${error.runtimeType}');
+      return null;
+    }
+    if (plan.repeat && plan.duration <= Duration.zero) {
+      _turnOff('repeat needs a positive duration');
+      return null;
+    }
+    return plan;
+  }
+
+  void _turnOff(String reason) {
+    _off = true;
+    _delayTimer?.cancel();
+    if (_started) _controller.stop();
+    EngineLog.widget.stilled(
+      this,
+      widget.path ?? widget.motion.type,
+      '_motion "${widget.motion.type}" $reason',
+    );
   }
 
   @override
@@ -209,6 +252,7 @@ class _MotionWrapperState extends State<MotionWrapper>
 
   void _run() {
     _delayTimer?.cancel();
+    if (_off) return;
     void go() {
       if (!mounted) return;
       if (_plan.repeat) {
@@ -229,7 +273,8 @@ class _MotionWrapperState extends State<MotionWrapper>
   void didUpdateWidget(MotionWrapper oldWidget) {
     super.didUpdateWidget(oldWidget);
     final prev = _plan;
-    final next = widget.motion.plan(widget.params);
+    final next = _planned();
+    if (next == null) return;
     _plan = next;
 
     if (next.duration != prev.duration) _controller.duration = next.duration;
@@ -262,8 +307,20 @@ class _MotionWrapperState extends State<MotionWrapper>
     return AnimatedBuilder(
       animation: _curved!,
       child: widget.child,
-      builder: (context, child) =>
-          widget.motion.frame(context, _curved!.value, child!, widget.params),
+      builder: (context, child) {
+        if (_off) return child!;
+        try {
+          return widget.motion.frame(
+            context,
+            _curved!.value,
+            child!,
+            widget.params,
+          );
+        } catch (error) {
+          _turnOff('frame failed: ${error.runtimeType}');
+          return child!;
+        }
+      },
     );
   }
 }

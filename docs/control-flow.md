@@ -56,6 +56,7 @@ Matching uses the evaluator's structural equality. A switch control node allows 
 | `_trigger` | expression or scalar | none |
 | `_repeat` | bool | `false` |
 | `_reverse` | bool | `false` |
+| `_spring` | preset name or literal `{stiffness, damping_ratio, mass}` | none (tween) |
 
 ```yaml
 _type: opacity
@@ -68,5 +69,47 @@ opacity: '${alpha}'
 _child: { _type: text, value: Ready }
 ```
 
-The morph variable is readable only by its child and is not writable state. Unknown morph keys are rejected. Curve names use the same resolver documented in [Motion](motion.md).
+The morph variable is readable only by its child and is not writable state. Curve names use the same resolver documented in [Motion](motion.md).
+
+### When a morph is misused or fails
+
+A morph never fails the template or stops the app, in debug and release alike (since 0.7.0). Only typos are compile errors:
+
+- **Compile error (typo):** an unknown `_morph` key, an `_as` name that cannot be referenced as a binding (e.g. `line-item`), an unknown `_spring` preset name or `_spring` map key, and expression syntax errors.
+- **No morph:** a `_morph` value that is not a map, or a missing, empty or non-string `_as`. The child renders without the morph (a child that still reads the name then fails as any undeclared binding does).
+- **Morph without animation:** any other malformed value — a missing `_to`, a `_to`/`_from`/`_trigger` that is neither an expression nor a scalar, `_duration`/`_delay` that are not non-negative integers, a non-string `_curve`, non-bool `_repeat`/`_reverse`, `_repeat` with `_duration: 0`, and every `_spring` misuse listed [below](#_spring). The `_as` variable is still provided and equals the evaluated `_to` immediately, following every `_to` change at once. An unknown curve *name* still falls back to `ease_out`.
+- **Runtime:** when evaluating `_to`, `_from` or `_trigger` throws or yields something that is not a finite number, the variable keeps its last good value; before any good value it uses a valid `_from`, and otherwise it is `null`.
+
+None of this reaches `SduiErrorObserver` or `NodeGuard`; a debug build logs one `animation off (...)` line per node and reason. See [Error handling](errors.md#motion-and-morph-never-fail).
+
+### `_spring`
+
+`_spring` replaces the duration/curve tween with a spring simulation. A target change starts a new simulation from the current value and, except for `effect_default`, the current velocity, so a retarget mid-flight continues smoothly. Since 0.7.0.
+
+```yaml
+_type: align
+_morph:
+  _to: '${tab}'
+  _as: lens
+  _spring: spatial_default
+alignment: '${[remap(lens, 0, 3, -0.9, 0.9), 0]}'
+_child: { _type: sizedbox, width: 72, height: 52 }
+```
+
+| Preset | Stiffness | Damping ratio | Velocity on retarget |
+| --- | --- | --- | --- |
+| `spatial_fast` | 1400 | 0.8 | kept |
+| `spatial_default` | 700 | 0.75 | kept |
+| `spatial_slow` | 300 | 0.85 | kept |
+| `effect_default` | 800 | 1.0 | reset to 0 |
+
+A literal map gives `stiffness` (1–5000, required), `damping_ratio` (0.2–2, required) and `mass` (0.1–10, default 1). Mass is 1 in every preset.
+
+- An unknown preset name or an unknown map key is a typo and fails compilation with the node path.
+- Any other misuse gives a morph without animation instead of a compile error: an expression (`'${preset}'`), a value that is neither a name nor a map (`5`, `true`, `null`), a missing, non-numeric, non-finite or out-of-range parameter, or combining `_spring` with `_duration`, `_curve`, `_repeat` or `_reverse`.
+- `_from`, `_delay` and `_trigger` work as for the tween; a trigger restarts from `_from` at rest.
+- A target equal to the current target is ignored. A target that is not a finite number, or whose expression fails to evaluate, keeps the previous target; with no good target yet the value is a valid `_from`, else `null`.
+- A simulation that has not settled after 5 seconds snaps to its target. When the platform asks to reduce motion (`MediaQuery.disableAnimations`), the value jumps to the target.
+
+Older engines reject `_spring` as an unknown morph key; declare `_requires: [spring_v1]` at the template root (see [Concepts](concepts.md#reserved-keys)).
 

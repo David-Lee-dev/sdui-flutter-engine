@@ -114,6 +114,10 @@ Every widget declares the render protocol it produces and the protocol its child
 
 `nested_scroll_view` deliberately accepts mixed child roles. Loop wrappers `sliver_list` and `sliver_grid` produce slivers; all other loop wrappers produce boxes. Repeated items themselves must produce boxes.
 
+## Alignment values
+
+Every `alignment`-typed property (for example `align.alignment`, `stack.alignment`, gradient `begin`/`end`/`center`, motion anchors) accepts one of the nine names `top_left`, `top_center`, `top_right`, `center_left`, `center`, `center_right`, `bottom_left`, `bottom_center`, `bottom_right`, or, since 0.7.0, a list `[x, y]` of two finite numbers in Flutter's `Alignment` coordinates (`[-1, -1]` is top left, `[0, 0]` the center, `[1, 1]` bottom right). Each axis is clamped to −4…4. Anything else falls back to the property's default.
+
 ## Reserved keys
 
 The parser always consumes `_type`, `_child`, `_children`, `_slots`, and `_key`. The compiler recognizes these additional widget-node markers:
@@ -131,6 +135,8 @@ The parser always consumes `_type`, `_child`, `_children`, `_slots`, and `_key`.
 | `_on` | Interaction event map. |
 | `_motion` | Motion atom/preset or list. |
 | `_provides` | Builder-provided readable variable names. |
+
+A template root may also declare `_requires`, a list of engine features the template needs: `spring_v1` (`_morph._spring`), `shape_v1` (the `shape` widget), `math_v1` (`sin`, `cos`, `pow`, `remap`) and `align_xy_v1` (`[x, y]` alignments). An unknown feature name fails compilation, and engines older than 0.7.0 reject `_requires` itself as an unknown reserved key, so the template fails to mount instead of rendering partially. `_requires` is accepted only at the root.
 
 Inside `_scope`, the allowed keys are `_state`, `_action`, `_lifecycle`, and `_skeleton`. Inside a command, the metadata keys are `_type`, `_then`, `_error`, `_dismiss`, `_always`, `_background`, `_when`, plus action-level `_dedupe` on the single-command form. Other underscore-prefixed names are rejected; widget/driver properties must not begin with `_`.
 

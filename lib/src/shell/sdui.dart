@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart'
     show BuildContext, Builder, Page, ValueKey, Widget;
 import 'package:go_router/go_router.dart';
@@ -18,6 +20,7 @@ import 'screen_page.dart';
 import '../impl/noop_telemetry_sink.dart';
 import '../engine.dart';
 import '../runtime/log/engine_log.dart';
+import '../runtime/media/shader_registry.dart';
 import '../runtime/telemetry/telemetry.dart';
 import '../runtime/widget/factory.dart';
 import 'sdui_screen_page_builder.dart';
@@ -76,7 +79,8 @@ final class Sdui {
   /// frame and applies its root `_transition`. The returned future completes
   /// when every listed load has settled; failures are reported through the
   /// error observer and leave that id uncached. Configuration errors still
-  /// throw synchronously.
+  /// throw synchronously. Engine shaders start loading in the background and
+  /// are not part of the returned future.
   static Future<void> initialize({
     required ScreenLoader screenLoader,
     List<String> preloadScreens = const [],
@@ -129,6 +133,9 @@ final class Sdui {
       debugLogLevel: debugLogLevel,
       logOutput: logOutput,
     );
+    // Shaders load in the background: shapes paint with the Path fallback
+    // until their program is ready, so boot never waits on it.
+    unawaited(ShaderRegistry.warmUp());
     return SduiState.cache.warm(preloadScreens, screenLoader);
   }
 

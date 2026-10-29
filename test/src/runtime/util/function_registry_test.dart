@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sdui_engine/src/runtime/util/function_registry.dart';
@@ -156,6 +158,58 @@ void main() {
         expect(call('lerp', [100, 300, 0]), 100);
         expect(call('lerp', [100, 300, 1]), 300);
         expect(call('lerp', ['x', double.infinity, null]), 0);
+      });
+
+      test('sin/cos — 라디안 1개 인자', () {
+        expect(call('sin', [0]), 0);
+        expect(call('sin', [math.pi / 2]), closeTo(1, 1e-12));
+        expect(call('cos', [0]), 1);
+        expect(call('cos', [math.pi]), closeTo(-1, 1e-12));
+      });
+
+      test('sin/cos — 인자 수·타입·비유한은 null', () {
+        for (final name in ['sin', 'cos']) {
+          expect(call(name, []), isNull);
+          expect(call(name, [1, 2]), isNull);
+          expect(call(name, ['1']), isNull);
+          expect(call(name, [null]), isNull);
+          expect(call(name, [double.nan]), isNull);
+          expect(call(name, [double.infinity]), isNull);
+          expect(call(name, [double.negativeInfinity]), isNull);
+        }
+      });
+
+      test('pow — 실수 영역 밖·비유한 결과는 null', () {
+        expect(call('pow', [2, 10]), 1024);
+        expect(call('pow', [4, 0.5]), 2);
+        expect(call('pow', [-2, 3]), -8);
+        expect(call('pow', [-8, 1 / 3]), isNull);
+        expect(call('pow', [0, -1]), isNull);
+        expect(call('pow', [10, 400.5]), isNull);
+        expect(call('pow', [1e308, 2]), isNull);
+        expect(call('pow', [double.nan, 1]), isNull);
+        expect(call('pow', [2, double.infinity]), isNull);
+        expect(call('pow', [2]), isNull);
+        expect(call('pow', [2, 2, 2]), isNull);
+        expect(call('pow', ['2', 2]), isNull);
+      });
+
+      test('remap — 외삽 포함 선형 재매핑', () {
+        expect(call('remap', [5, 0, 10, 0, 100]), 50);
+        expect(call('remap', [0, 0, 1, -1, 1]), -1);
+        expect(call('remap', [2, 0, 1, 0, 10]), 20);
+        expect(call('remap', [-1, 0, 1, 10, 20]), 0);
+        expect(call('remap', [0.5, 1, 0, 0, 1]), 0.5);
+      });
+
+      test('remap — a0==a1·인자 수·비유한은 null', () {
+        expect(call('remap', [1, 3, 3, 0, 1]), isNull);
+        expect(call('remap', [1, 0, 1, 0]), isNull);
+        expect(call('remap', [1, 0, 1, 0, 1, 2]), isNull);
+        expect(call('remap', [double.nan, 0, 1, 0, 1]), isNull);
+        expect(call('remap', [1, 0, 1, 0, double.infinity]), isNull);
+        expect(call('remap', [1e308, 0, 1e-308, 0, 1]), isNull);
+        expect(call('remap', ['1', 0, 1, 0, 1]), isNull);
       });
 
       test('mix — 색 보간과 잘못된 색 폴백', () {

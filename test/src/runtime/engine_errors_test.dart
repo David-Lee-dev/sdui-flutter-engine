@@ -129,6 +129,59 @@ void main() {
       expect(find.text('oops:a.b'), findsOneWidget);
     });
   });
+
+  group('EngineErrors.isolate (paint·tick 시점 격리)', () {
+    test('정상 실행은 결과를 그대로 돌려주고 보고하지 않는다', () {
+      final owner = Object();
+      expect(EngineErrors.isolate(owner, 'root/x', () => 7, fallback: 0), 7);
+      expect(observer.errors, isEmpty);
+    });
+
+    test('던지면 fallback을 돌려주고 nodeBuild·경로로 한 번 보고한다', () {
+      final owner = Object();
+      final result = EngineErrors.isolate<int>(
+        owner,
+        'root/shape',
+        () => throw ArgumentError('bad paint'),
+        fallback: -1,
+      );
+      expect(result, -1);
+      expect(observer.errors, hasLength(1));
+      expect(observer.errors.single.scope, SduiErrorScope.nodeBuild);
+      expect(observer.errors.single.nodePath, 'root/shape');
+      expect(observer.errors.single.error, isA<ArgumentError>());
+    });
+
+    test('한 번 깨진 owner는 계속 깨진 상태로 fn을 다시 실행하지 않는다', () {
+      final owner = Object();
+      var runs = 0;
+      int boom() {
+        runs++;
+        throw StateError('x');
+      }
+
+      EngineErrors.isolate(owner, null, boom, fallback: 0);
+      expect(EngineErrors.isolate(owner, null, () => 5, fallback: 0), 0);
+      expect(EngineErrors.isolate(owner, null, boom, fallback: 0), 0);
+      expect(runs, 1);
+      expect(observer.errors, hasLength(1));
+    });
+
+    test('owner마다 독립적으로 깨진다', () {
+      final broken = Object();
+      final healthy = Object();
+      EngineErrors.isolate(broken, null, () => throw 'x', fallback: 0);
+      expect(EngineErrors.isolate(healthy, null, () => 3, fallback: 0), 3);
+    });
+
+    test('관찰자가 던져도 fallback을 돌려준다', () {
+      EngineErrors.observer = _ThrowingObserver();
+      expect(
+        EngineErrors.isolate(Object(), null, () => throw 'x', fallback: 9),
+        9,
+      );
+    });
+  });
 }
 
 final class _ThrowingObserver extends SduiErrorObserver {

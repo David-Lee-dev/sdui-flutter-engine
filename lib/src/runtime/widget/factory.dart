@@ -35,6 +35,7 @@ import 'catalog/custom/speech_balloon_widget.dart';
 import 'catalog/custom/serpentine_row_widget.dart';
 import 'catalog/custom/scratch_card_widget.dart';
 import 'catalog/custom/serpentine_widget.dart';
+import 'catalog/custom/shape_widget.dart';
 import 'catalog/custom/spin_grid_widget.dart';
 import 'catalog/primitive/divider_widget.dart';
 import 'catalog/primitive/custom_scroll_view_widget.dart';
@@ -158,6 +159,7 @@ final class WidgetFactory {
     'speech_balloon': EagerSpec(SpeechBalloonWidget.build),
     'serpentine': EagerSpec(SerpentineWidget.build),
     'serpentine_row': EagerSpec(SerpentineRowWidget.build),
+    'shape': EagerSpec(ShapeWidget.build),
     'spin_grid': ActionSpec(SpinGridWidget.build),
     'scratch_card': ActionSpec(ScratchCardWidget.build),
     'chart': EagerSpec(ChartWidget.build),

@@ -96,6 +96,9 @@ Initialization registers these functions before the catalog freezes, includes th
 | `sum` | `sum(...values)` | Sum of numeric args; one list arg is unpacked. |
 | `clamp` | `clamp(value?, low?, high?)` | Inclusive numeric clamp. |
 | `lerp` | `lerp(begin?, end?, t?)` | Numeric interpolation; invalid inputs default to zero. |
+| `remap` | `remap(value, from0, from1, to0, to1)` | Maps `value` from `[from0, from1]` onto `[to0, to1]`, extrapolating like `lerp`. Exactly 5 finite numbers; `null` when `from0 == from1` or on a non-finite result. Since 0.7.0. |
+| `sin` / `cos` | `sin(radians)`, `cos(radians)` | Exactly one finite number; otherwise `null`. Since 0.7.0. |
+| `pow` | `pow(base, exponent)` | `base` raised to `exponent`. Exactly two finite numbers; `null` outside the real domain (e.g. `pow(-8, 1/3)`) or on overflow. Since 0.7.0. |
 | `mix` | `mix(beginColor?, endColor?, t?)` | ARGB integer color interpolation, clamped to 0–1. |
 | `comma` | `comma(number?)` | Thousands-grouped number text. |
 | `format` | `format(number?, decimals?)` | Fixed-decimal text. |

@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.7.0
+
+- New `_morph._spring`: a preset name (`spatial_fast`, `spatial_default`,
+  `spatial_slow`, `effect_default`) or a literal
+  `{stiffness, damping_ratio, mass}` map (stiffness 1–5000, damping_ratio
+  0.2–2, mass 0.1–10, default 1) replaces the tween with a spring. A target
+  change continues from the current value and velocity (`effect_default`
+  restarts at rest); an unsettled spring snaps to its target after 5 s, and
+  reduced motion jumps to the target. A target that is not a finite number,
+  or whose expression fails to evaluate, keeps the previous target. Unknown
+  presets or keys are compile errors; other misuse (expressions, out-of-range
+  values, combining `_spring` with `_duration`, `_curve`, `_repeat` or
+  `_reverse`) gives a morph without animation, as below.
+- **Motion and morph never fail the template or the app** (debug and
+  release). Typos stay compile errors: unregistered `_motion` names, unknown
+  `_morph` keys, unbindable `_as` names, unknown `_spring` presets or keys.
+  Everything else degrades silently, with one debug `animation off` log line
+  per node and reason, and is never reported to `SduiErrorObserver` or
+  caught by `NodeGuard`:
+  - `_motion` values or entries of the wrong shape (`5`, `null`, `[]`, `''`,
+    a map without a string `type`) drop that entry instead of failing
+    compilation; other layers stay.
+  - A `_motion` layer whose parameters, `plan()` or `frame()` throw —
+    including app-registered atoms — or whose repeating plan has no duration
+    is off for the node's lifetime; the widget is drawn at rest and other
+    layers keep running. Motion numbers, offsets and durations beyond
+    ±1,000,000 fall back to the atom default.
+  - A `_morph` that is not a map or has no string `_as` is dropped. Other
+    malformed values (no `_to`, non-scalar `_to`/`_from`/`_trigger`, invalid
+    `_duration`/`_delay`/`_curve`/`_repeat`/`_reverse`, `_repeat` with
+    `_duration: 0`) give a morph without animation: the variable equals
+    `_to` immediately. Previously these were compile errors or, for some
+    tween values, a silent fallback to the 400 ms default.
+  - At runtime, a `_to`, `_from` or `_trigger` that throws (any error type,
+    tween and spring alike) keeps the last good value, then a valid `_from`,
+    then `null`. Before, a tween expression error escaped the morph, and a
+    target that never evaluated read as `0`.
+- New `shape` widget: a decorative smooth union of up to 8 circles, capsules
+  and rounded rects (`shapes`, `smooth`, `fill`, `rim`), painted by an engine
+  fragment shader that `Sdui.initialize` loads in the background. Until it is
+  loaded, or where it cannot load, the hard union of the same primitives is
+  painted. Invalid runtime values keep each primitive's last valid form, and a
+  paint failure is reported once and then paints nothing.
+- New expression functions `sin`, `cos`, `pow` and `remap`. They return
+  `null` for wrong arity, non-finite input, or a non-finite result (`pow`
+  also outside the real domain; `remap` when its source range is empty).
+- Alignments accept `[x, y]` (two finite numbers, each clamped to −4…4) in
+  addition to the nine names. **This applies to every property decoded as an
+  alignment**, including gradient `begin`/`end`/`center` and motion
+  parameters, not only `align`.
+- New root key `_requires: [spring_v1, shape_v1, math_v1, align_xy_v1]`
+  declares the engine features a template needs. Unknown names are compile
+  errors; older engines reject the key itself, so such templates fail to
+  mount there instead of rendering partially.
+
 ## 0.6.1
 
 - iOS podspec version now matches the package version (it stayed at 0.4.0)

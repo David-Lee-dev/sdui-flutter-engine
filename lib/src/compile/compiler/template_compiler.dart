@@ -1,5 +1,6 @@
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
+import 'package:sdui_engine/src/ir/model/engine_spring.dart';
 import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/model/lifecycle_hook.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
@@ -8,6 +9,7 @@ import 'package:sdui_engine/src/ir/compiled_value.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
 import 'package:sdui_engine/src/ir/model/ui_node.dart';
 import '../invalid_template_exception.dart';
+import '../schema/builtin_language.dart';
 import '../template_parser.dart';
 import 'action_compiler.dart';
 import 'value_compiler.dart';
@@ -41,6 +43,59 @@ final class TemplateCompiler {
   static const _condMarkers = {'_if', '_else'};
 
   static const _switchMarkers = {'_case', '_default'};
+
+  /// Engine features a template root may declare under `_requires`.
+  ///
+  /// Engines that predate `_requires` reject it as an unknown reserved key,
+  /// so a template that needs a feature fails to compile on an engine
+  /// without it instead of rendering partially.
+  static const knownFeatures = {
+    'spring_v1',
+    'shape_v1',
+    'math_v1',
+    'align_xy_v1',
+  };
+
+  /// Builds the directive tree for a template root.
+  ///
+  /// Checks and consumes the root-only `_requires` declaration, then builds
+  /// the tree like [buildDirectiveTree]. Throws [InvalidTemplateException]
+  /// when `_requires` is not a list of known feature names.
+  static Directive buildRoot(UiNode node) {
+    if (!node.reserved.containsKey('_requires')) {
+      return buildDirectiveTree(node);
+    }
+    final raw = node.reserved['_requires'];
+    if (raw is! List) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_requires" must be a list of feature names.',
+      );
+    }
+    for (final feature in raw) {
+      if (!knownFeatures.contains(feature)) {
+        throw InvalidTemplateException(
+          node.path,
+          'unknown "_requires" feature "$feature" '
+          '(supported: ${knownFeatures.join(", ")}).',
+        );
+      }
+    }
+    return buildDirectiveTree(
+      UiNode(
+        type: node.type,
+        props: node.props,
+        reserved: {
+          for (final entry in node.reserved.entries)
+            if (entry.key != '_requires') entry.key: entry.value,
+        },
+        children: node.children,
+        slots: node.slots,
+        key: node.key,
+        path: node.path,
+      ),
+    );
+  }
 
   /// Builds the directive tree rooted at [node].
   ///
@@ -312,14 +367,23 @@ final class TemplateCompiler {
     '_trigger',
     '_repeat',
     '_reverse',
+    '_spring',
   };
 
+  /// `_morph` keys that configure the tween and so conflict with `_spring`.
+  static const _tweenOnlyKeys = {'_duration', '_curve', '_repeat', '_reverse'};
+
+  /// Builds the `_morph` directive around [child].
+  ///
+  /// Only typos fail compilation: an unknown key, an unbindable `_as` name,
+  /// an unknown spring preset or spring key. Other misuse degrades: without a
+  /// map or an `_as` name the morph is dropped, and a malformed value or a
+  /// conflicting or out-of-range `_spring` yields a morph without animation,
+  /// whose variable takes `_to` at once.
   static Directive _wrapMorph(UiNode node, Directive child) {
     if (!node.reserved.containsKey('_morph')) return child;
     final raw = node.reserved['_morph'];
-    if (raw is! Map) {
-      throw InvalidTemplateException(node.path, 'Prop "_morph" must be a map.');
-    }
+    if (raw is! Map) return child;
     for (final key in raw.keys) {
       if (!_morphAllowedKeys.contains(key)) {
         throw InvalidTemplateException(
@@ -329,52 +393,127 @@ final class TemplateCompiler {
         );
       }
     }
-    final to = raw['_to'];
-    if (to == null) {
-      throw InvalidTemplateException(node.path, '_morph requires "_to".');
-    }
     final as = raw['_as'];
-    if (as is! String || as.isEmpty) {
-      throw InvalidTemplateException(
-        node.path,
-        '_morph "_as" must be a non-empty string.',
-      );
-    }
+    if (as is! String || as.isEmpty) return child;
     _requireBindableName(as, 'morph "_as" name', node.path);
-    Expression expression(Object? value, String key) {
-      final source = switch (value) {
+
+    var malformed = false;
+    Expression? expression(String key) {
+      if (!raw.containsKey(key)) return null;
+      final source = switch (raw[key]) {
         String value when value.isNotEmpty => value,
         num value => '\${$value}',
         bool value => '\${$value}',
         _ => null,
       };
       if (source == null) {
-        throw InvalidTemplateException(
-          node.path,
-          'Prop "_morph.$key" must be an expression or scalar literal.',
-        );
+        malformed = true;
+        return null;
       }
       return _compileExpr(source, node.path);
     }
 
+    final to = expression('_to');
+    final from = expression('_from');
+    final trigger = expression('_trigger');
+    final duration = raw['_duration'] ?? 400;
+    final curve = raw['_curve'] ?? 'ease_out';
+    final delay = raw['_delay'] ?? 0;
+    final repeat = raw['_repeat'] ?? false;
+    final reverse = raw['_reverse'] ?? false;
+    final hasSpring = raw.containsKey('_spring');
+    final spring = hasSpring ? _morphSpring(raw['_spring'], node.path) : null;
+    final springMisused =
+        hasSpring && (spring == null || raw.keys.any(_tweenOnlyKeys.contains));
+    final target = to ?? _compileExpr(r'${null}', node.path);
+
+    if (malformed ||
+        to == null ||
+        springMisused ||
+        duration is! int ||
+        duration < 0 ||
+        curve is! String ||
+        delay is! int ||
+        delay < 0 ||
+        repeat is! bool ||
+        reverse is! bool ||
+        (repeat && duration == 0)) {
+      return MorphDirective(
+        to: target,
+        from: from,
+        as: as,
+        durationMs: 0,
+        curve: 'linear',
+        trigger: trigger,
+        child: child,
+        path: node.path,
+      );
+    }
     return MorphDirective(
-      to: expression(to, '_to'),
-      from: raw.containsKey('_from') ? expression(raw['_from'], '_from') : null,
+      to: target,
+      from: from,
       as: as,
-      durationMs: raw['_duration'] is int && (raw['_duration'] as int) >= 0
-          ? raw['_duration'] as int
-          : 400,
-      curve: raw['_curve'] is String ? raw['_curve'] as String : 'ease_out',
-      delayMs: raw['_delay'] is int && (raw['_delay'] as int) >= 0
-          ? raw['_delay'] as int
-          : 0,
-      repeat: raw['_repeat'] is bool ? raw['_repeat'] as bool : false,
-      reverse: raw['_reverse'] is bool ? raw['_reverse'] as bool : false,
-      trigger: raw.containsKey('_trigger')
-          ? expression(raw['_trigger'], '_trigger')
-          : null,
+      durationMs: duration,
+      curve: curve,
+      delayMs: delay,
+      repeat: repeat,
+      reverse: reverse,
+      trigger: trigger,
+      spring: spring,
       child: child,
       path: node.path,
+    );
+  }
+
+  /// Decodes `_morph._spring`: a preset name or a literal parameter map.
+  ///
+  /// An unknown preset name or map key is a typo and throws. Any other
+  /// malformed value (an expression, another type, a missing, out-of-range
+  /// or non-finite parameter) returns `null`, so the morph loses animation.
+  static EngineSpringSpec? _morphSpring(Object? spring, String path) {
+    if (spring is String) {
+      if (spring.contains(r'${')) return null;
+      final preset = EngineSpringNames.presets[spring];
+      if (preset == null) {
+        throw InvalidTemplateException(
+          path,
+          'unknown "_morph._spring" preset "$spring" (a literal preset name; '
+          'supported: ${EngineSpringNames.presets.keys.join(", ")}).',
+        );
+      }
+      return preset;
+    }
+    if (spring is! Map) return null;
+    const params = BuiltinLanguage.springParams;
+    for (final key in spring.keys) {
+      if (!params.containsKey(key)) {
+        throw InvalidTemplateException(
+          path,
+          'unknown "_morph._spring" key "$key" '
+          '(allowed: ${params.keys.join(", ")}).',
+        );
+      }
+    }
+    double? param(String key, {double? fallback}) {
+      final value = spring[key];
+      if (value == null) return fallback;
+      final range = params[key]!;
+      final inRange =
+          value is num &&
+          value.isFinite &&
+          value >= range.min! &&
+          value <= range.max!;
+      return inRange ? value.toDouble() : null;
+    }
+
+    final stiffness = param('stiffness');
+    final dampingRatio = param('damping_ratio');
+    final mass = param('mass', fallback: 1);
+    if (stiffness == null || dampingRatio == null || mass == null) return null;
+    return EngineSpringSpec(
+      stiffness: stiffness,
+      dampingRatio: dampingRatio,
+      mass: mass,
     );
   }
 
@@ -689,68 +828,37 @@ final class TemplateCompiler {
     return Duration(microseconds: (ms * 1000).round());
   }
 
+  /// Collects the `_motion` layers of [node].
+  ///
+  /// A malformed entry (neither a map nor a string, an empty name, a missing
+  /// or empty `type`) is dropped and the other layers still run; an unknown
+  /// motion name is a typo the validator rejects.
   static List<({String type, Map<String, Object?> params})> _parseMotion(
     UiNode node,
   ) {
     if (!node.reserved.containsKey('_motion')) return const [];
     final raw = node.reserved['_motion'];
-    if (raw is Map) return [_motionSpec(raw, node.path)];
-    if (raw is String) return [_motionName(raw, node.path)];
-    if (raw is List) {
-      if (raw.isEmpty) {
-        throw InvalidTemplateException(
-          node.path,
-          'Prop "_motion" list must not be empty.',
-        );
-      }
-      return [
-        for (final entry in raw)
-          if (entry is Map)
-            _motionSpec(entry, node.path)
-          else if (entry is String)
-            _motionName(entry, node.path)
-          else
-            throw InvalidTemplateException(
-              node.path,
-              'each "_motion" entry must be a map or a string.',
-            ),
-      ];
-    }
-    throw InvalidTemplateException(
-      node.path,
-      'Prop "_motion" must be a map, a string, or a list of those.',
-    );
+    return [
+      for (final entry in raw is List ? raw : [raw])
+        ?_motionEntry(entry, node.path),
+    ];
   }
 
-  static ({String type, Map<String, Object?> params}) _motionName(
-    String name,
+  static ({String type, Map<String, Object?> params})? _motionEntry(
+    Object? entry,
     String path,
   ) {
-    if (name.isEmpty) {
-      throw InvalidTemplateException(
-        path,
-        '"_motion" name must be a non-empty string.',
-      );
+    if (entry is String) {
+      return entry.isEmpty ? null : (type: entry, params: const {});
     }
-    return (type: name, params: const {});
-  }
-
-  static ({String type, Map<String, Object?> params}) _motionSpec(
-    Map<Object?, Object?> raw,
-    String path,
-  ) {
-    final type = raw['type'];
-    if (type is! String || type.isEmpty) {
-      throw InvalidTemplateException(
-        path,
-        '"_motion.type" must be a non-empty string.',
-      );
-    }
+    if (entry is! Map) return null;
+    final type = entry['type'];
+    if (type is! String || type.isEmpty) return null;
     return (
       type: type,
       params: ValueCompiler.map({
-        for (final entry in raw.entries)
-          if (entry.key != 'type') '${entry.key}': entry.value,
+        for (final param in entry.entries)
+          if (param.key != 'type') '${param.key}': param.value,
       }, path),
     );
   }

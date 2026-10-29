@@ -41,6 +41,29 @@ with the failing node's template path (`nodePath`), then replaced in place:
 `nodeErrorBuilder` if the app installed one, otherwise the package default
 (a tagged red box in debug, nothing in release).
 
+## Motion and morph never fail
+
+`_motion` and `_morph` only animate a widget, so since 0.7.0 they are kept
+out of this error path entirely, in debug and release alike:
+
+- **Typos are compile errors**, reported as any compile failure: an
+  unregistered `_motion` name, an unknown `_morph` key, an unbindable `_as`
+  name, an unknown `_spring` preset or `_spring` map key, and expression
+  syntax errors.
+- **Everything else is silently swallowed** and behaves as if the animation
+  were not there. A malformed `_motion` entry is dropped; a layer whose
+  parameters, `plan()` or `frame()` throw (including app-registered atoms)
+  is off for the node's lifetime while other layers keep running. A
+  malformed `_morph` value gives a morph without animation whose variable
+  takes `_to` at once; a `_to`/`_from`/`_trigger` that throws at runtime
+  keeps the last good value (then a valid `_from`, then `null`).
+
+These failures are never reported to `SduiErrorObserver` and never trigger
+`NodeGuard`, so the widget itself is never replaced. A debug build logs one
+`animation off (...)` line per node and reason under the `widget` tag.
+Details: [Motion](motion.md#failure-never-stops-the-template),
+[Control flow](control-flow.md#when-a-morph-is-misused-or-fails).
+
 ## `SduiErrorObserver`
 
 `SduiErrorObserver` is the single seam every unexpected engine error passes

@@ -50,7 +50,7 @@ final class Compile {
         ? (Map<String, Object?>.of(template)..remove('_transition'))
         : template;
     final node = TemplateParser.buildUiTree(root);
-    final directive = TemplateCompiler.buildDirectiveTree(node);
+    final directive = TemplateCompiler.buildRoot(node);
     TemplateValidator.validate(directive, rootDataKeys, catalog: language);
     return (
       directive: directive,

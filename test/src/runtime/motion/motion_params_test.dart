@@ -5,6 +5,30 @@ import 'package:sdui_engine/src/runtime/motion/atom/shimmer.dart';
 
 void main() {
   group('MotionParams (관대 디코더)', () {
+    // 0.7.0: 유한하지만 거대한 값은 변환 사각형을 넘쳐 렌더 단계에서 터지므로 fallback.
+    test('±1e6을 넘는 number·offset·duration은 fallback', () {
+      const p = MotionParams({
+        'big': 1e308,
+        'neg': -1000001,
+        'edge': 1e6,
+        'xy': [1e308, 0],
+        'ok': [-1e6, 1e6],
+      });
+      expect(p.number('big', 7), 7);
+      expect(p.number('neg', 7), 7);
+      expect(p.number('edge', 7), 1e6);
+      expect(p.offset('xy', Offset.zero), Offset.zero);
+      expect(p.offset('ok', Offset.zero), const Offset(-1e6, 1e6));
+      expect(
+        p.duration('big', const Duration(milliseconds: 5)),
+        const Duration(milliseconds: 5),
+      );
+      expect(
+        p.duration('edge', Duration.zero),
+        const Duration(milliseconds: 1000000),
+      );
+    });
+
     group('number', () {
       test('유한 수는 그대로, 아니면 fallback', () {
         expect(const MotionParams({'x': 3}).number('x', 0), 3);

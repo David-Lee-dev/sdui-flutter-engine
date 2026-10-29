@@ -35,6 +35,10 @@ final class FunctionRegistry {
     'sum': _ar(-1, _Builtins.sum),
     'clamp': _ar(3, _Builtins.clamp),
     'lerp': _ar(3, _Builtins.lerp),
+    'sin': _Builtins.sin,
+    'cos': _Builtins.cos,
+    'pow': _Builtins.pow,
+    'remap': _Builtins.remap,
     'mix': _ar(3, _Builtins.mix),
     'comma': _ar(1, _Builtins.comma),
     'format': _ar(2, _Builtins.format),
@@ -237,6 +241,42 @@ final class _Builtins {
     final end = _finiteNum(_at(a, 1)) ?? 0;
     final t = _finiteNum(_at(a, 2)) ?? 0;
     return begin + (end - begin) * t;
+  }
+
+  /// Returns the sine of exactly one finite radian argument, or `null`.
+  static Object? sin(List<Object?> a) => _finiteOf(a, 1, (x) => math.sin(x[0]));
+
+  /// Returns the cosine of exactly one finite radian argument, or `null`.
+  static Object? cos(List<Object?> a) => _finiteOf(a, 1, (x) => math.cos(x[0]));
+
+  /// Raises `a` to `b`; `null` outside the real domain or on overflow.
+  static Object? pow(List<Object?> a) =>
+      _finiteOf(a, 2, (x) => math.pow(x[0], x[1]));
+
+  /// Maps `v` from `[a0, a1]` onto `[b0, b1]`, extrapolating like [lerp].
+  ///
+  /// Returns `null` when `a0 == a1`.
+  static Object? remap(List<Object?> a) => _finiteOf(a, 5, (x) {
+    final [v, a0, a1, b0, b1] = x;
+    if (a0 == a1) return null;
+    return b0 + (v - a0) / (a1 - a0) * (b1 - b0);
+  });
+
+  /// Runs [fn] on exactly [arity] finite numbers and keeps a finite result.
+  static Object? _finiteOf(
+    List<Object?> a,
+    int arity,
+    num? Function(List<num>) fn,
+  ) {
+    if (a.length != arity) return null;
+    final args = <num>[];
+    for (final v in a) {
+      final n = _finiteNum(v);
+      if (n == null) return null;
+      args.add(n);
+    }
+    final result = fn(args);
+    return result != null && result.isFinite ? result : null;
   }
 
   /// Interpolates between two colors and returns an ARGB integer.

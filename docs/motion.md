@@ -18,18 +18,31 @@ _motion:
   - { type: tint, begin: '#66FFFFFF', end: '#00FFFFFF', blend: src_atop }
 ```
 
-`_motion` accepts a non-empty name, a map with non-empty `type`, or a non-empty list of names/maps. Parameters are recursively expression-bindable. Composite user parameters are merged over every atom's preset defaults.
+`_motion` accepts a non-empty name, a map with non-empty `type`, or a list of names/maps. Parameters are recursively expression-bindable. Composite user parameters are merged over every atom's preset defaults.
+
+## Failure never stops the template
+
+A motion only ever decorates its widget, so since 0.7.0 nothing about it can fail the template or the app — in debug and release alike. The one exception is a typo:
+
+- **Compile error (typo):** a motion or preset name that is not registered (`unknown motion`), and expression syntax errors in parameters.
+- **Layer dropped at compile time:** a `_motion` value that is not a name, map or list (e.g. `5`, `null`), a list entry that is neither, an empty name, or a map with a missing, empty or non-string `type`. Only that entry is dropped; the other layers stay. An empty list means no layers. Unknown parameter keys are ignored, as before.
+- **Layer turned off at runtime:** if evaluating a layer's parameters throws, or the atom's `plan()` or `frame()` throws (built-in or app-registered), or a repeating plan has no duration, that layer is off for the rest of the node's life. The widget is drawn at rest as if the layer were absent; the other layers keep running.
+- **Out-of-range values:** numbers, offsets and durations beyond ±1,000,000 (ms for durations) fall back to the atom default, like any other malformed value.
+
+Nothing in these cases reaches `SduiErrorObserver` or `NodeGuard`; a debug build logs one `animation off (...)` line per node and reason under the `widget` tag. See [Error handling](errors.md#motion-and-morph-never-fail).
 
 ## Common scheduling parameters
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `duration` | non-negative finite milliseconds | `300` (`shimmer`: `1200`) | One animation leg. |
+| `duration` | milliseconds, 0–1,000,000 | `300` (`shimmer`: `1200`) | One animation leg. |
 | `curve` | name | `ease_out` (`shimmer`: `linear`) | `linear`, `ease`, `ease_in`, `ease_out`, `ease_in_out`, `fast_out_slow_in`, `bounce_out`, `elastic_out`, `decelerate`. Unknown names use the atom fallback. |
-| `delay` | non-negative finite milliseconds | `0` | Initial delay, measured from when the start gate opens (see below). |
+| `delay` | milliseconds, 0–1,000,000 | `0` | Initial delay, measured from when the start gate opens (see below). |
 | `repeat` | bool | `false` (`shimmer`: `true`) | Repeats until disposal/change. |
 | `reverse` | bool | `false` | Alternates direction when repeating. |
 | `trigger` | any | `null` | Runtime restart identity. |
+
+`_motion` atoms are time-based tweens. For a value that follows changing state with spring physics (velocity carried across retargets), use `_morph` with `_spring`; see [Control flow](control-flow.md#_spring).
 
 ## Start gate inside a scrollable
 
@@ -105,6 +118,8 @@ When the app boots through `Sdui.initialize` or `Engine.initialize`, the boot ca
 - `type` is the non-empty template-facing name used by `_motion`.
 - `plan(params)` returns the duration, curve, delay, repeat/reverse behavior, and optional restart trigger. `MotionPlan.from(params)` applies the standard scheduling parameters while allowing atom-specific defaults.
 - `frame(context, t, child, params)` returns the child wrapped in the visual state for normalized, curve-adjusted progress `t` from 0 to 1. Read atom-specific values through `MotionParams` so malformed dynamic input falls back safely.
+
+A throw from `plan()` or `frame()` turns that layer off for the node's lifetime instead of failing the node (see [above](#failure-never-stops-the-template)), so a bug in an app atom shows up as a missing animation plus one debug log line, not as an error report.
 
 ```dart
 import 'package:flutter/widgets.dart';

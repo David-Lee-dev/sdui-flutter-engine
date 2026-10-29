@@ -2,6 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/contract/error_observer.dart';
+import 'package:sdui_engine/src/engine_runner.dart';
+import 'package:sdui_engine/src/runtime/engine_errors.dart';
+import 'package:sdui_engine/src/runtime/log/engine_log.dart';
+import 'package:sdui_engine/src/runtime/motion/motion_factory.dart';
+import 'package:sdui_engine/src/runtime/util/function_registry.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/fade.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/move.dart';
@@ -721,4 +727,167 @@ void main() {
       expect(opacityOf(tester, key), 1.0);
     });
   });
+
+  // 0.7.0: 한 모션 레이어의 실패는 그 레이어만 노드 수명 동안 끈다. 자식은 그
+  // 레이어가 없던 것처럼 그려지고 다른 레이어는 계속 돌며, 아무것도 보고하지 않는다.
+  group('MotionWrapper 실패 격리', () {
+    late List<SduiError> errors;
+    late List<String> logs;
+
+    setUp(() {
+      errors = [];
+      logs = [];
+      EngineErrors.observer = _Capture(errors);
+      EngineLog.configure(output: logs.add);
+      MotionFactory.registerAll(const [
+        _MarkerMotion(),
+        _MarkerMotion(type: 'bad_plan', throwsInPlan: true),
+        _MarkerMotion(type: 'bad_frame', throwsAfter: 0),
+        _MarkerMotion(type: 'halfway', throwsAfter: 0.5),
+      ]);
+      FunctionRegistry.register(
+        'boom',
+        (args) => args.first == 0 ? throw ArgumentError('boom') : args.first,
+      );
+    });
+    tearDown(() {
+      EngineErrors.reset();
+      EngineLog.configure(output: debugPrint);
+      MotionFactory.reset();
+      FunctionRegistry.reset();
+    });
+
+    Finder marker() => find.byWidgetPredicate(
+      (w) => w is ColoredBox && w.color == _MarkerMotion.color,
+    );
+
+    Widget mount(Object? motion, {Map<String, Object?> data = const {}}) =>
+        MaterialApp(
+          home: Scaffold(
+            body: EngineRunner(
+              rootData: data,
+              template: {'_type': 'text', 'value': 'hi', '_motion': motion},
+            ),
+          ),
+        );
+
+    for (final bad in ['bad_plan', 'bad_frame']) {
+      testWidgets('$bad: 그 레이어만 빠지고 fade는 계속 돈다', (tester) async {
+        await tester.pumpWidget(
+          mount([
+            bad,
+            {'type': 'fade', 'duration': 100},
+          ]),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(tester.takeException(), isNull);
+        expect(find.text('hi'), findsOneWidget);
+        expect(marker(), findsNothing);
+        final midway = tester.widget<Opacity>(find.byType(Opacity)).opacity;
+        expect(midway, inExclusiveRange(0, 1));
+        await tester.pumpAndSettle();
+        expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 1);
+        expect(errors, isEmpty);
+      });
+    }
+
+    testWidgets('frame이 도중에 던지면 그 뒤로는 계속 꺼진 채 쉬는 자식을 그린다', (tester) async {
+      await tester.pumpWidget(
+        mount({'type': 'halfway', 'duration': 100, 'repeat': true}),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(marker(), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 60)); // t > 0.5 → throw
+      expect(tester.takeException(), isNull);
+      expect(marker(), findsNothing);
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 25));
+        expect(marker(), findsNothing, reason: 'frame $i');
+      }
+      expect(find.text('hi'), findsOneWidget);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(errors, isEmpty);
+      expect(logs.where((l) => l.contains('animation off')), hasLength(1));
+    });
+
+    testWidgets('길이 0인 반복 모션은 그 레이어만 빠진다', (tester) async {
+      await tester.pumpWidget(
+        mount([
+          {'type': 'marker', 'duration': 0, 'repeat': true},
+          {'type': 'fade', 'duration': 100},
+        ]),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(tester.takeException(), isNull);
+      expect(marker(), findsNothing);
+      expect(
+        tester.widget<Opacity>(find.byType(Opacity)).opacity,
+        inExclusiveRange(0, 1),
+      );
+      await tester.pumpAndSettle();
+      expect(errors, isEmpty);
+    });
+
+    testWidgets('인자 평가가 던지면 그 레이어만 노드 수명 동안 빠진다', (tester) async {
+      final data = ValueNotifier<Map<String, Object?>>({'s': 0});
+      addTearDown(data.dispose);
+      await tester.pumpWidget(
+        ValueListenableBuilder<Map<String, Object?>>(
+          valueListenable: data,
+          builder: (context, root, _) => mount([
+            {'type': 'marker', 'x': r'${boom(s)}'},
+            {'type': 'fade', 'duration': 100},
+          ], data: root),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('hi'), findsOneWidget);
+      expect(marker(), findsNothing);
+      expect(tester.widget<Opacity>(find.byType(Opacity)).opacity, 1);
+      data.value = {'s': 1};
+      await tester.pumpAndSettle();
+      expect(marker(), findsNothing);
+      expect(errors, isEmpty);
+    });
+  });
+}
+
+/// Draws a marker box around the child; optionally fails in `plan()` or in
+/// `frame()` once progress passes [throwsAfter].
+class _MarkerMotion extends Motion {
+  const _MarkerMotion({
+    this.type = 'marker',
+    this.throwsInPlan = false,
+    this.throwsAfter,
+  });
+
+  static const color = Color(0xFF123456);
+
+  @override
+  final String type;
+  final bool throwsInPlan;
+  final double? throwsAfter;
+
+  @override
+  MotionPlan plan(MotionParams params) {
+    if (throwsInPlan) throw StateError('plan failure');
+    return MotionPlan.from(params, duration: const Duration(milliseconds: 100));
+  }
+
+  @override
+  Widget frame(BuildContext context, double t, Widget child, MotionParams p) {
+    final limit = throwsAfter;
+    if (limit != null && t > limit) throw ArgumentError('frame failure');
+    return ColoredBox(color: color, child: child);
+  }
+}
+
+final class _Capture extends SduiErrorObserver {
+  _Capture(this.sink);
+
+  final List<SduiError> sink;
+
+  @override
+  void onError(SduiError error) => sink.add(error);
 }
