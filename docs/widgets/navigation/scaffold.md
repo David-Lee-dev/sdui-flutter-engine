@@ -12,6 +12,7 @@ Assigns named engine slots to the corresponding [Scaffold] regions. This primiti
 | `extend_body` | `flag` | — | `false` | Yes | lets the body extend behind the bottom navigation bar. |
 | `extend_body_behind_app_bar` | `flag` | — | `false` | Yes | lets the body extend behind the app bar. |
 | `app_bar_height` | `size` (scaled by EngineMetrics) | — | `kToolbarHeight` | Yes | height reserved for the fixed app bar. |
+| `inset_bottom` | `flag` | — | `false` | Yes | clears the bottom system inset around the body (the behavior before 0.8.0). |
 | `_slots` | map of widget nodes | app_bar, body, bottom_navigation_bar, bottom_sheet, drawer, end_drawer, floating_action_button | `{}` | No | Named children consumed by this slot widget; positional children are rejected. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 
@@ -49,6 +50,7 @@ _slots:
 ## Pitfalls & related
 
 - Use `_slots` only; the validator rejects `_child` and `_children`.
+- Since 0.8.0 the body clears the top, left and right insets but not the bottom: vertical scroll views draw under the home indicator and add the inset after their last item. Put a fixed bottom CTA in the `bottom_navigation_bar` slot (Flutter then removes the body's bottom padding, so the scroll adds nothing) or wrap it in `safe_area` with `top: false`. Do not wrap the whole body in a `safe_area` that keeps `bottom: true`; it consumes the inset before the scroll view sees it. `inset_bottom: true` restores the old behavior. See [Bottom inset](../../concepts.md#bottom-inset).
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
 - Return to the [widget catalog](../README.md).

@@ -1,8 +1,12 @@
 import 'package:flutter/widgets.dart';
 
 import '../../../util/props_resolver.dart';
+import '../../../util/scroll_inset.dart';
 
 /// `list_view` — Builds a non-lazy [ListView] from the node's already-built children.
+///
+/// A vertical list that reaches the bottom of the screen scrolls under the
+/// bottom system inset and adds it to its end spacing (see [ScrollInset]).
 ///
 /// ```yaml
 /// _type: list_view
@@ -22,6 +26,7 @@ import '../../../util/props_resolver.dart';
 /// - `shrink_wrap` (`flag`, default `false`) — sizes the scroll view to its content along the scroll axis.
 /// - `item_extent` (`size` (scaled by EngineMetrics), default `null`) — forces every list item to the same main-axis extent.
 /// - `clip_behavior` (`clip`, default `hard_edge`) — edge clipping behavior. Values: none | hard_edge | anti_alias | anti_alias_with_save_layer.
+/// - `inset_end` (`flag`, default `null`) — adds the bottom system inset after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never.
 ///
 /// Child: `_children`.
 final class ListViewWidget {
@@ -32,20 +37,30 @@ final class ListViewWidget {
     Map<String, Object?> props,
     List<Widget> children,
   ) {
-    return ListView(
-      scrollDirection:
-          PropsResolver.axis(props['scroll_direction']) ?? Axis.vertical,
-      reverse: PropsResolver.flag(props['reverse']) ?? false,
-      primary: PropsResolver.flag(props['primary']),
-      padding: PropsResolver.edge(context, props['padding']),
-      physics: PropsResolver.scrollPhysics(props['physics']),
-      keyboardDismissBehavior: PropsResolver.keyboardDismissBehavior(
-        props['keyboard_dismiss_behavior'],
+    final axis = PropsResolver.axis(props['scroll_direction']) ?? Axis.vertical;
+    return ScrollInset.build(
+      context,
+      axis: axis,
+      insetEnd: PropsResolver.flag(props['inset_end']),
+      builder: (context, extent) => ListView(
+        scrollDirection: axis,
+        reverse: PropsResolver.flag(props['reverse']) ?? false,
+        primary: PropsResolver.flag(props['primary']),
+        padding: ScrollInset.endPadding(
+          PropsResolver.edge(context, props['padding']),
+          axis,
+          extent,
+        ),
+        physics: PropsResolver.scrollPhysics(props['physics']),
+        keyboardDismissBehavior: PropsResolver.keyboardDismissBehavior(
+          props['keyboard_dismiss_behavior'],
+        ),
+        shrinkWrap: PropsResolver.flag(props['shrink_wrap']) ?? false,
+        itemExtent: PropsResolver.size(context, props['item_extent']),
+        clipBehavior:
+            PropsResolver.clip(props['clip_behavior']) ?? Clip.hardEdge,
+        children: children,
       ),
-      shrinkWrap: PropsResolver.flag(props['shrink_wrap']) ?? false,
-      itemExtent: PropsResolver.size(context, props['item_extent']),
-      clipBehavior: PropsResolver.clip(props['clip_behavior']) ?? Clip.hardEdge,
-      children: children,
     );
   }
 }

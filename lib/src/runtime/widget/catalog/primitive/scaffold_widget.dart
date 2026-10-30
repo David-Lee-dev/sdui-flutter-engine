@@ -10,10 +10,13 @@ import '../../../util/props_resolver.dart';
 /// a `sliver_app_bar` in a `custom_scroll_view` body only when you actually want
 /// a scroll-away or collapsing bar.
 ///
-/// The `body` slot is always wrapped in a [SafeArea] (see [_body]) so screen
-/// content clears device intrusions without each template adding its own
-/// `safe_area`. Set `extend_body`/`extend_body_behind_app_bar` to opt an edge
-/// out.
+/// The `body` slot is always wrapped in a [SafeArea] (see [_body]) that clears
+/// the top, left and right device intrusions. The bottom is left to the
+/// content: vertical scroll views run under the home indicator and add the
+/// inset after their last item, and fixed bottom content (a CTA) goes in the
+/// `bottom_navigation_bar` slot or a `safe_area`. Set `inset_bottom` to clear
+/// the bottom as before 0.8.0, and `extend_body`/`extend_body_behind_app_bar`
+/// to opt an edge out.
 ///
 /// ```yaml
 /// _type: scaffold
@@ -28,6 +31,7 @@ import '../../../util/props_resolver.dart';
 /// - `extend_body` (`flag`, default `false`) — lets the body extend behind the bottom navigation bar.
 /// - `extend_body_behind_app_bar` (`flag`, default `false`) — lets the body extend behind the app bar.
 /// - `app_bar_height` (`size` (scaled by EngineMetrics), default `kToolbarHeight`) — height reserved for the fixed app bar.
+/// - `inset_bottom` (`flag`, default `false`) — clears the bottom system inset around the body (the behavior before 0.8.0).
 ///
 /// Child: `_slots: { app_bar, body, bottom_navigation_bar, bottom_sheet, drawer, end_drawer, floating_action_button }`.
 final class ScaffoldWidget {
@@ -45,7 +49,12 @@ final class ScaffoldWidget {
     return Scaffold(
       backgroundColor: PropsResolver.color(props['background_color']),
       appBar: appBar == null ? null : _appBar(context, props, appBar),
-      body: _body(slots['body'], extendBody, extendBodyBehindAppBar),
+      body: _body(
+        slots['body'],
+        extendBody,
+        extendBodyBehindAppBar,
+        PropsResolver.flag(props['inset_bottom']) ?? false,
+      ),
       drawer: slots['drawer'],
       endDrawer: slots['end_drawer'],
       bottomSheet: slots['bottom_sheet'],
@@ -63,25 +72,27 @@ final class ScaffoldWidget {
   }
 
   /// Wraps the body slot in a [SafeArea] so screen content clears device
-  /// intrusions (status bar, notch, home indicator) without every template
+  /// intrusions (status bar, notch, side cut-outs) without every template
   /// opting in with its own `safe_area`.
   ///
-  /// All edges are enabled by default. This does not double up existing
-  /// insets: [Scaffold] already strips the body's top padding when an app bar
-  /// is present and its bottom padding when a bottom navigation bar is present,
-  /// so those edges resolve to zero here and only the genuinely exposed edges
-  /// are inset. A top/bottom edge the template explicitly extends behind
+  /// The top, left and right edges are enabled. This does not double up the
+  /// top: [Scaffold] already strips the body's top padding when an app bar is
+  /// present, so it resolves to zero here. The bottom is enabled only with
+  /// [insetBottom]; otherwise the body keeps the bottom padding in its
+  /// [MediaQuery] for the scroll views and `safe_area`s inside it. A top/bottom
+  /// edge the template explicitly extends behind
   /// ([extendBodyBehindAppBar]/[extendBody]) is left un-inset so the opt-out
   /// stays meaningful.
   static Widget? _body(
     Widget? body,
     bool extendBody,
     bool extendBodyBehindAppBar,
+    bool insetBottom,
   ) {
     if (body == null) return null;
     return SafeArea(
       top: !extendBodyBehindAppBar,
-      bottom: !extendBody,
+      bottom: insetBottom && !extendBody,
       child: body,
     );
   }

@@ -15,6 +15,7 @@ Builds a non-lazy [ListView] from the node's already-built children. This primit
 | `shrink_wrap` | `flag` | — | `false` | Yes | sizes the scroll view to its content along the scroll axis. |
 | `item_extent` | `size` (scaled by EngineMetrics) | — | `null` | Yes | forces every list item to the same main-axis extent. |
 | `clip_behavior` | `clip` | none, hard_edge, anti_alias, anti_alias_with_save_layer | `hard_edge` | Yes | edge clipping behavior. Values: none \| hard_edge \| anti_alias \| anti_alias_with_save_layer. |
+| `inset_end` | `flag` | — | `null` | Yes | adds the bottom system inset after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never. |
 | `_children` | list of widget nodes | — | `[]` | No | Positional children; cannot be combined with `_child` or `_slots`. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 
@@ -53,6 +54,7 @@ _children:
 ## Pitfalls & related
 
 - Use only the documented positional child form; `_slots` are rejected for this specification kind.
+- A vertical list scrolls under the home indicator, system bar or floating tab bar and adds the bottom inset after its last item. Its children see no bottom padding. Without `padding` it no longer takes the top padding from the screen; the scaffold body already clears it. Horizontal lists are unchanged. By default it does this only while its bottom edge reaches the bottom inset of the screen, so a view above a fixed CTA, inside a centered dialog or above a bottom bar adds nothing; `inset_end: true` forces it on and `inset_end: false` off. See [Bottom inset](../../concepts.md#bottom-inset).
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
 - Return to the [widget catalog](../README.md).

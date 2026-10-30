@@ -1,8 +1,12 @@
 import 'package:flutter/widgets.dart';
 
 import '../../../util/props_resolver.dart';
+import '../../../util/scroll_inset.dart';
 
 /// `single_child_scroll_view` — Builds Flutter's [SingleChildScrollView] for the node's first child.
+///
+/// A vertical view that reaches the bottom of the screen scrolls under the
+/// bottom system inset and adds it to its end spacing (see [ScrollInset]).
 ///
 /// ```yaml
 /// _type: single_child_scroll_view
@@ -18,6 +22,7 @@ import '../../../util/props_resolver.dart';
 /// - `physics` (`scrollPhysics`, default `null`) — scroll physics. Values: never | bouncing | clamping | always.
 /// - `keyboard_dismiss_behavior` (`keyboardDismissBehavior`, default `null`) — chooses whether dragging dismisses the keyboard. Values: manual | on_drag.
 /// - `clip_behavior` (`clip`, default `hard_edge`) — edge clipping behavior. Values: none | hard_edge | anti_alias | anti_alias_with_save_layer.
+/// - `inset_end` (`flag`, default `null`) — adds the bottom system inset after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never.
 ///
 /// Child: `_child`.
 final class SingleChildScrollViewWidget {
@@ -28,18 +33,28 @@ final class SingleChildScrollViewWidget {
     Map<String, Object?> props,
     List<Widget> children,
   ) {
-    return SingleChildScrollView(
-      scrollDirection:
-          PropsResolver.axis(props['scroll_direction']) ?? Axis.vertical,
-      reverse: PropsResolver.flag(props['reverse']) ?? false,
-      primary: PropsResolver.flag(props['primary']),
-      padding: PropsResolver.edge(context, props['padding']),
-      physics: PropsResolver.scrollPhysics(props['physics']),
-      keyboardDismissBehavior: PropsResolver.keyboardDismissBehavior(
-        props['keyboard_dismiss_behavior'],
+    final axis = PropsResolver.axis(props['scroll_direction']) ?? Axis.vertical;
+    return ScrollInset.build(
+      context,
+      axis: axis,
+      insetEnd: PropsResolver.flag(props['inset_end']),
+      builder: (context, extent) => SingleChildScrollView(
+        scrollDirection: axis,
+        reverse: PropsResolver.flag(props['reverse']) ?? false,
+        primary: PropsResolver.flag(props['primary']),
+        padding: ScrollInset.endPadding(
+          PropsResolver.edge(context, props['padding']),
+          axis,
+          extent,
+        ),
+        physics: PropsResolver.scrollPhysics(props['physics']),
+        keyboardDismissBehavior: PropsResolver.keyboardDismissBehavior(
+          props['keyboard_dismiss_behavior'],
+        ),
+        clipBehavior:
+            PropsResolver.clip(props['clip_behavior']) ?? Clip.hardEdge,
+        child: children.isEmpty ? null : children.first,
       ),
-      clipBehavior: PropsResolver.clip(props['clip_behavior']) ?? Clip.hardEdge,
-      child: children.isEmpty ? null : children.first,
     );
   }
 }

@@ -48,6 +48,7 @@ _child:
 ## Pitfalls & related
 
 - Use only the documented positional child form; `_slots` are rejected for this specification kind.
+- Use `safe_area` with `top: false` for fixed bottom content outside a scroll view, such as a CTA. Inside a vertical scroll view that reaches the screen bottom the bottom inset is already 0 (the scroll view adds it to its end spacing), so a `safe_area` there adds nothing. A `safe_area` around a whole scroll view keeps `bottom: true` by default and consumes the inset first, so the content stops above it again. See [Bottom inset](../../concepts.md#bottom-inset).
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
 - Return to the [widget catalog](../README.md).

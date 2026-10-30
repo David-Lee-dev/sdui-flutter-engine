@@ -114,6 +114,23 @@ Every widget declares the render protocol it produces and the protocol its child
 
 `nested_scroll_view` deliberately accepts mixed child roles. Loop wrappers `sliver_list` and `sliver_grid` produce slivers; all other loop wrappers produce boxes. Repeated items themselves must produce boxes.
 
+## Bottom inset
+
+Since 0.8.0 a screen draws under the home indicator, the Android system bar and a floating tab bar, and only its scrolling content's last item stops above them. The engine applies these rules:
+
+| Where | Behavior |
+| --- | --- |
+| [`scaffold`](widgets/navigation/scaffold.md) body | Clears the top (when there is no app bar), left and right insets, not the bottom. The body keeps the bottom padding in its `MediaQuery`. `inset_bottom: true` restores the old behavior. |
+| Vertical [`single_child_scroll_view`](widgets/scrolling/single_child_scroll_view.md), [`list_view`](widgets/scrolling/list_view.md), [`grid_view`](widgets/scrolling/grid_view.md), [`custom_scroll_view`](widgets/scrolling/custom_scroll_view.md) | When the view's bottom edge reaches the bottom inset of the screen, add the bottom padding after their content, on top of the template `padding` (a `custom_scroll_view` ends with a sliver of that height), and hand their content a bottom padding of 0, so an inner `safe_area` or nested scroll view does not add it again. A view that ends higher (above a fixed CTA or bottom bar, inside a centered dialog) adds nothing and leaves the padding to its content. `inset_end: true` always adds it, `inset_end: false` never does. |
+| Horizontal scroll views, `page_view`, `tab_bar_view` | Unchanged. A vertical scroll view inside each page applies the rule. |
+| Keyboard | Flutter reports a bottom padding of 0 while the keyboard is up, so the end spacing shrinks to the template `padding`; `resize_to_avoid_bottom_inset` works as before. |
+
+The engine decides from the view's laid-out position, ignoring paint-only transforms such as page transitions, and re-checks whenever the view is laid out or painted. A view in a bottom sheet anchored to the screen bottom reaches it; a view in a centered dialog does not; with the keyboard up the bottom padding is 0, so nothing is added either way. The first frame assumes the view reaches the bottom. When the measurement disagrees (a scroll above a CTA, or a bottom bar appears later), the next frame changes only the end spacing and the content's bottom padding. Content at the scroll start does not move, except in a `reverse` view, whose start is the bottom edge and shifts by the inset once.
+
+Fixed bottom content, such as a CTA, belongs in the scaffold `bottom_navigation_bar` slot: Flutter then removes the body's bottom padding, so the scroll view adds nothing. Outside that slot, wrap it in a `safe_area` with `top: false`. A `safe_area` with `bottom: true` around a whole scroll view consumes the inset before the scroll view sees it, and the content stops above the inset again. An app shell that draws a floating tab bar should add the bar height to the `MediaQuery` bottom padding rather than shrinking the layout; the scroll views then end above the bar.
+
+Lists and grids built by `_loop._wrap` (`list`, `grid`, `reorderable`, `dismissible`) do not apply these rules. Without `padding` they keep Flutter's own handling, which also adds the bottom padding; with `padding` they add nothing.
+
 ## Alignment values
 
 Every `alignment`-typed property (for example `align.alignment`, `stack.alignment`, gradient `begin`/`end`/`center`, motion anchors) accepts one of the nine names `top_left`, `top_center`, `top_right`, `center_left`, `center`, `center_right`, `bottom_left`, `bottom_center`, `bottom_right`, or, since 0.7.0, a list `[x, y]` of two finite numbers in Flutter's `Alignment` coordinates (`[-1, -1]` is top left, `[0, 0]` the center, `[1, 1]` bottom right). Each axis is clamped to −4…4. Anything else falls back to the property's default.

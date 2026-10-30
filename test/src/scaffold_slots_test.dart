@@ -68,4 +68,189 @@ void main() {
       expect(tester.takeException(), isA<InvalidTemplateException>());
     });
   });
+
+  group('scaffold 하단 inset (템플릿 경로)', () {
+    Future<void> mount(
+      WidgetTester tester,
+      Map<String, Object?> template, {
+      double inset = 34,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: const Size(800, 600),
+              padding: EdgeInsets.only(bottom: inset),
+              viewPadding: EdgeInsets.only(bottom: inset),
+            ),
+            child: EngineRunner(template: template),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Map<String, Object?> screen(
+      Map<String, Object?> body, {
+      Map<String, Object?> props = const {},
+      Map<String, Object?> slots = const {},
+    }) => {
+      '_type': 'scaffold',
+      ...props,
+      '_slots': {'body': body, ...slots},
+    };
+
+    const scroll = {
+      '_type': 'single_child_scroll_view',
+      'padding': 16,
+      '_child': {'_type': 'sizedbox', 'height': 100},
+    };
+
+    // Scaffold는 body를 느슨하게 재므로, 화면 높이를 채우는 탭 템플릿처럼 펼친다.
+    const filled = {
+      '_type': 'column',
+      '_children': [
+        {'_type': 'expanded', '_child': scroll},
+      ],
+    };
+
+    EdgeInsets? scrollPadding(WidgetTester tester) =>
+        tester
+                .widget<SingleChildScrollView>(
+                  find.byType(SingleChildScrollView),
+                )
+                .padding
+            as EdgeInsets?;
+
+    testWidgets('scaffold + scv: 화면 하단까지 그리고 끝 여백에 inset을 더한다', (tester) async {
+      await mount(tester, screen(filled));
+
+      expect(tester.getRect(find.byType(SingleChildScrollView)).bottom, 600);
+      expect(scrollPadding(tester), const EdgeInsets.fromLTRB(16, 16, 16, 50));
+    });
+
+    testWidgets('스크롤 아래 safe_area CTA가 있으면 스크롤 끝 여백에 inset을 더하지 않는다', (
+      tester,
+    ) async {
+      await mount(
+        tester,
+        screen({
+          '_type': 'column',
+          '_children': [
+            {'_type': 'expanded', '_child': scroll},
+            {
+              '_type': 'safe_area',
+              'top': false,
+              '_child': {'_type': 'sizedbox', 'height': 56},
+            },
+          ],
+        }),
+      );
+
+      expect(tester.getRect(find.byType(SingleChildScrollView)).bottom, 510);
+      expect(scrollPadding(tester), const EdgeInsets.all(16));
+    });
+
+    testWidgets('하단 슬롯이 있으면 스크롤 끝 여백에 inset을 더하지 않는다', (tester) async {
+      await mount(
+        tester,
+        screen(
+          scroll,
+          slots: {
+            'bottom_navigation_bar': {'_type': 'sizedbox', 'height': 60},
+          },
+        ),
+      );
+
+      expect(scrollPadding(tester), const EdgeInsets.all(16));
+    });
+
+    testWidgets('inset_bottom: true면 body 하단을 깎고 스크롤은 inset을 더하지 않는다', (
+      tester,
+    ) async {
+      await mount(tester, screen(filled, props: {'inset_bottom': true}));
+
+      expect(tester.getRect(find.byType(SingleChildScrollView)).bottom, 566);
+      expect(scrollPadding(tester), const EdgeInsets.all(16));
+    });
+
+    testWidgets('inset_end: false면 템플릿 padding만 쓴다', (tester) async {
+      await mount(tester, screen({...scroll, 'inset_end': false}));
+
+      expect(scrollPadding(tester), const EdgeInsets.all(16));
+    });
+
+    testWidgets('스크롤 안의 list_view(shrink_wrap)는 inset을 다시 더하지 않는다', (
+      tester,
+    ) async {
+      await mount(
+        tester,
+        screen({
+          '_type': 'column',
+          '_children': [
+            {
+              '_type': 'expanded',
+              '_child': {
+                '_type': 'single_child_scroll_view',
+                '_child': {
+                  '_type': 'list_view',
+                  'shrink_wrap': true,
+                  'physics': 'never',
+                  '_children': [
+                    {'_type': 'sizedbox', 'height': 100},
+                  ],
+                },
+              },
+            },
+          ],
+        }),
+      );
+
+      expect(scrollPadding(tester), const EdgeInsets.only(bottom: 34));
+      expect(
+        tester.widget<ListView>(find.byType(ListView)).padding,
+        EdgeInsets.zero,
+      );
+    });
+
+    testWidgets('page_view 안의 세로 스크롤이 inset을 한 번 더한다', (tester) async {
+      await mount(
+        tester,
+        screen({
+          '_type': 'page_view',
+          '_children': [scroll],
+        }),
+      );
+
+      expect(scrollPadding(tester), const EdgeInsets.fromLTRB(16, 16, 16, 50));
+    });
+
+    testWidgets('nested_scroll_view body의 list_view가 inset을 한 번 더한다', (
+      tester,
+    ) async {
+      await mount(
+        tester,
+        screen({
+          '_type': 'nested_scroll_view',
+          '_children': [
+            {
+              '_type': 'sliver_to_box_adapter',
+              '_child': {'_type': 'sizedbox', 'height': 100},
+            },
+            {
+              '_type': 'list_view',
+              '_children': [
+                {'_type': 'sizedbox', 'height': 100},
+              ],
+            },
+          ],
+        }),
+      );
+
+      expect(
+        tester.widget<ListView>(find.byType(ListView)).padding,
+        const EdgeInsets.only(bottom: 34),
+      );
+    });
+  });
 }

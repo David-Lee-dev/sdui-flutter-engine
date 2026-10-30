@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.8.0
+
+**Behavior change:** screens now draw under the bottom system inset (home
+indicator, Android system bar, a floating tab bar added to the padding), and
+vertical scroll views end above it. See
+[Bottom inset](docs/concepts.md#bottom-inset).
+
+- `scaffold` no longer clears the bottom inset around its body. Top, left and
+  right are unchanged, and the body keeps the bottom padding in its
+  `MediaQuery`. New flag `inset_bottom` (default `false`) restores the old
+  behavior.
+- Vertical `single_child_scroll_view`, `list_view`, `grid_view` and
+  `custom_scroll_view` add the bottom padding after their content, on top of
+  the template `padding` (`custom_scroll_view` ends with a sliver of that
+  height; for `reverse` views the space stays on the bottom edge). Their
+  content sees a bottom padding of 0, so an inner `safe_area` or nested scroll
+  view does not add it again: the `{safe_area top:false, sizedbox 8}` pattern
+  inside a scroll view now leaves only the 8. Horizontal views, `page_view`
+  and `tab_bar_view` are unchanged.
+- This applies automatically only to a view whose bottom edge reaches the
+  bottom inset of the screen (full-height screens, bottom sheets). A view
+  above a fixed CTA or bottom bar, or inside a centered dialog, adds nothing,
+  so templates need no opt-out. New flag `inset_end` forces it: `true` always,
+  `false` never. The first frame assumes the view reaches the bottom; when it
+  does not, the next frame changes only the end spacing (a `reverse` view's
+  content shifts by the inset once).
+- A vertical `list_view` or `grid_view` without `padding` no longer takes the
+  top padding from the screen. The scaffold body already cleared it, so
+  screens inside a `scaffold` look the same.
+- With the keyboard up the end spacing shrinks to the template `padding`,
+  because Flutter reports a bottom padding of 0.
+- Templates to check: fixed bottom content outside a scroll view (a CTA)
+  needs the `bottom_navigation_bar` slot or a `safe_area` with `top: false`;
+  a `safe_area` with `bottom: true` around a whole scroll view still stops the
+  content above the inset; a `custom_scroll_view` ending with
+  `sliver_fill_remaining` now scrolls by the inset.
+
 ## 0.7.0
 
 - New `_morph._spring`: a preset name (`spatial_fast`, `spatial_default`,
