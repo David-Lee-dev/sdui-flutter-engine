@@ -10,11 +10,16 @@ import 'child_builder.dart';
 /// (`_skeleton: auto`).
 ///
 /// - [real] builds the widget with leniently resolved props under the bones.
-/// - [text] does the same with its `value` replaced by placeholder words.
-/// - [circle] draws a `size` square as a round bone without building it.
+/// - [text] does the same with its `value` replaced by placeholder words,
+///   one line per `max_lines` (default one) when the lines come from data.
+/// - [circle] draws a `size` square (else the icon theme size, else 24) as a
+///   round bone without building it.
 /// - [box] draws its declared `width`/`height` without building it — for a
 ///   spec that would load or report something from its props (media), and
 ///   always drawn as a leaf.
+///
+/// A sliver spec ([WidgetSpec.produces]) always draws [real]: a stand-in is
+/// a box, which a viewport cannot lay out.
 enum SkeletonForm { real, text, circle, box }
 
 /// Describes how the engine builds a widget and validates its layout protocol.

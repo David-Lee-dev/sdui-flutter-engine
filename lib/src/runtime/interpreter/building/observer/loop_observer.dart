@@ -208,7 +208,9 @@ class LoopObserver extends StatelessWidget {
   );
 
   /// Lays out [count] rows in the `_wrap` container. Only real rows carry
-  /// [resolved], which reorder, dismiss and the index finder need.
+  /// [resolved], which reorder, dismiss and the index finder need; over
+  /// stand-in rows a swipe or spin_grid wrap gets no action host, so what
+  /// it starts itself dispatches nothing.
   Widget _container(
     BuildContext context,
     Environment env,
@@ -246,7 +248,7 @@ class LoopObserver extends StatelessWidget {
           context,
           {...p, 'length': count},
           [SwipePaneWidget.build(context, p, rows())],
-          Scope.actionHost(context),
+          resolved == null ? null : Scope.actionHost(context),
         );
       case 'list':
         return ListView.builder(
@@ -278,7 +280,7 @@ class LoopObserver extends StatelessWidget {
           context,
           p,
           rows(),
-          Scope.actionHost(context),
+          resolved == null ? null : Scope.actionHost(context),
         );
       case 'grid':
         return GridView.builder(

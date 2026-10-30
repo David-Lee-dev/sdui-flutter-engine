@@ -52,6 +52,10 @@ final class NodeBuilder {
   /// for life, so releasing it never remounts their subtree.
   static final _wasHeld = Expando<bool>('NodeBuilder.wasHeld');
 
+  /// Guarded node elements whose focus is excluded right now, so their
+  /// release can apply the autofocus the exclusion swallowed.
+  static final _focusHeld = Expando<bool>('NodeBuilder.focusHeld');
+
   /// Whether any node has been pending or held, so apps that never use an
   /// automatic skeleton skip the [_wasPending], [_coreKeys] and [_wasHeld]
   /// lookups. Process-wide and monotonic: it only gates those lookups.
@@ -188,7 +192,10 @@ final class NodeBuilder {
     bool pending = false,
   }) {
     final spec = WidgetFactory.specFor(directive.type);
-    final form = pending ? spec?.skeleton : null;
+    // A sliver must stay a sliver, so it never takes a box stand-in.
+    final form = pending && spec?.produces != LayoutProtocol.sliver
+        ? spec?.skeleton
+        : null;
     final resolved = pending
         ? _resolveLeniently(directive.props, env)
         : ExpressionEvaluator.resolveMap(directive.props, env);
@@ -249,7 +256,7 @@ final class NodeBuilder {
       ),
       ActionSpec spec => spec.build(context, props, [
         for (final child in directive.children) build(child),
-      ], Scope.actionHost(context)),
+      ], held ? null : Scope.actionHost(context)),
       null => throw StateError('Unknown widget type: "${directive.type}".'),
     };
     assert(() {
@@ -292,6 +299,11 @@ final class NodeBuilder {
   /// The guard, mask, hold and restore layers stay for the element's life
   /// once added, so a reveal never changes the tree above the core key. A
   /// sliver ([WidgetSpec.produces]) gets a sliver guard and no box layers.
+  /// The code builds them innermost first. The hold layer only covers
+  /// wrappers that dispatch through [Scope.actionHost] and count toward
+  /// `decorated`; an action widget gets no host from [assemble] while held,
+  /// and a guarded node applies the autofocus its exclusion dropped on
+  /// release.
   static Widget _layers(
     BuildContext context,
     PlainDirective directive,
@@ -366,6 +378,12 @@ final class NodeBuilder {
           );
         }
         if (!guarded) return child;
+        if (held) {
+          _focusHeld[context] = true;
+        } else if (_focusHeld[context] != null) {
+          _focusHeld[context] = null;
+          _autofocusOnRelease(context);
+        }
         return ExcludeFocus(
           excluding: held,
           child: box
@@ -378,6 +396,25 @@ final class NodeBuilder {
     return key == null
         ? widget
         : KeyedSubtree(key: ValueKey(key), child: widget);
+  }
+
+  /// After the frame that releases a guarded node, asks its scope to
+  /// autofocus each `autofocus` text field below [context] — the request their
+  /// first build made while focus was excluded and the manager dropped. The
+  /// scope applies at most one, and only when nothing in it has focus.
+  static void _autofocusOnRelease(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      void visit(Element element) {
+        final widget = element.widget;
+        if (widget is EditableText && widget.autofocus) {
+          widget.focusNode.enclosingScope?.autofocus(widget.focusNode);
+        }
+        element.visitChildren(visit);
+      }
+
+      context.visitChildElements(visit);
+    });
   }
 
   /// Whether a pending [directive] draws its own bones: content leaves (and

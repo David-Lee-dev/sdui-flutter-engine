@@ -7,6 +7,7 @@ import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_error.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
@@ -16,6 +17,7 @@ import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/observer/plain_observer.dart';
 import 'package:sdui_engine/src/runtime/log/engine_log.dart';
 import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
+import 'package:sdui_engine/src/runtime/widget/contract/action_sink.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/interaction.dart';
@@ -2598,6 +2600,52 @@ void main() {
       );
     });
 
+    testWidgets('box form으로 등록한 sliver spec은 pending 동안 실제로 빌드되어 오류가 없다', (
+      tester,
+    ) async {
+      WidgetFactory.register(
+        'custom_sliver',
+        EagerSpec(
+          (context, props, children) => SliverToBoxAdapter(
+            child: SizedBox(height: 40, child: Text('${props['label']}')),
+          ),
+          produces: LayoutProtocol.sliver,
+          skeleton: SkeletonForm.box,
+        ),
+      );
+      addTearDown(WidgetFactory.reset);
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          children: [
+            {
+              '_type': 'sizedbox',
+              'height': 300,
+              '_child': {
+                '_type': 'custom_scroll_view',
+                '_children': [
+                  {'_type': 'custom_sliver', 'label': r'${a}'},
+                ],
+              },
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      expect(tester.takeException(), isNull);
+      final sliver = tester.element(find.byType(SliverToBoxAdapter));
+
+      _open('a', 'ok');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('ok'), findsOneWidget);
+      expect(
+        identical(tester.element(find.byType(SliverToBoxAdapter)), sliver),
+        isTrue,
+      );
+    });
+
     /// [node] under an automatic skeleton whose `a` is still pending, with
     /// an `act` action recording its dispatch.
     Future<void> pumpEffectful(
@@ -2742,6 +2790,26 @@ void main() {
       expect(_calls, contains('act'));
       _open('act');
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('pending autofocus text_field는 focus를 받지 않고, 공개 뒤에 받는다', (
+      tester,
+    ) async {
+      await pumpEffectful(tester, {
+        '_type': 'text_field',
+        'autofocus': true,
+        'hint': r'${a}',
+      });
+      await tester.pump(_grace);
+      EditableTextState field() =>
+          tester.state<EditableTextState>(find.byType(EditableText));
+      final core = field();
+      expect(core.widget.focusNode.hasFocus, isFalse);
+
+      _open('a', 'hint');
+      await tester.pumpAndSettle();
+      expect(identical(field(), core), isTrue);
+      expect(field().widget.focusNode.hasFocus, isTrue);
     });
 
     testWidgets('pending video는 player를 띄우지 않고 box로, 공개 뒤에 player를 띄운다', (
@@ -2891,4 +2959,169 @@ void main() {
       expect(taps, ['ok']);
     });
   });
+
+  group('auto skeleton — self-started dispatch', () {
+    /// [node] under an automatic skeleton whose `a` is still pending, with
+    /// an `act` action recording its dispatch.
+    Future<void> pumpEffectful(
+      WidgetTester tester,
+      Map<String, Object?> node,
+    ) => _pump(
+      tester,
+      _screen(
+        state: {'a': null},
+        extra: {
+          'act': {'_type': 'gate', 'tag': 'act'},
+        },
+        children: [
+          {'_type': 'sizedbox', 'width': 300, 'height': 300, '_child': node},
+        ],
+      ),
+    );
+
+    Finder byTypeName(String name) =>
+        find.byWidgetPredicate((w) => w.runtimeType.toString() == name);
+
+    testWidgets(
+      'pending swipe_layout autoplay는 on_changed를 보내지 않고, 공개 뒤엔 보낸다',
+      (tester) async {
+        await pumpEffectful(tester, {
+          '_type': 'swipe_layout',
+          'id': r'${a}',
+          'length': 3,
+          'autoplay_interval': 100,
+          'on_changed': 'act',
+          '_child': {'_type': 'text', 'value': 'page'},
+        });
+        await tester.pump(_grace);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(_calls, isNot(contains('act')));
+        final core = tester.element(byTypeName('_SwipeLayout'));
+
+        _open('a', 'swipe');
+        await tester.pump();
+        await tester.pump(_fade);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(
+          identical(tester.element(byTypeName('_SwipeLayout')), core),
+          isTrue,
+        );
+        expect(_calls, contains('act'));
+        _open('act');
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
+    testWidgets('pending spin_grid는 시작한 회전이 끝나도 on_finish를 보내지 않는다', (
+      tester,
+    ) async {
+      await pumpEffectful(tester, {
+        '_type': 'spin_grid',
+        'winner_index': 0,
+        'trigger': 'draw',
+        'duration': 100,
+        'steps': r'${a}',
+        'on_finish': 'act',
+        '_children': [
+          {'_type': 'text', 'value': 'p0'},
+          {'_type': 'text', 'value': 'p1'},
+        ],
+      });
+      await tester.pump(_grace);
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(_calls, isNot(contains('act')));
+      final core = tester.element(byTypeName('_SpinGrid'));
+
+      _open('a', 5);
+      await tester.pumpAndSettle();
+      expect(identical(tester.element(byTypeName('_SpinGrid')), core), isTrue);
+    });
+
+    testWidgets(
+      '등록한 ActionSpec이 Timer로 보내는 dispatch는 pending 동안 막히고 공개 뒤엔 간다',
+      (tester) async {
+        WidgetFactory.register(
+          'custom_ticker',
+          ActionSpec(
+            (context, props, children, dispatch) => _Ticker(dispatch: dispatch),
+          ),
+        );
+        addTearDown(WidgetFactory.reset);
+        await pumpEffectful(tester, {
+          '_type': 'custom_ticker',
+          'label': r'${a}',
+        });
+        await tester.pump(_grace);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(_calls, isNot(contains('act')));
+        final core = tester.element(find.byType(_Ticker));
+
+        _open('a', 'x');
+        await tester.pump();
+        await tester.pump(_fade);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(identical(tester.element(find.byType(_Ticker)), core), isTrue);
+        expect(_calls, contains('act'));
+        _open('act');
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
+    testWidgets(
+      'pending 소스 위 loop swipe wrap은 placeholder 행에서 on_changed를 보내지 않는다',
+      (tester) async {
+        await pumpEffectful(tester, {
+          '_type': 'text',
+          'value': r'${item.name}',
+          '_loop': {
+            '_in': r'${a}',
+            '_key': r'${item.id}',
+            '_skeleton': 3,
+            '_wrap': {
+              '_type': 'swipe',
+              'autoplay_interval': 100,
+              'on_changed': 'act',
+            },
+          },
+        });
+        await tester.pump(_grace);
+        await tester.pump(const Duration(milliseconds: 250));
+        expect(_calls, isNot(contains('act')));
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  });
+}
+
+/// A self-acting widget that dispatches `act` on a timer, reading its sink
+/// when the timer fires.
+class _Ticker extends StatefulWidget {
+  const _Ticker({required this.dispatch});
+
+  final ActionSink? dispatch;
+
+  @override
+  State<_Ticker> createState() => _TickerState();
+}
+
+class _TickerState extends State<_Ticker> {
+  late final Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(
+      const Duration(milliseconds: 100),
+      (_) => widget.dispatch?.handle('act'),
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(width: 40, height: 40);
 }
