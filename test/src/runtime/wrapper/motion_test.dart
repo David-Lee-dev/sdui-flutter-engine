@@ -1149,7 +1149,7 @@ void main() {
       errors = [];
       logs = [];
       EngineErrors.observer = _Capture(errors);
-      EngineLog.configure(minLevel: LogLevel.debug, output: logs.add);
+      EngineLog.configure(output: logs.add);
       MotionFactory.registerAll(const [
         _MarkerMotion(),
         _MarkerMotion(type: 'bad_plan', throwsInPlan: true),
@@ -1163,7 +1163,7 @@ void main() {
     });
     tearDown(() {
       EngineErrors.reset();
-      EngineLog.configure(minLevel: LogLevel.info, output: debugPrint);
+      EngineLog.configure(output: debugPrint);
       MotionFactory.reset();
       FunctionRegistry.reset();
     });

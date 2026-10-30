@@ -133,7 +133,7 @@ void main() {
     );
     addTearDown(
       () => EngineLog.configure(
-        minLevel: LogLevel.info,
+        minLevel: LogLevel.debug,
         colors: true,
         output: (line) => debugPrint(line),
       ),

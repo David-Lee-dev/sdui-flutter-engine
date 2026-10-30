@@ -47,7 +47,7 @@ A bare `EngineRunner` mount before initialization no longer degrades validation:
 | `errorObserver` (optional) | Install an `SduiErrorObserver`; defaults to `FlutterErrorObserver`, preserving the classic `FlutterError.reportError` behavior. See [errors](errors.md#sduierrorobserver). |
 | `telemetry` (optional) | Install a `TelemetrySink`; defaults to a no-op sink, so not observing is a valid choice. |
 | `toastPresenter` (`Sdui.initialize` only) | Replace the facade's default `SnackBar` presentation for [`toast`](commands/toast.md). |
-| `debugLogLevel` | Set the minimum engine diagnostic level (default `info`; pass `LogLevel.debug` for action, state and widget detail). Per-frame `scroll` actions and interval ticks never log. |
+| `debugLogLevel` | Set the minimum engine diagnostic level (default `debug`). Per-frame `scroll` actions and interval ticks log only warnings and errors. |
 | `logOutput` | Receive each formatted engine log line in an app-owned sink. |
 
 Initialization is process-wide and single-shot. A second call to either `Sdui.initialize` or `Engine.initialize` throws `StateError` before changing services, loaders, presentation, logging, or any registry.

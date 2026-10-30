@@ -116,6 +116,18 @@ void main() {
     expect(lines.any((line) => line.contains('async-inside')), isFalse);
   });
 
+  test('runSilently still lets warnings and errors through', () {
+    EngineLog.runSilently(() {
+      EngineLog.action.start('quiet');
+      EngineLog.warn('loud-warn');
+      EngineLog.error(StateError('loud-error'), StackTrace.current);
+    });
+
+    expect(lines.any((line) => line.contains('quiet')), isFalse);
+    expect(lines.any((line) => line.contains('loud-warn')), isTrue);
+    expect(lines.any((line) => line.contains('loud-error')), isTrue);
+  });
+
   test('summarize compacts collections and long strings', () {
     expect(EngineLog.summarize(const [1, 2, 3]), '[3]');
     expect(EngineLog.summarize(const {'one': 1, 'two': 2}), '{one, two}');

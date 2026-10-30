@@ -11,7 +11,7 @@ enum LogLevel { trace, debug, info, warn, error }
 final class EngineLog {
   const EngineLog._();
 
-  static LogLevel _minLevel = LogLevel.info;
+  static LogLevel _minLevel = LogLevel.debug;
   static bool _colors = true;
   static Set<String>? _tags;
   // `null` = the ambient [debugPrint], read at call time — tests (and
@@ -41,8 +41,9 @@ final class EngineLog {
   /// Widget contract diagnostics.
   static const widget = _WidgetLog();
 
-  /// Runs [body] with engine logging suppressed for the whole (possibly async)
-  /// duration of its execution, returning its result.
+  /// Runs [body] with engine logging below [LogLevel.warn] suppressed for the
+  /// whole (possibly async) duration of its execution, returning its result.
+  /// Warnings and errors still log, so a failing silent action stays visible.
   ///
   /// The suppression rides a [Zone] value, so it follows the body across
   /// `await`s and scheduled continuations without threading a flag through every
@@ -108,7 +109,10 @@ final class EngineLog {
 
   static void _emit(LogLevel level, String tag, String Function() message) {
     if (!kDebugMode || level.index < _minLevel.index) return;
-    if (Zone.current[_silentZoneKey] == true) return;
+    if (level.index < LogLevel.warn.index &&
+        Zone.current[_silentZoneKey] == true) {
+      return;
+    }
     if (_tags != null && !_tags!.contains(tag)) return;
 
     final now = DateTime.now();

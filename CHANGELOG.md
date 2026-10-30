@@ -19,9 +19,9 @@ Performance only; what is shown, padded and dispatched is unchanged.
   change or scroll repaints only the affected section instead of the whole
   page; scopes without hooks (e.g. a per-row `_action`) add no layer.
 - Debug logging: per-frame `scroll` event actions run silently like interval
-  ticks (`start_reached`/`end_reached` still log), and the default minimum
-  level is `info`; pass `debugLogLevel: LogLevel.debug` for the previous
-  detail. Release builds were already silent.
+  ticks (`start_reached`/`end_reached` still log). Silent work still logs
+  warnings and errors, so a failing tick or scroll action stays visible.
+  Release builds were already silent.
 
 ## 0.14.0
 
