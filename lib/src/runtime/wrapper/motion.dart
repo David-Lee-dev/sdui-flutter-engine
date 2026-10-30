@@ -152,7 +152,7 @@ class _MotionWrapperState extends State<MotionWrapper>
     _scrollables = _findAncestorScrollables(context);
     _lastPixels.clear();
     _lastScrolling.clear();
-    if (_scrollables.isEmpty) {
+    if (_scrollables.isEmpty || _plan.startAtMount) {
       _passGate();
       return;
     }

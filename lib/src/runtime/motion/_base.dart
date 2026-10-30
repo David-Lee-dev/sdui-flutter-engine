@@ -80,6 +80,7 @@ class MotionPlan {
     this.reverse = false,
     this.repeatDelay = Duration.zero,
     this.trigger,
+    this.startAtMount = false,
   });
 
   final Duration duration;
@@ -100,6 +101,11 @@ class MotionPlan {
   final Duration repeatDelay;
 
   final Object? trigger;
+
+  /// When true (`start: "mount"`), the motion skips the scroll-aware start
+  /// gate and starts (counting [delay]) as soon as its layer mounts, exactly
+  /// as if it had no ancestor `Scrollable`.
+  final bool startAtMount;
 
   /// Builds the common one-shot or repeating plan options from [p].
   ///
@@ -125,6 +131,7 @@ class MotionPlan {
       reverse: p.flag('reverse', fallback: false),
       repeatDelay: p.duration('repeat_delay', Duration.zero),
       trigger: p.raw('trigger'),
+      startAtMount: p.text('start') == 'mount',
     );
   }
 

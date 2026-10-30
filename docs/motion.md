@@ -42,8 +42,9 @@ Nothing in these cases reaches `SduiErrorObserver` or `NodeGuard`; a debug build
 | `repeat_delay` | milliseconds, 0–1,000,000 | `0` | Pause between two repeated legs, holding the end of the leg just run. Since 0.9.0. |
 | `reverse` | bool | `false` | Alternates direction when repeating. |
 | `trigger` | any | `null` | Runtime restart identity; also restarts a leg count. |
+| `start` | `'visible'` or `'mount'` | `'visible'` | Inside an ancestor `Scrollable`, `'mount'` skips the start gate below and starts (counting `delay`) as soon as the layer mounts. Since 0.13.0. |
 
-A `repeat` value that is neither a bool nor a whole number in 1–1000 (`0`, `2.5`, `1001`, `'x'`) falls back to the atom default, and an invalid `repeat_delay` to `0`. With `reverse`, odd legs run backwards, so `repeat: 2, reverse: true` goes there and back and stops at the start. A counted or pausing repeat detects each leg's end on the frame after it is due, so the next leg may start up to one frame late. Declare `_requires: [motion_repeat_v1]` for counts and `repeat_delay`.
+A `repeat` value that is neither a bool nor a whole number in 1–1000 (`0`, `2.5`, `1001`, `'x'`) falls back to the atom default, and an invalid `repeat_delay` to `0`. With `reverse`, odd legs run backwards, so `repeat: 2, reverse: true` goes there and back and stops at the start. A counted or pausing repeat detects each leg's end on the frame after it is due, so the next leg may start up to one frame late. Declare `_requires: [motion_repeat_v1]` for counts and `repeat_delay`. A `start` value other than `'mount'` (an unknown string, or any non-string) falls back to `'visible'`. Declare `_requires: [motion_start_v1]` for `start: 'mount'`.
 
 ### Curves
 
@@ -89,6 +90,13 @@ takes the size of the first sized box beneath it. Known limits of that fallback:
 reveal aligned to the right or bottom edge of its parent can stay waiting when that edge sits
 exactly at the viewport edge, and a collapsed multi-child layout is sized by its first child only.
 Prefer left/top alignment for reveals inside scrollables.
+
+`start: 'mount'` skips this gate entirely: the motion starts (and starts counting `delay`) as
+soon as its layer mounts, whether or not it is on-screen and whether or not an ancestor is still
+scrolling. A gated motion with a `delay` can look laggy — its content only appears well after the
+user scrolls it into view — so `start: 'mount'` is for templates that want the motion running
+before the user gets there; with it, an off-screen motion may finish before the user ever scrolls
+to it. `trigger` restarts and reduced motion are unaffected either way.
 
 ## Atoms
 

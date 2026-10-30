@@ -148,6 +148,7 @@ void main() {
             'transform_offset_v1',
             'math_v2',
             'parent_data_motion_v1',
+            'motion_start_v1',
           ]),
           const {},
           catalog: catalog,

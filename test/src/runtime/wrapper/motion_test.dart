@@ -41,6 +41,7 @@ class _ProbeMotion extends Motion {
     reverse: reverse,
     delay: delay,
     trigger: params.raw('trigger'),
+    startAtMount: params.text('start') == 'mount',
   );
 
   @override
@@ -406,6 +407,50 @@ void main() {
       expect(opacityOf(tester, probeKey), greaterThan(0.0));
     });
 
+    testWidgets('B2: start=mount이면 스크롤이 계속 움직이는 중에도 바로 시작한다', (tester) async {
+      const probeKey = ValueKey('probe-mount-scrolling');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              controller: scrollController,
+              children: [
+                const SizedBox(key: ValueKey('spacer-mount-scrolling'), height: 200),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(),
+                    params: const MotionParams({'start': 'mount'}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      unawaited(
+        scrollController.animateTo(
+          50,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.linear,
+        ),
+      );
+      await tester.pump();
+      // 스크롤이 아직 멈추지 않았는데도(isScrollingNotifier == true) gate 없이 진행된다.
+      expect(scrollController.position.isScrollingNotifier.value, isTrue);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(opacityOf(tester, probeKey), greaterThan(0.0));
+      await tester.pumpWidget(const SizedBox()); // 정리
+    });
+
     testWidgets('C: swipe_layout 두 pane — follower(jumpTo)도 settle까지 대기', (
       tester,
     ) async {
@@ -517,6 +562,119 @@ void main() {
 
       await tester.pumpAndSettle();
       expect(opacityOf(tester, probeKey), greaterThan(0.0)); // 보이고 멈춤 → 시작
+    });
+
+    testWidgets('D2: start=mount 이면 화면 밖에서도 delay부터 바로 시작한다', (tester) async {
+      const probeKey = ValueKey('probe-mount');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              controller: scrollController,
+              children: [
+                const SizedBox(key: ValueKey('spacer-mount'), height: 400),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(
+                      delay: Duration(milliseconds: 300),
+                    ),
+                    params: const MotionParams({'start': 'mount'}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      // 스크롤 없이도 delay(300ms)가 지나면 진행된다.
+      await tester.pump(const Duration(milliseconds: 310));
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(opacityOf(tester, probeKey), greaterThan(0.0));
+    });
+
+    testWidgets('D3: start 기본값(visible)은 화면 밖이면 그대로 대기한다', (tester) async {
+      const probeKey = ValueKey('probe-default-visible');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              controller: scrollController,
+              children: [
+                const SizedBox(
+                  key: ValueKey('spacer-default-visible'),
+                  height: 1000,
+                ),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(
+                      delay: Duration(milliseconds: 300),
+                    ),
+                    params: const MotionParams({'start': 'visible'}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 310));
+      expect(opacityOf(tester, probeKey), 0.0); // 아직 화면 밖 — 대기
+    });
+
+    testWidgets('D4: start에 잘못된 값이면 visible로 대체되어 화면 밖이면 대기한다', (tester) async {
+      const probeKey = ValueKey('probe-invalid-start');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              controller: scrollController,
+              children: [
+                const SizedBox(
+                  key: ValueKey('spacer-invalid-start'),
+                  height: 1000,
+                ),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(
+                      delay: Duration(milliseconds: 300),
+                    ),
+                    params: const MotionParams({'start': 'mnt'}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 310));
+      expect(opacityOf(tester, probeKey), 0.0); // 잘못된 값 → visible로 대체, 대기
     });
 
     testWidgets('E: settle 이후라도 trigger 변경은 즉시 재생', (tester) async {
@@ -641,6 +799,44 @@ void main() {
         opacityOf(tester, probeKey),
         greaterThan(0.0),
       ); // settle 후 repeat 진행
+
+      await tester.pumpWidget(const SizedBox()); // 무한 애니라 정리
+    });
+
+    testWidgets('G2: start=mount인 repeat 모션은 화면 밖에서도 돈다', (tester) async {
+      const probeKey = ValueKey('probe-repeat-mount');
+      final scrollController = ScrollController();
+      addTearDown(scrollController.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 400,
+            height: 300,
+            child: ListView(
+              controller: scrollController,
+              children: [
+                const SizedBox(
+                  key: ValueKey('spacer-repeat-mount'),
+                  height: 400,
+                ),
+                KeyedSubtree(
+                  key: probeKey,
+                  child: MotionWrapper(
+                    motion: const _ProbeMotion(repeat: true, reverse: true),
+                    params: const MotionParams({'start': 'mount'}),
+                    child: const SizedBox(width: 10, height: 10),
+                  ),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(opacityOf(tester, probeKey), greaterThan(0.0)); // 화면 밖이어도 진행
 
       await tester.pumpWidget(const SizedBox()); // 무한 애니라 정리
     });

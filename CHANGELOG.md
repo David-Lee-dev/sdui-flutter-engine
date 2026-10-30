@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0
+
+- Added `_motion` scheduling param `start` (`'visible'` default, or `'mount'`):
+  inside an ancestor `Scrollable`, `'mount'` skips the scroll-aware start gate
+  and starts (counting `delay`) as soon as the layer mounts, so it can finish
+  before the user scrolls to it. Declare `_requires: [motion_start_v1]`.
+
 ## 0.12.0
 
 **Breaking change:** the page transition type `slide_up` is removed.

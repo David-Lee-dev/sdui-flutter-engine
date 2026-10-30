@@ -77,6 +77,8 @@ final class TemplateCompiler {
     'semantics_v1',
     // 0.9.0: the `layout_builder` widget.
     'layout_builder_v1',
+    // 0.13.0: `_motion` `start: "mount"`.
+    'motion_start_v1',
   };
 
   /// Builds the directive tree for a template root.
