@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/contract/telemetry_sink.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
@@ -12,10 +13,13 @@ import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/runtime/environment/_base.dart';
 import 'package:sdui_engine/src/runtime/environment/scope/scope_environment.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
+import 'package:sdui_engine/src/runtime/interpreter/building/observer/plain_observer.dart';
 import 'package:sdui_engine/src/runtime/log/engine_log.dart';
+import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/interaction.dart';
 import 'package:sdui_engine/src/runtime/wrapper/motion.dart';
+import 'package:sdui_engine/src/runtime/wrapper/scroll_event_wrapper.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/auto_skeleton.dart';
 
 /// 테스트가 직접 끝내는 비동기 driver — `tag`별 [Completer]가 응답을 쥔다.
@@ -72,6 +76,7 @@ Map<String, Object?> _screen({
   required Map<String, Object?> state,
   required List<Map<String, Object?>> children,
   Map<String, Object?> extra = const {},
+  List<Map<String, Object?>> lifecycle = const [],
 }) => {
   '_type': 'column',
   'cross_axis_alignment': 'start',
@@ -83,6 +88,7 @@ Map<String, Object?> _screen({
     },
     '_lifecycle': [
       for (final key in state.keys) {'on': 'mount', 'action': 'load_$key'},
+      ...lifecycle,
     ],
     '_skeleton': 'auto',
   },
@@ -94,6 +100,17 @@ Finder _maskOf(Finder finder) =>
 
 RenderObject _mask(WidgetTester tester, Finder finder) =>
     tester.renderObject(_maskOf(finder).first);
+
+class _TelemetrySink implements TelemetrySink {
+  final events = <TelemetryEvent>[];
+
+  @override
+  void record(TelemetryEvent event) => events.add(event);
+
+  @override
+  Future<TelemetryReservation> reserve(TelemetryEvent event) =>
+      throw UnimplementedError();
+}
 
 const _grace = Duration(milliseconds: 300);
 const _fade = Duration(milliseconds: 250);
@@ -2079,5 +2096,610 @@ void main() {
         expect(find.text('late=y'), findsOneWidget);
       },
     );
+  });
+
+  group('auto skeleton — characterization', () {
+    /// The engine layers between the core widget found by [core] and the
+    /// node's [PlainObserver], innermost first.
+    List<String> layers(WidgetTester tester, Finder core) {
+      final names = <String>[];
+      tester.element(core).visitAncestorElements((element) {
+        final widget = element.widget;
+        if (widget is PlainObserver) return false;
+        final name = switch (widget) {
+          IgnorePointer() => 'IgnorePointer',
+          SkeletonMask() => 'SkeletonMask',
+          InteractionWrapper() => 'InteractionWrapper',
+          ScrollEventWrapper() => 'ScrollEventWrapper',
+          MotionWrapper() => 'MotionWrapper',
+          RepaintBoundary() => 'RepaintBoundary',
+          KeyedSubtree(key: GlobalKey()) => 'CoreKey',
+          _ => null,
+        };
+        if (name != null) names.add(name);
+        return true;
+      });
+      return names;
+    }
+
+    testWidgets(
+      'held tap(debounce)는 action_intent 없이 무시되고 공개 뒤 실제 payload로 한 번',
+      (tester) async {
+        final sink = _TelemetrySink();
+        Telemetry.install(sink);
+        addTearDown(Telemetry.reset);
+        await _pump(
+          tester,
+          _screen(
+            state: {'a': null},
+            extra: {
+              'go': {'_type': 'gate', 'tag': r'go:${event}'},
+            },
+            children: [
+              {
+                '_type': 'text',
+                'value': 'tapper',
+                '_on': {
+                  'tap': {'do': 'go', 'event': r'${a}', 'debounce': 100},
+                },
+              },
+            ],
+          ),
+        );
+        await tester.pump(_grace);
+        await tester.tap(find.text('tapper'), warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(seconds: 4));
+        expect(_calls.where((c) => c.startsWith('go')), isEmpty);
+        expect(sink.events.where((e) => e.event == 'action_intent'), isEmpty);
+
+        _open('a', 'real');
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('tapper'));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(_calls.where((c) => c.startsWith('go')), ['go:real']);
+        expect(
+          sink.events.where(
+            (e) =>
+                e.event == 'action_intent' && e.properties['accepted'] == true,
+          ),
+          hasLength(1),
+        );
+        _open('go:real');
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('held 노드의 pressed_as는 누르는 동안에도 false, 공개 뒤엔 true', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          extra: {
+            'go': {'_type': 'gate', 'tag': 'go'},
+          },
+          children: [
+            {
+              '_type': 'container',
+              'width': 120,
+              'height': 60,
+              '_on': {
+                'tap': {'do': 'go', 'event': r'${a}', 'pressed_as': 'down'},
+              },
+              '_child': {'_type': 'text', 'value': r'${down ? "D" : "U"}'},
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      var gesture = await tester.startGesture(tester.getCenter(find.text('U')));
+      await tester.pump();
+      expect(find.text('U'), findsOneWidget);
+      await gesture.up();
+      await tester.pump();
+
+      _open('a', 'x');
+      await tester.pumpAndSettle();
+      gesture = await tester.startGesture(tester.getCenter(find.text('U')));
+      await tester.pump();
+      expect(find.text('D'), findsOneWidget);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      _open('go');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('payload만 기다리는 end_reached는 끝에 머문 채 공개되면 다음 스크롤 알림에 한 번', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          extra: {
+            'more': {'_type': 'gate', 'tag': 'more'},
+          },
+          children: [
+            {
+              '_type': 'sizedbox',
+              'height': 300,
+              '_on': {
+                'end_reached': {'do': 'more', 'event': r'${a}'},
+              },
+              '_child': {
+                '_type': 'list_view',
+                '_children': [
+                  for (var i = 0; i < 20; i++)
+                    {'_type': 'sizedbox', 'height': 100},
+                ],
+              },
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      final scrollable = tester.state<ScrollableState>(find.byType(Scrollable));
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pump();
+      expect(_calls, isNot(contains('more')));
+
+      _open('a', 'x');
+      await tester.pumpAndSettle();
+      expect(_calls, isNot(contains('more')));
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent - 1);
+      await tester.pump();
+      expect(_calls.where((c) => c == 'more'), hasLength(1));
+      _open('more');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'tap·motion·scroll·isolate가 있는 held·pending leaf의 layer 순서와 core 유지',
+      (tester) async {
+        Map<String, Object?> leaf(String value, String tag) => {
+          '_type': 'text',
+          'value': value,
+          '_morph': {'_from': 0, '_to': 1, '_as': 'm$tag', '_repeat': true},
+          '_motion': 'fade_in',
+          '_on': {
+            'tap': {'do': 'go', 'event': r'${a}'},
+            'end_reached': 'go',
+          },
+        };
+        await _pump(
+          tester,
+          _screen(
+            state: {'a': null},
+            extra: {
+              'go': {'_type': 'gate', 'tag': 'go'},
+            },
+            children: [leaf('held', 'h'), leaf(r'p${a}', 'p')],
+          ),
+        );
+        await tester.pump(_grace);
+        final held = find.descendant(
+          of: find.text('held'),
+          matching: find.byType(RichText),
+        );
+        final pending = find.byType(RichText).last;
+        expect(layers(tester, held), [
+          'CoreKey',
+          'InteractionWrapper',
+          'ScrollEventWrapper',
+          'RepaintBoundary',
+          'IgnorePointer',
+        ]);
+        expect(layers(tester, pending), [
+          'CoreKey',
+          'SkeletonMask',
+          'IgnorePointer',
+        ]);
+        final heldCore = tester.element(held);
+        final pendingCore = tester.element(pending);
+
+        _open('a', 'x');
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        const revealed = [
+          'CoreKey',
+          'MotionWrapper',
+          'InteractionWrapper',
+          'ScrollEventWrapper',
+          'RepaintBoundary',
+        ];
+        expect(layers(tester, held), [...revealed, 'IgnorePointer']);
+        expect(layers(tester, find.byType(RichText).last), [
+          ...revealed,
+          'SkeletonMask',
+          'IgnorePointer',
+        ]);
+        expect(identical(tester.element(held), heldCore), isTrue);
+        expect(
+          identical(tester.element(find.byType(RichText).last), pendingCore),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets('expanded·positioned 노드는 공개 때 자식 core를 remount하지 않는다', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          extra: {
+            'go': {'_type': 'gate', 'tag': 'go'},
+          },
+          children: [
+            {
+              '_type': 'row',
+              '_children': [
+                {
+                  '_type': 'expanded',
+                  'flex': r'${a}',
+                  '_on': {'tap': 'go'},
+                  '_child': {'_type': 'text', 'value': 'in-expanded'},
+                },
+              ],
+            },
+            {
+              '_type': 'sizedbox',
+              'height': 100,
+              'width': 200,
+              '_child': {
+                '_type': 'stack',
+                '_children': [
+                  {
+                    '_type': 'positioned',
+                    'left': r'${a}',
+                    '_on': {'tap': 'go'},
+                    '_child': {'_type': 'text', 'value': 'in-positioned'},
+                  },
+                ],
+              },
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      Element core(String text) => tester.element(
+        find.descendant(of: find.text(text), matching: find.byType(RichText)),
+      );
+      final expanded = core('in-expanded');
+      final positioned = core('in-positioned');
+
+      _open('a', 1);
+      await tester.pumpAndSettle();
+      expect(identical(core('in-expanded'), expanded), isTrue);
+      expect(identical(core('in-positioned'), positioned), isTrue);
+      expect(
+        find.ancestor(
+          of: find.text('in-expanded'),
+          matching: find.byType(InteractionWrapper),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('in-positioned'));
+      await tester.pump();
+      expect(_calls, contains('go'));
+      _open('go');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('_key 루프 행의 pending 노드는 공개 때 같은 element를 쓴다', (tester) async {
+      await _pump(tester, {
+        '_type': 'column',
+        '_scope': {
+          '_state': {
+            'a': null,
+            'items': [
+              {'id': 'r1'},
+              {'id': 'r2'},
+            ],
+          },
+          '_action': {'load_a': _load('a', 'a')},
+          '_lifecycle': [
+            {'on': 'mount', 'action': 'load_a'},
+          ],
+          '_skeleton': 'auto',
+        },
+        '_children': [
+          {
+            '_type': 'text',
+            '_loop': {'_in': r'${items}', '_key': r'${item.id}'},
+            'value': r'${item.id}:${a}',
+          },
+        ],
+      });
+      await tester.pump(_grace);
+      final rows = [for (final e in find.byType(RichText).evaluate()) e];
+      expect(rows, hasLength(2));
+
+      _open('a', 'x');
+      await tester.pumpAndSettle();
+      expect(find.text('r1:x'), findsOneWidget);
+      final after = [for (final e in find.byType(RichText).evaluate()) e];
+      expect(identical(after[0], rows[0]), isTrue);
+      expect(identical(after[1], rows[1]), isTrue);
+    });
+
+    testWidgets('pending leaf는 공개 뒤와 같은 크기로 배치된다', (tester) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'p': null},
+          children: [
+            {'_type': 'text', 'value': r'${p.text}', 'width': 100},
+            {'_type': 'icon', 'name': r'${p.icon}', 'size': 32},
+            {'_type': 'checkbox', 'active_color': r'${p.color}'},
+            {
+              '_type': 'sizedbox',
+              'width': 200,
+              '_child': {'_type': 'slider', 'max': r'${p.max}'},
+            },
+            {
+              '_type': 'sizedbox',
+              'width': 200,
+              '_child': {'_type': 'text_field', 'hint': r'${p.hint}'},
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      final masks = find.byType(SkeletonMask);
+      expect(masks, findsNWidgets(5));
+      final pending = [for (var i = 0; i < 5; i++) tester.getSize(masks.at(i))];
+
+      _open('p', const {
+        'text': 'hello',
+        'icon': 'home',
+        'color': '#FF0000',
+        'max': 10,
+        'hint': 'type',
+      });
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final revealed = [
+        for (var i = 0; i < 5; i++) tester.getSize(masks.at(i)),
+      ];
+      expect(revealed[0].height, pending[0].height);
+      expect(revealed.skip(1), pending.skip(1));
+    });
+
+    testWidgets('auto가 아닌 화면은 skeleton layer 없이 lifecycle·이벤트를 한 번씩 낸다', (
+      tester,
+    ) async {
+      await _pump(tester, {
+        '_type': 'column',
+        '_scope': {
+          '_state': {'a': null},
+          '_action': {
+            'first': {'_type': 'gate', 'tag': 'first'},
+            'second': {'_type': 'gate', 'tag': 'second'},
+            'go': {'_type': 'gate', 'tag': 'go'},
+          },
+          '_lifecycle': [
+            {'on': 'mount', 'action': 'first'},
+            {'on': 'mount', 'action': 'second'},
+          ],
+        },
+        '_children': [
+          {
+            '_type': 'text',
+            'value': r'v${a}',
+            '_motion': 'fade_in',
+            '_on': {
+              'tap': {'do': 'go', 'event': r'${a}'},
+            },
+          },
+        ],
+      });
+      await tester.pumpAndSettle();
+      expect(_calls, ['first', 'second']);
+      expect(find.byType(SkeletonMask), findsNothing);
+      expect(find.byType(SkeletonClock), findsNothing);
+      expect(layers(tester, find.byType(RichText)), [
+        'MotionWrapper',
+        'InteractionWrapper',
+      ]);
+      final scopes = find.byType(Scope).evaluate().length;
+      expect(
+        find
+            .byWidgetPredicate(
+              (w) => w.runtimeType.toString() == '_ActionLayer',
+            )
+            .evaluate()
+            .length,
+        scopes,
+      );
+      await tester.tap(find.byType(RichText));
+      await tester.pump();
+      expect(_calls.where((c) => c == 'go'), hasLength(1));
+      _open('first');
+      _open('second');
+      _open('go');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('pending scope에서도 interval 훅은 돌고 앱 복귀 remount는 발화한다', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          extra: {
+            'tick': {'_type': 'gate', 'tag': 'tick'},
+            'back': {'_type': 'gate', 'tag': 'back'},
+          },
+          lifecycle: [
+            {'on': 'interval', 'every': 100, 'action': 'tick'},
+            {'on': 'remount', 'action': 'back'},
+          ],
+          children: [
+            {'_type': 'text', 'value': r'${a}'},
+          ],
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(_calls.where((c) => c == 'tick'), isNotEmpty);
+      expect(find.byType(SkeletonMask), findsOneWidget);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(_calls, contains('back'));
+      _open('a', 'x');
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
+  group('auto skeleton — known defects', () {
+    testWidgets(
+      'KNOWN DEFECT: pending sliver leaf는 viewport 아래에서 box layer로 터진다',
+      (tester) async {
+        await _pump(
+          tester,
+          _screen(
+            state: {'a': null},
+            children: [
+              {
+                '_type': 'sizedbox',
+                'height': 300,
+                '_child': {
+                  '_type': 'custom_scroll_view',
+                  '_children': [
+                    {
+                      '_type': 'sliver_fill_remaining',
+                      'has_scroll_body': r'${a}',
+                    },
+                  ],
+                },
+              },
+            ],
+          ),
+        );
+        await tester.pump(_grace);
+        expect(tester.takeException(), isNotNull);
+        _open('a', false);
+        await tester.pumpAndSettle();
+      },
+    );
+
+    /// [node] under an automatic skeleton whose `a` is still pending, with
+    /// an `act` action recording its dispatch.
+    Future<void> pumpEffectful(
+      WidgetTester tester,
+      Map<String, Object?> node,
+    ) => _pump(
+      tester,
+      _screen(
+        state: {'a': null},
+        extra: {
+          'act': {'_type': 'gate', 'tag': 'act'},
+        },
+        children: [
+          {'_type': 'sizedbox', 'width': 300, 'height': 300, '_child': node},
+        ],
+      ),
+    );
+
+    testWidgets('KNOWN DEFECT: pending dismissible은 밀면 on_dismissed를 보낸다', (
+      tester,
+    ) async {
+      await pumpEffectful(tester, {
+        '_type': 'dismissible',
+        'key': r'${a}',
+        'on_dismissed': 'act',
+        '_child': {'_type': 'text', 'value': 'swipe me'},
+      });
+      await tester.pump(_grace);
+      await tester.drag(find.text('swipe me'), const Offset(500, 0));
+      await tester.pumpAndSettle();
+      expect(_calls, contains('act'));
+      // The dismissed widget stays in the tree, which Dismissible asserts on.
+      tester.takeException();
+    });
+
+    testWidgets('KNOWN DEFECT: pending page_view는 넘기면 on_page_changed를 보낸다', (
+      tester,
+    ) async {
+      await pumpEffectful(tester, {
+        '_type': 'page_view',
+        'viewport_fraction': r'${a}',
+        'on_page_changed': 'act',
+        '_children': [
+          {'_type': 'text', 'value': 'page0'},
+          {'_type': 'text', 'value': 'page1'},
+        ],
+      });
+      await tester.pump(_grace);
+      await tester.fling(find.text('page0'), const Offset(-300, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(_calls, contains('act'));
+      _open('a', 1.0);
+      _open('act');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      'KNOWN DEFECT: pending refresh_indicator는 당기면 on_refresh를 보낸다',
+      (tester) async {
+        await pumpEffectful(tester, {
+          '_type': 'refresh_indicator',
+          'color': r'${a}',
+          'on_refresh': 'act',
+          '_child': {
+            '_type': 'list_view',
+            '_children': [
+              {'_type': 'text', 'value': 'pull'},
+            ],
+          },
+        });
+        await tester.pump(_grace);
+        await tester.fling(find.text('pull'), const Offset(0, 300), 1000);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(_calls, contains('act'));
+        _open('act');
+        _open('a', '#FF0000');
+        await tester.pumpAndSettle();
+      },
+    );
+
+    testWidgets('KNOWN DEFECT: pending text_field는 입력하면 change를 보낸다', (
+      tester,
+    ) async {
+      await pumpEffectful(tester, {
+        '_type': 'text_field',
+        'hint': r'${a}',
+        '_on': {'change': 'act'},
+      });
+      await tester.pump(_grace);
+      await tester.enterText(find.byType(EditableText), 'hi');
+      await tester.pump();
+      expect(_calls, contains('act'));
+      _open('act');
+      _open('a', 'hint');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('KNOWN DEFECT: pending video는 실제 player를 띄운다', (tester) async {
+      await pumpEffectful(tester, {
+        '_type': 'video',
+        'src': 'clip.mp4',
+        'muted': r'${a}',
+      });
+      await tester.pump(_grace);
+      expect(
+        find.byWidgetPredicate((w) => w.runtimeType.toString() == '_VideoView'),
+        findsOneWidget,
+      );
+      _open('a', true);
+      await tester.pumpAndSettle();
+    });
   });
 }
