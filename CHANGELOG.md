@@ -11,7 +11,8 @@ Performance only; what is shown, padded and dispatched is unchanged.
 - The background refresh after a cache hit now starts once the page's entrance
   transition has completed (after the first frame when there is none), so its
   decode never lands inside the transition. A page popped mid-transition
-  starts it when it leaves; every open still refreshes once.
+  starts it when it leaves, and one whose tab is switched away mid-transition
+  starts it then; every open still refreshes once.
 - `single_child_scroll_view` puts its content in a repaint boundary, and the
   box node under each `_scope` gets one (never on slivers; inside
   parent-data widgets). A state change or scroll repaints only the affected

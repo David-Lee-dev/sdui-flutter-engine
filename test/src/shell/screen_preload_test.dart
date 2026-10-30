@@ -406,6 +406,100 @@ void main() {
     );
   }
 
+  testWidgets('C5: without a route the refresh starts after the first frame', (
+    tester,
+  ) async {
+    final loader = _Loader();
+    await _init(loader, preload: ['detail']);
+    final router = GoRouter(
+      routes: [GoRoute(path: '/', builder: (_, _) => const SizedBox())],
+    );
+    addTearDown(router.dispose);
+    int refreshes() => loader.calls.where((id) => id == 'detail').length - 1;
+    await tester.pumpWidget(
+      InheritedGoRouter(
+        goRouter: router,
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: SduiScreenPage(screenId: 'detail', loader: loader),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('detail'), findsOneWidget);
+    expect(refreshes(), 1);
+    await tester.pumpWidget(const SizedBox());
+    expect(refreshes(), 1);
+  });
+
+  testWidgets('C5: a tab switched mid-transition still starts the refresh', (
+    tester,
+  ) async {
+    final loader = _Loader({
+      'detail': () async =>
+          _screen('detail', transition: {'type': 'fade', 'duration': 300}),
+    });
+    await _init(loader, preload: ['detail'], type: 'none');
+    late StatefulNavigationShell shell;
+    final router = Sdui.router(
+      loader: loader,
+      initialLocation: '/tab-home',
+      routes: [
+        StatefulShellRoute.indexedStack(
+          builder: (_, _, navigationShell) => shell = navigationShell,
+          branches: [
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/tab-home',
+                  builder: (_, _) => const Text('tab-home'),
+                  routes: [
+                    GoRoute(
+                      path: 'detail',
+                      pageBuilder: (context, state) => Sdui.page(
+                        context,
+                        state,
+                        screenId: 'detail',
+                        child: SduiScreenPage(
+                          screenId: 'detail',
+                          loader: loader,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/tab-mission',
+                  builder: (_, _) => const Text('tab-mission'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+    int refreshes() => loader.calls.where((id) => id == 'detail').length - 1;
+    router.go('/tab-home/detail');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(refreshes(), 0);
+    shell.goBranch(1);
+    await tester.pumpAndSettle();
+    expect(find.text('tab-mission'), findsOneWidget);
+    expect(refreshes(), 1);
+    shell.goBranch(0);
+    await tester.pumpAndSettle();
+    expect(find.text('detail'), findsOneWidget);
+    expect(refreshes(), 1);
+  });
+
   for (final app in [false, true]) {
     testWidgets('C6: a cached _transition drives the engine page app=$app', (
       tester,

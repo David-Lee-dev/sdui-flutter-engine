@@ -190,7 +190,9 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
 /// lands inside the transition. Without a route animation, or with one that
 /// already completed, it runs after the first frame. A page that leaves
 /// before its transition completes (popped mid-push) runs it on dispose, so
-/// every open still revalidates once.
+/// every open still revalidates once. A page whose tickers are muted (its tab
+/// switched away mid-push) runs it after that frame instead of waiting for
+/// the stalled animation.
 ///
 /// The route lookup lives in this element, not the page, so route status
 /// changes rebuild only this pass-through.
@@ -206,22 +208,29 @@ class _AfterTransition extends StatefulWidget {
 
 class _AfterTransitionState extends State<_AfterTransition> {
   Animation<double>? _animation;
+  bool _subscribed = false;
   bool _settled = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_settled || widget.onSettled == null) return;
+    final muted = !TickerMode.of(context);
     final animation = ModalRoute.of(context)?.animation;
-    if (identical(animation, _animation)) return;
-    _animation?.removeStatusListener(_onStatus);
-    _animation = animation;
-    animation?.addStatusListener(_onStatus);
+    if (_subscribed && !muted && identical(animation, _animation)) return;
+    _subscribed = true;
+    if (!identical(animation, _animation)) {
+      _animation?.removeStatusListener(_onStatus);
+      _animation = animation;
+      animation?.addStatusListener(_onStatus);
+    }
     // A pushed route's animation proxy only follows its controller after the
     // first frame, so the status is read then.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final current = _animation;
-      if (current == null || current.status == AnimationStatus.completed) {
+      if (muted ||
+          current == null ||
+          current.status == AnimationStatus.completed) {
         _settle();
       }
     });
