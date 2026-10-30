@@ -14,6 +14,7 @@ final class LoopDirective extends Directive {
     required this.path,
     this.wrap = 'column',
     this.wrapParams = const {},
+    this.skeletonCount,
   });
 
   final Object? source;
@@ -33,6 +34,10 @@ final class LoopDirective extends Directive {
   /// Bindings use the same compiled-value format as widget properties and are
   /// included in [roots] so container configuration remains reactive.
   final Map<String, Object?> wrapParams;
+
+  /// The `_loop._skeleton` placeholder row count drawn while [source] waits on
+  /// an automatic skeleton, or `null` to estimate it.
+  final int? skeletonCount;
 
   /// The source node's tree path for runtime diagnostics.
   final String path;

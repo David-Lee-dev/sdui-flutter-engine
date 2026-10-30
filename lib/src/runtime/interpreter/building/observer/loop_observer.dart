@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import '../../../environment/_base.dart';
 import '../../../environment/map_environment.dart';
+import 'package:sdui_engine/src/ir/compiled_value.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
+import '../../../log/engine_log.dart';
 import '../../../util/props_resolver.dart';
 import '../../../widget/catalog/custom/spin_grid_widget.dart';
 import '../../../widget/catalog/custom/swipe_layout_widget.dart';
@@ -77,26 +79,104 @@ class LoopObserver extends StatelessWidget {
   };
 
   Widget _expand(BuildContext context, Environment env) {
+    if (NodeBuilder.isPending(context, env, _sourceRoots)) {
+      return _placeholders(context, env);
+    }
     final resolved = LoopResolver.resolve(directive, env);
     final p = ExpressionEvaluator.resolveMap(directive.wrapParams, env);
-    final finder = _indexFinder(resolved);
+    return _container(
+      context,
+      env,
+      p,
+      resolved.length,
+      (i) => _item(resolved[i]),
+      resolved: resolved,
+    );
+  }
+
+  static final _roots = Expando<Set<String>>('LoopObserver.sourceRoots');
+
+  static final _warned = Expando<bool>('LoopObserver.warnedSkeleton');
+
+  Set<String> get _sourceRoots =>
+      _roots[directive] ??= CompiledValue.rootsOf({'source': directive.source});
+
+  /// Wraps that build their rows lazily inside their own viewport.
+  static const _lazyWraps = {'list', 'grid', 'sliver_list', 'sliver_grid'};
+
+  /// Wraps laid out as a grid, whose estimate is one row of cells.
+  static const _gridWraps = {'grid', 'sliver_grid', 'spin_grid'};
+
+  /// Draws stand-in rows from the real row template while the source waits
+  /// on an automatic skeleton: `_skeleton` rows, else enough to fill the
+  /// scrolling viewport, else one row of cells (with a diagnostic).
+  Widget _placeholders(BuildContext context, Environment env) {
+    final p = ExpressionEvaluator.resolveMap(directive.wrapParams, env);
+    Widget build(int? count, [Key? firstRow]) =>
+        _container(context, env, p, count, (i) => _placeholder(i, firstRow));
+    final count = directive.skeletonCount;
+    if (count != null) return build(count);
+    final sliver = directive.wrap.startsWith('sliver');
+    final shrinks = PropsResolver.flag(p['shrink_wrap']) ?? false;
+    if (_lazyWraps.contains(directive.wrap) && (sliver || !shrinks)) {
+      return build(null);
+    }
+    if (Scrollable.maybeOf(context) != null) {
+      return _FillViewport(builder: build);
+    }
+    if (_warned[directive] == null) {
+      _warned[directive] = true;
+      EngineLog.warn(
+        '_loop at ${directive.path}: no "_skeleton" row count outside a '
+        'scrollable — the automatic skeleton draws one row.',
+        tag: 'widget',
+      );
+    }
+    final cells = _gridWraps.contains(directive.wrap)
+        ? PropsResolver.integer(p['cross_axis_count']) ?? 2
+        : 1;
+    return build(cells < 1 ? 1 : cells);
+  }
+
+  /// One stand-in row: the real row template over a placeholder frame, so
+  /// its data nodes draw bones and its nested scopes never start.
+  Widget _placeholder(int index, Key? firstRow) => KeyedSubtree(
+    key: index == 0 && firstRow != null
+        ? firstRow
+        : ValueKey('\u0000skeleton:$index'),
+    child: IgnorePointer(
+      child: Scope.ofState(
+        {directive.as: null, directive.index: index},
+        placeholder: true,
+        child: NodeBuilder.build(directive.child),
+      ),
+    ),
+  );
+
+  /// Lays out [count] rows (unbounded when `null`, for a lazy wrap) in the
+  /// `_wrap` container. Only real rows carry [resolved], which reorder,
+  /// dismiss and the index finder need; stand-in rows lay out as a list.
+  Widget _container(
+    BuildContext context,
+    Environment env,
+    Map<String, Object?> p,
+    int? count,
+    Widget Function(int index) row, {
+    List<({Map<String, Object?> frame, String key})>? resolved,
+  }) {
+    final finder = resolved == null ? null : _indexFinder(resolved);
+    List<Widget> rows() => [for (var i = 0; i < count!; i++) row(i)];
     switch (directive.wrap) {
       case 'row':
-        return _eager(context, 'row', p, resolved);
+        return _eager(context, 'row', p, rows());
       case 'wrap':
-        return _eager(context, 'wrap', p, resolved);
+        return _eager(context, 'wrap', p, rows());
       case 'serpentine':
-        return WidgetFactory.build(context, 'serpentine', p, [
-          for (final item in resolved) _item(item),
-        ]);
+        return WidgetFactory.build(context, 'serpentine', p, rows());
       case 'serpentine_row':
-        return WidgetFactory.build(context, 'serpentine_row', p, [
-          for (final item in resolved) _item(item),
-        ]);
+        return WidgetFactory.build(context, 'serpentine_row', p, rows());
       case 'auto_scroll':
-        return WidgetFactory.build(context, 'auto_scroll', p, [
-          for (final item in resolved) _item(item),
-        ]);
+        return WidgetFactory.build(context, 'auto_scroll', p, rows());
       case 'swipe':
         // A data-driven swipe carousel: the loop owns the page count, so the
         // wrapping swipe_layout's length is the resolved item count rather than
@@ -111,12 +191,8 @@ class LoopObserver extends StatelessWidget {
         // from a loop.
         return SwipeLayoutWidget.build(
           context,
-          {...p, 'length': resolved.length},
-          [
-            SwipePaneWidget.build(context, p, [
-              for (final item in resolved) _item(item),
-            ]),
-          ],
+          {...p, 'length': count},
+          [SwipePaneWidget.build(context, p, rows())],
           Scope.actionHost(context),
         );
       case 'list':
@@ -127,15 +203,15 @@ class LoopObserver extends StatelessWidget {
           padding: PropsResolver.edge(context, p['padding']),
           physics: PropsResolver.scrollPhysics(p['physics']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
-          itemCount: resolved.length,
-          itemBuilder: (context, i) => _item(resolved[i]),
+          itemCount: count,
+          itemBuilder: (context, i) => row(i),
           findChildIndexCallback: finder,
         );
       case 'sliver_list':
         return SliverList(
           delegate: SliverChildBuilderDelegate(
-            (context, i) => _item(resolved[i]),
-            childCount: resolved.length,
+            (context, i) => row(i),
+            childCount: count,
             findChildIndexCallback: finder,
           ),
         );
@@ -145,27 +221,39 @@ class LoopObserver extends StatelessWidget {
         // EagerSpec and would throw StateError here. Built directly instead,
         // following the 'swipe' precedent above: the action host is required
         // so `on_finish` can dispatch once the spin animation settles.
-        return SpinGridWidget.build(context, p, [
-          for (final item in resolved) _item(item),
-        ], Scope.actionHost(context));
+        return SpinGridWidget.build(
+          context,
+          p,
+          rows(),
+          Scope.actionHost(context),
+        );
       case 'grid':
         return GridView.builder(
           gridDelegate: _gridDelegate(context, p),
           padding: PropsResolver.edge(context, p['padding']),
           physics: PropsResolver.scrollPhysics(p['physics']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
-          itemCount: resolved.length,
-          itemBuilder: (context, i) => _item(resolved[i]),
+          itemCount: count,
+          itemBuilder: (context, i) => row(i),
           findChildIndexCallback: finder,
         );
       case 'sliver_grid':
         return SliverGrid(
           gridDelegate: _gridDelegate(context, p),
           delegate: SliverChildBuilderDelegate(
-            (context, i) => _item(resolved[i]),
-            childCount: resolved.length,
+            (context, i) => row(i),
+            childCount: count,
             findChildIndexCallback: finder,
           ),
+        );
+      case 'reorderable' || 'dismissible' when resolved == null:
+        return ListView.builder(
+          scrollDirection:
+              PropsResolver.axis(p['scroll_direction']) ?? Axis.vertical,
+          padding: PropsResolver.edge(context, p['padding']),
+          shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
+          itemCount: count,
+          itemBuilder: (context, i) => row(i),
         );
       case 'reorderable':
         return ReorderableListView.builder(
@@ -173,8 +261,8 @@ class LoopObserver extends StatelessWidget {
               PropsResolver.axis(p['scroll_direction']) ?? Axis.vertical,
           padding: PropsResolver.edge(context, p['padding']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
-          itemCount: resolved.length,
-          itemBuilder: (context, i) => _item(resolved[i]),
+          itemCount: count!,
+          itemBuilder: (context, i) => row(i),
           onReorder: (oldIndex, newIndex) =>
               _reorder(context, env, oldIndex, newIndex),
         );
@@ -184,18 +272,18 @@ class LoopObserver extends StatelessWidget {
               PropsResolver.axis(p['scroll_direction']) ?? Axis.vertical,
           padding: PropsResolver.edge(context, p['padding']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
-          itemCount: resolved.length,
+          itemCount: count,
           itemBuilder: (context, i) => Dismissible(
-            key: ValueKey('dismiss:${resolved[i].key}'),
+            key: ValueKey('dismiss:${resolved![i].key}'),
             direction:
                 PropsResolver.dismissDirection(p['direction']) ??
                 DismissDirection.horizontal,
             onDismissed: (_) => _dismissKey(context, env, resolved[i].key),
-            child: _item(resolved[i]),
+            child: row(i),
           ),
         );
       default:
-        return _eager(context, 'column', p, resolved);
+        return _eager(context, 'column', p, rows());
     }
   }
 
@@ -203,9 +291,8 @@ class LoopObserver extends StatelessWidget {
     BuildContext context,
     String type,
     Map<String, Object?> p,
-    List<({Map<String, Object?> frame, String key})> resolved,
+    List<Widget> children,
   ) {
-    final children = [for (final item in resolved) _item(item)];
     final props = type == 'wrap' ? p : {'main_axis_size': 'min', ...p};
     return WidgetFactory.build(context, type, props, children);
   }
@@ -285,6 +372,48 @@ class LoopObserver extends StatelessWidget {
       listenable: listenable,
       builder: (ctx, _) => expand(ctx),
     );
+  }
+}
+
+/// Grows stand-in rows until they cover the enclosing scroll viewport.
+///
+/// Row extent is only known after layout, so one row is laid out first,
+/// measured, and the count set once from the viewport's extent.
+class _FillViewport extends StatefulWidget {
+  const _FillViewport({required this.builder});
+
+  final Widget Function(int count, Key firstRow) builder;
+
+  @override
+  State<_FillViewport> createState() => _FillViewportState();
+}
+
+class _FillViewportState extends State<_FillViewport> {
+  final GlobalKey _firstRow = GlobalKey();
+  int _count = 1;
+  bool _measured = false;
+
+  void _measure() {
+    if (!mounted || _measured) return;
+    _measured = true;
+    final row = _firstRow.currentContext?.findRenderObject();
+    final position = Scrollable.maybeOf(context)?.position;
+    if (row is! RenderBox || !row.hasSize || position == null) return;
+    if (!position.hasViewportDimension) return;
+    final extent = position.axis == Axis.vertical
+        ? row.size.height
+        : row.size.width;
+    if (extent <= 0) return;
+    final count = (position.viewportDimension / extent).ceil().clamp(1, 100);
+    if (count != _count) setState(() => _count = count);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_measured) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    }
+    return widget.builder(_count, _firstRow);
   }
 }
 

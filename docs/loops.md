@@ -11,6 +11,7 @@
 | `_index` | identifier | `index` | Read-only zero-based index binding. |
 | `_key` | non-empty whole expression string | required | Must evaluate per item to a unique string or finite number. |
 | `_wrap` | strategy string or `{_type: strategy, ...params}` | `column` | Wrapper and bindable wrapper parameters. |
+| `_skeleton` | positive integer | none | Placeholder row count while `_in` waits on an [automatic skeleton](lifecycle.md#automatic-skeleton). |
 
 ```yaml
 _type: text
@@ -48,6 +49,10 @@ _loop:
 | `dismissible` | lazy/mutating | box | `scroll_direction`, `padding`, `shrink_wrap`, `direction` (default `horizontal`); removes the dismissed item. |
 
 These are the validator's complete accepted names. `box`, `data`, `event`, and `set` are not loop wrappers; they belong to other concepts.
+
+## Automatic skeleton rows
+
+While `_in` reads a key an enclosing `_skeleton: auto` scope still awaits, the loop draws stand-in rows from its real row template: each row's frame (`_as`, `_index`) reads as pending, so data nodes draw bones and static nodes draw as they are. Rows ignore pointers and nested scopes inside them never run hooks. The count is `_skeleton` when given; otherwise a lazy `list`/`grid` (not shrink-wrapped) or `sliver_list`/`sliver_grid` builds rows lazily as far as its viewport reaches, a loop inside another scrollable lays out one row and fills the viewport with as many, and anywhere else the loop draws one row (`cross_axis_count` cells for grids) and logs a debug warning. Stand-in rows are replaced by the real rows when the source arrives.
 
 ## Mutation and constraints
 

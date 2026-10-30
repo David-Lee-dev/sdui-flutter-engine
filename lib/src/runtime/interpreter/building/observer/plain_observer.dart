@@ -28,7 +28,17 @@ class PlainObserver extends StatelessWidget {
     final listenable = env.listen(directive.roots);
     Widget assemble() => NodeGuard.run(
       directive.path,
-      () => NodeBuilder.assemble(context, directive, env, isolate: isolate),
+      () => NodeBuilder.assemble(
+        context,
+        directive,
+        env,
+        isolate: isolate,
+        pending: NodeBuilder.isPending(
+          context,
+          env,
+          NodeBuilder.visualRoots(directive),
+        ),
+      ),
     );
     if (listenable == null) return assemble();
     return ListenableBuilder(

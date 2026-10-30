@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Added `_scope._skeleton: auto`: the real tree becomes the skeleton. Each
+  node that reads a key written by the scope's `mount` hooks (through `set`)
+  draws real-geometry bones until that key is first written, then reveals on
+  its own. Static nodes draw at once, pending `cond`/`switch` pick the branch
+  that shows the data, and loops draw placeholder rows from their row
+  template — `_loop._skeleton: <rows>` sets the count. Bones wait 300 ms,
+  share one shimmer, and fade out over 250 ms; a 15 s watchdog releases hooks
+  that never settle. A map `_skeleton` keeps the hand-drawn behavior; any
+  other value is a compile error. Engines up to 0.13 reject `auto`, so gate
+  migrated templates by app version. See
+  [Automatic skeleton](docs/lifecycle.md#automatic-skeleton).
+
 ## 0.13.0
 
 - Added `_motion` scheduling param `start` (`'visible'` default, or `'mount'`):

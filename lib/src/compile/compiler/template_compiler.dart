@@ -605,13 +605,16 @@ final class TemplateCompiler {
         '"_scope._lifecycle" must not be null.',
       );
     }
+    // `auto` draws the skeleton from the real tree; a map is a hand-drawn
+    // override of this scope.
+    final rawSkeleton = config['_skeleton'];
+    final autoSkeleton = rawSkeleton == 'auto';
     Directive? skeleton;
-    if (config.containsKey('_skeleton') && config['_skeleton'] != null) {
-      final rawSkeleton = config['_skeleton'];
+    if (rawSkeleton != null && !autoSkeleton) {
       if (rawSkeleton is! Map) {
         throw InvalidTemplateException(
           node.path,
-          '"_scope._skeleton" must be a map.',
+          '"_scope._skeleton" must be "auto" or a map.',
         );
       }
       skeleton = buildDirectiveTree(
@@ -625,6 +628,7 @@ final class TemplateCompiler {
       config: ScopeConfig.fromRaw(config),
       child: child,
       skeleton: skeleton,
+      autoSkeleton: autoSkeleton,
       path: node.path,
       actions: _compileActions(config['_action'], node.path),
       lifecycle: _compileLifecycle(config['_lifecycle'], node.path),
@@ -928,9 +932,35 @@ final class TemplateCompiler {
       final name = '${entry.key}';
       _rejectReserved(name, 'action name', path);
       // A command map or a list-of-batches flow — ActionCompiler validates it.
-      result[name] = ActionCompiler.compile(entry.value, '$path/_action/$name');
+      final action = ActionCompiler.compile(entry.value, '$path/_action/$name');
+      result[name] = Action(
+        steps: action.steps,
+        dedupe: action.dedupe,
+        writes: _writesOf(action),
+      );
     }
     return result;
+  }
+
+  /// The keys every `set` command in [action] commits, through all handler
+  /// flows. Other drivers' writes cannot be read from their parameters.
+  static Set<String> _writesOf(Action action) {
+    final keys = <String>{};
+    void flow(Flow? steps) {
+      if (steps == null) return;
+      for (final batch in steps) {
+        for (final command in batch) {
+          if (command.type == 'set') keys.addAll(command.params.keys);
+          flow(command.then);
+          command.onError?.values.forEach(flow);
+          flow(command.dismiss);
+          flow(command.always);
+        }
+      }
+    }
+
+    flow(action.steps);
+    return keys;
   }
 
   static Directive _wrapIf(UiNode node, Directive child) {
@@ -977,6 +1007,13 @@ final class TemplateCompiler {
       );
     }
     final (wrap, wrapParams) = _parseWrap(node);
+    final skeletonCount = raw['_skeleton'];
+    if (skeletonCount != null && (skeletonCount is! int || skeletonCount < 1)) {
+      throw InvalidTemplateException(
+        node.path,
+        'Prop "_loop._skeleton" must be a positive integer row count.',
+      );
+    }
     return LoopDirective(
       source: compiledSource,
       as: as,
@@ -986,6 +1023,7 @@ final class TemplateCompiler {
       path: node.path,
       wrap: wrap,
       wrapParams: wrapParams,
+      skeletonCount: skeletonCount as int?,
     );
   }
 

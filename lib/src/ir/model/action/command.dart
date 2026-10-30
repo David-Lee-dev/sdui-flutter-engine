@@ -11,13 +11,21 @@ typedef Batch = List<Command>;
 
 /// Represents a compiled named action with execution steps and deduplication policy.
 class Action {
-  const Action({required this.steps, this.dedupe = true});
+  const Action({
+    required this.steps,
+    this.dedupe = true,
+    this.writes = const {},
+  });
 
   /// The pipeline of sequential batches containing concurrent commands.
   final Flow steps;
 
   /// Whether invocations are dropped while this action is already running.
   final bool dedupe;
+
+  /// The state keys a `set` command anywhere in [steps] (including handler
+  /// flows) commits — the keys an automatic skeleton waits on.
+  final Set<String> writes;
 }
 
 /// Represents one driver invocation and its result handlers.

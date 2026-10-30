@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/runtime/environment/_base.dart';
 import 'package:sdui_engine/src/runtime/environment/scope/commit_scheduler.dart';
 import 'package:sdui_engine/src/runtime/environment/scope/scope_store.dart';
 
@@ -139,6 +140,94 @@ void main() {
 
         store.commit({'b': 8}, immediate: true); // 우회 → 즉시
         expect(calls, 2);
+      });
+    });
+
+    group('pend (자동 skeleton 대기)', () {
+      test('pend는 선언 키를 pending으로 두고 구독자에게 알린다', () {
+        final store = ScopeStore({'a': null, 'b': null});
+        var calls = 0;
+        store.subscribe({'a'}).addListener(() => calls++);
+
+        store.pend({'a', 'nope'});
+
+        expect(store.pendOf('a'), PendState.pending);
+        expect(store.pendOf('b'), PendState.none);
+        expect(store.pendOf('nope'), PendState.none);
+        expect(calls, 1);
+      });
+
+      test('release 커밋은 같은 값이어도 풀고 알린다', () {
+        final store = ScopeStore({'a': null});
+        var calls = 0;
+        store.subscribe({'a'}).addListener(() => calls++);
+        store.pend({'a'});
+        calls = 0;
+
+        store.commit({'a': null}, release: true);
+
+        expect(store.pendOf('a'), PendState.settled);
+        expect(calls, 1);
+      });
+
+      test('release 없는 커밋(syncState 경로)은 pending을 유지한다', () {
+        final store = ScopeStore({'a': null});
+        store.pend({'a'});
+
+        store.commit({'a': 1}, immediate: true);
+
+        expect(store.pendOf('a'), PendState.pending);
+      });
+
+      test('settle은 남은 pending만 한 번 풀고, 다시 pend해도 돌아가지 않는다', () {
+        final store = ScopeStore({'a': null, 'b': null});
+        var calls = 0;
+        store.subscribe({'a', 'b'}).addListener(() => calls++);
+        store.pend({'a', 'b'});
+        store.commit({'a': 1}, release: true);
+        calls = 0;
+
+        store.settle({'a', 'b'});
+        expect(store.pendOf('b'), PendState.settled);
+        expect(calls, 1);
+
+        store.settle({'a', 'b'});
+        store.pend({'a', 'b'});
+        expect(calls, 1);
+        expect(store.pendOf('a'), PendState.settled);
+        expect(store.pendOf('b'), PendState.settled);
+      });
+
+      test('전역 pending 키 수는 pend·release·settle·dispose를 따른다', () {
+        final base = ScopeStore.pendingKeys;
+        final store = ScopeStore({'a': null, 'b': null, 'c': null});
+
+        store.pend({'a', 'b', 'c'});
+        store.pend({'a'});
+        expect(ScopeStore.pendingKeys, base + 3);
+
+        store.commit({'a': 1}, release: true);
+        expect(ScopeStore.pendingKeys, base + 2);
+
+        store.settle({'a', 'b'});
+        expect(ScopeStore.pendingKeys, base + 1);
+
+        store.dispose();
+        expect(ScopeStore.pendingKeys, base);
+        store.dispose();
+        expect(ScopeStore.pendingKeys, base);
+      });
+
+      test('pendAll 스토어는 선언 키 전부를 pending으로 세고 dispose에 푼다', () {
+        final base = ScopeStore.pendingKeys;
+        final store = ScopeStore({'item': null, 'index': 0}, pendAll: true);
+
+        expect(store.pendOf('item'), PendState.pending);
+        expect(store.pendOf('index'), PendState.pending);
+        expect(ScopeStore.pendingKeys, base + 2);
+
+        store.dispose();
+        expect(ScopeStore.pendingKeys, base);
       });
     });
   });

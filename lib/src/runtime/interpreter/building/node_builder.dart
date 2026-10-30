@@ -2,10 +2,13 @@ import 'dart:collection';
 
 import 'package:flutter/widgets.dart';
 
+import 'package:sdui_engine/src/ir/compiled_value.dart';
+import 'package:sdui_engine/src/ir/expression.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import '../../log/engine_log.dart';
 import '../../environment/_base.dart';
+import '../../environment/scope/scope_store.dart';
 import '../expression_evaluator.dart';
 import '../../motion/_base.dart';
 import '../../motion/composite/presets.dart';
@@ -20,6 +23,7 @@ import '../../wrapper/scope/bound_builder.dart';
 import '../../wrapper/scope/morph_scope.dart';
 import '../../wrapper/scope/press_scope.dart';
 import '../../wrapper/scope/scope.dart';
+import '../../wrapper/scope/skeleton_scope.dart';
 import 'observer/loop_observer.dart';
 import 'observer/condition_observer.dart';
 import 'observer/plain_observer.dart';
@@ -35,6 +39,79 @@ final class NodeBuilder {
   /// Indexes of `_motion` layers turned off per node element after their
   /// parameters failed to evaluate; a layer stays off for the node's lifetime.
   static final _offMotions = Expando<Set<int>>('NodeBuilder.offMotions');
+
+  /// Node elements that have been pending: they keep their skeleton wrapper
+  /// (and core key) for life, so revealing never remounts their subtree.
+  static final _wasPending = Expando<GlobalKey>('NodeBuilder.wasPending');
+
+  /// Whether any node has been pending, so apps that never use an automatic
+  /// skeleton skip the [_wasPending] lookup.
+  static bool _anyWasPending = false;
+
+  static final _visualRoots = Expando<Set<String>>('NodeBuilder.visualRoots');
+
+  static final _warnedUnsized = Expando<bool>('NodeBuilder.warnedUnsized');
+
+  /// The binding roots that shape what [directive] draws — its props, not
+  /// event payloads or motion parameters.
+  static Set<String> visualRoots(PlainDirective directive) =>
+      _visualRoots[directive] ??= CompiledValue.rootsOf(directive.props);
+
+  /// Whether a node at [context] reading [roots] shows as pending: only
+  /// inside an automatic skeleton, so nodes elsewhere reading the same
+  /// awaited key render as usual. While no key pends anywhere it returns
+  /// without walking the environment chain.
+  static bool isPending(
+    BuildContext context,
+    Environment env,
+    Set<String> roots,
+  ) =>
+      ScopeStore.pendingKeys > 0 &&
+      env.pendState(roots) == PendState.pending &&
+      SkeletonClock.maybeOf(context) != null;
+
+  static final _treeRoots = Expando<Set<String>>('NodeBuilder.treeRoots');
+
+  /// Whether anything in the subtree of [directive] reads a key that still
+  /// waits on an automatic skeleton in [env] — how a pending branch choice
+  /// picks the branch that will show the awaited data.
+  static bool readsPending(Directive directive, Environment env) =>
+      env.pendState(_rootsBelow(directive)) == PendState.pending;
+
+  /// Every outer binding root read in the subtree of [directive]; names a
+  /// node defines for its own descendants are left out.
+  static Set<String> _rootsBelow(Directive directive) =>
+      _treeRoots[directive] ??= switch (directive) {
+        PlainDirective node => {
+          ...node.roots,
+          for (final child in node.children) ..._rootsBelow(child),
+          for (final slot in node.slots.values) ..._rootsBelow(slot),
+        }..removeAll({...node.provides, ?node.pressedAs}),
+        ConditionDirective cond => {
+          ...cond.roots,
+          for (final branch in cond.branches) ..._rootsBelow(branch.body),
+          ...?_maybeRootsBelow(cond.fallback),
+        },
+        SwitchDirective sw => {
+          ...sw.roots,
+          for (final branch in sw.cases) ..._rootsBelow(branch.branch),
+          ...?_maybeRootsBelow(sw.fallback),
+        },
+        LoopDirective loop => {
+          ...loop.roots,
+          ..._rootsBelow(loop.child).difference({loop.as, loop.index}),
+        },
+        MorphDirective morph => {
+          ...morph.roots,
+          ..._rootsBelow(morph.child)..removeAll({morph.as, ?morph.velocityAs}),
+        },
+        ScopeDirective scope => _rootsBelow(
+          scope.child,
+        ).difference(scope.config.state.keys.toSet()),
+      };
+
+  static Set<String>? _maybeRootsBelow(Directive? directive) =>
+      directive == null ? null : _rootsBelow(directive);
 
   /// Builds the observer or scope boundary represented by [directive].
   static Widget build(Directive directive) {
@@ -56,6 +133,7 @@ final class NodeBuilder {
         actions: scope.actions,
         lifecycle: scope.lifecycle,
         skeleton: scope.skeleton == null ? null : build(scope.skeleton!),
+        autoSkeleton: scope.autoSkeleton,
         child: build(scope.child),
       ),
     };
@@ -83,13 +161,27 @@ final class NodeBuilder {
   /// scroll events, the repaint boundary ([isolate]) and identity wrappers are
   /// applied in that order. For a parent-data widget (`positioned`,
   /// `expanded`, ...) all but the identity wrapper go around its child.
+  ///
+  /// A [pending] node waits on an automatic skeleton: its props resolve
+  /// leniently, text draws placeholder words in the real style, icons and
+  /// images keep their declared box, events and motion stay off, and a leaf
+  /// paints as bones under a [SkeletonMask].
   static Widget assemble(
     BuildContext context,
     PlainDirective directive,
     Environment env, {
     bool isolate = false,
+    bool pending = false,
   }) {
-    final resolved = ExpressionEvaluator.resolveMap(directive.props, env);
+    final resolved = pending
+        ? _resolveLeniently(directive.props, env)
+        : ExpressionEvaluator.resolveMap(directive.props, env);
+    if (pending && directive.type == 'text') {
+      resolved['value'] = _placeholderText(
+        directive.props['value'],
+        resolved['max_lines'],
+      );
+    }
     Map<String, Object?> props = resolved;
     _PropAudit? audit;
     // Property reads become the debug-only schema, avoiding a second catalog
@@ -104,6 +196,17 @@ final class NodeBuilder {
     // gets a (box) repaint boundary.
     final box = spec?.produces != LayoutProtocol.sliver;
     Widget widget = switch (spec) {
+      _ when pending && directive.type == 'icon' => SizedBox.square(
+        dimension:
+            PropsResolver.size(context, props['size']) ??
+            IconTheme.of(context).size ??
+            24,
+      ),
+      _ when pending && directive.type == 'image' => _imageBox(
+        context,
+        directive,
+        props,
+      ),
       SlotSpec spec => spec.build(context, props, {
         for (final entry in directive.slots.entries)
           entry.key: build(entry.value),
@@ -147,26 +250,110 @@ final class NodeBuilder {
       InteractionWrapper.events.contains,
     );
     final scrolls = directive.on.keys.any(ScrollEventWrapper.events.contains);
-    if (directive.motions.isNotEmpty || interactive || scrolls || isolate) {
-      widget = _inside(
-        widget,
-        (child) => _decorate(
-          context,
-          directive,
-          env,
-          props,
-          child,
-          interactive: interactive,
-          scrolls: scrolls,
-          isolate: isolate && box,
-          box: box,
-        ),
-      );
+    final decorated =
+        directive.motions.isNotEmpty || interactive || scrolls || isolate;
+    if (pending) {
+      _anyWasPending = true;
+      _wasPending[context] ??= GlobalKey();
+    }
+    final coreKey = _anyWasPending ? _wasPending[context] : null;
+    final masked = coreKey != null && _isLeaf(directive);
+    if (decorated || masked) {
+      widget = _inside(widget, (child) {
+        // A once-pending node keeps its core under one key so gaining the
+        // decorations on reveal reparents it instead of remounting it.
+        if (coreKey != null && decorated) {
+          child = KeyedSubtree(key: coreKey, child: child);
+        }
+        if (!pending && decorated) {
+          child = _decorate(
+            context,
+            directive,
+            env,
+            props,
+            child,
+            interactive: interactive,
+            scrolls: scrolls,
+            isolate: isolate && box,
+            box: box,
+          );
+        }
+        if (!masked) return child;
+        return SkeletonMask(
+          pending: pending,
+          circle: directive.type == 'icon',
+          child: child,
+        );
+      });
     }
     final key = directive.key;
     return key == null
         ? widget
         : KeyedSubtree(key: ValueKey(key), child: widget);
+  }
+
+  /// Whether a pending [directive] draws its own bones: content leaves do,
+  /// layout nodes leave that to their children.
+  static bool _isLeaf(PlainDirective directive) =>
+      directive.type == 'image' ||
+      (directive.children.isEmpty && directive.slots.isEmpty);
+
+  /// Resolves each value on its own, so one expression failing on missing
+  /// data drops only that value instead of the node's whole geometry.
+  static Map<String, Object?> _resolveLeniently(
+    Map<String, Object?> props,
+    Environment env,
+  ) {
+    Object? resolve(Object? value) {
+      if (value is Map) {
+        return {for (final e in value.entries) e.key: resolve(e.value)};
+      }
+      if (value is List) return [for (final v in value) resolve(v)];
+      try {
+        return ExpressionEvaluator.resolveValue(value, env);
+      } on FormatException {
+        return null;
+      } on StateError {
+        return null;
+      }
+    }
+
+    return {for (final e in props.entries) e.key: resolve(e.value)};
+  }
+
+  static const _placeholderWord = '000000';
+
+  /// Stand-in text for a pending `text` [value]: each binding becomes a
+  /// placeholder word and literal fragments (and their line breaks) stay. A
+  /// value whose lines come from data spans [maxLines] lines (or one).
+  static String _placeholderText(Object? value, Object? maxLines) {
+    final text = value is Interpolation
+        ? value.parts
+              .map((part) => part is Expression ? _placeholderWord : '$part')
+              .join()
+        : _placeholderWord;
+    if (text.contains('\n')) return text;
+    final lines = PropsResolver.integer(maxLines) ?? 1;
+    return List.filled(lines < 1 ? 1 : lines, text).join('\n');
+  }
+
+  /// A pending image's declared box; an unsized one has nothing to hold.
+  static Widget _imageBox(
+    BuildContext context,
+    PlainDirective directive,
+    Map<String, Object?> props,
+  ) {
+    final width = PropsResolver.size(context, props['width']);
+    final height = PropsResolver.size(context, props['height']);
+    if (width == null && height == null && _warnedUnsized[directive] == null) {
+      _warnedUnsized[directive] = true;
+      EngineLog.warn(
+        'image @${directive.path} has no width/height — its automatic '
+        'skeleton bone collapses until the image loads.',
+        tag: 'widget',
+      );
+    }
+    return SizedBox(width: width, height: height);
   }
 
   /// Applies [decorate] to the child of a parent-data widget, which must stay
