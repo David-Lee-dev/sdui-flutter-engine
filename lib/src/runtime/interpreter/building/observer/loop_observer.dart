@@ -135,18 +135,43 @@ class LoopObserver extends StatelessWidget {
         max: _maxLazyRows,
       );
     }
-    if (Scrollable.maybeOf(context) != null) {
+    if (_fillsEnclosing(context, p, shrinks: shrinks)) {
       return _FillViewport(builder: build);
     }
     if (_warned[directive] == null) {
       _warned[directive] = true;
       EngineLog.warn(
-        '_loop at ${directive.path}: no "_skeleton" row count outside a '
-        'scrollable — the automatic skeleton draws one row.',
+        '_loop at ${directive.path}: no "_skeleton" row count and no '
+        'scrollable along the "${directive.wrap}" axis — the automatic '
+        'skeleton draws one row.',
         tag: 'widget',
       );
     }
     return build(cells < 1 ? 1 : cells);
+  }
+
+  /// Whether the stand-in rows lay out along the axis of the scroll view
+  /// they are measured in, so filling its viewport counts rows: a `column`
+  /// in a vertical scroll view, a `row` in a horizontal one, a shrink-wrapped
+  /// list or grid along its own scroll direction, and a `reorderable` or
+  /// `dismissible` list in its own viewport. Other wraps (`wrap`,
+  /// serpentines, carousels) never fill it.
+  bool _fillsEnclosing(
+    BuildContext context,
+    Map<String, Object?> p, {
+    required bool shrinks,
+  }) {
+    final scrollable = Scrollable.maybeOf(context);
+    if (scrollable == null) return false;
+    final axis = axisDirectionToAxis(scrollable.axisDirection);
+    final listAxis = PropsResolver.axis(p['scroll_direction']) ?? Axis.vertical;
+    return switch (directive.wrap) {
+      'column' || 'grid' => axis == Axis.vertical,
+      'row' => axis == Axis.horizontal,
+      'list' => listAxis == axis,
+      'reorderable' || 'dismissible' => !shrinks || listAxis == axis,
+      _ => false,
+    };
   }
 
   /// One stand-in row: the real row template over a placeholder frame, so

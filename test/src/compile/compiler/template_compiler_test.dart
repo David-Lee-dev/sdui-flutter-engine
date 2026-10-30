@@ -168,15 +168,30 @@ void main() {
           expect(() => scopeOf({'_skeleton': true}), throwsInvalidTemplate);
         });
 
-        test('action writes는 흐름 전체(_then·_error·_dismiss·_always)의 set 키', () {
+        test('action writes는 성공 흐름(command·중첩 _then)의 set 키뿐, '
+            '_error·_dismiss·_always는 제외', () {
           final scope = scopeOf({
-            '_state': {'a': null, 'b': null, 'c': null, 'd': null, 'e': null},
+            '_state': {
+              'a': null,
+              'b': null,
+              'c': null,
+              'd': null,
+              'e': null,
+              'f': null,
+            },
             '_action': {
               'load': [
                 {
                   '_type': 'net',
                   'url': '/x',
-                  '_then': {'_type': 'set', 'a': r'${data}'},
+                  '_then': [
+                    {'_type': 'set', 'a': r'${data}'},
+                    {
+                      '_type': 'toast',
+                      'message': 'x',
+                      '_then': {'_type': 'set', 'f': 1},
+                    },
+                  ],
                   '_error': {
                     '_': [
                       {'_type': 'set', 'b': 1},
@@ -194,7 +209,7 @@ void main() {
             },
           });
 
-          expect(scope.actions['load']!.writes, {'a', 'b', 'c', 'd'});
+          expect(scope.actions['load']!.writes, {'a', 'f'});
           expect(scope.actions['other']!.writes, {'e'});
         });
 

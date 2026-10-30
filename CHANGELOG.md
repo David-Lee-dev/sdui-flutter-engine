@@ -14,10 +14,21 @@
   migrated templates by app version. See
   [Automatic skeleton](docs/lifecycle.md#automatic-skeleton).
   While a node's props, event payloads or motion parameters read a waiting
-  key it ignores pointers; waiting content and stand-in rows are hidden from
-  accessibility; a scroll view laying out stand-in rows fires no `scroll`,
-  `start_reached` or `end_reached`; and a lazy wrap without `_skeleton` lays
+  key it fires none of its events (a leaf also ignores pointers); waiting content and stand-in rows are hidden from
+  accessibility; a scroll view laying out stand-in rows holds its
+  `start_reached` and `end_reached`; and a lazy wrap without `_skeleton` lays
   out the rows that fill its viewport, at most 20.
+- Automatic skeleton refinements: only success-path writes (steps and
+  `_then` chains) are awaited, so `_error`/`_dismiss`/`_always` writes such as
+  an error banner's key no longer show as bones; a scroll view laying out
+  stand-in rows holds only `start_reached`/`end_reached` (`scroll` fires) and
+  fires a held edge once after release if still in its zone; a waiting layout
+  node silences only its own events, leaving its children's input working;
+  stand-in rows fill the viewport only when the wrap lays out along the
+  scroll axis (a `row` in a vertical scroll view drew too many cells and
+  overflowed); a nested scope moved away from a loading automatic skeleton by
+  a `GlobalKey` stops waiting on it; and a placeholder-row scope never runs
+  hooks a template update adds.
 - `_loop._skeleton` is now validated: a value that is not a positive integer
   fails to compile.
 - A scope's `remount` on return from background no longer fires before its

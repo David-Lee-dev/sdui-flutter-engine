@@ -23,8 +23,9 @@ class Action {
   /// Whether invocations are dropped while this action is already running.
   final bool dedupe;
 
-  /// The state keys a `set` command anywhere in [steps] (including handler
-  /// flows) commits — the keys an automatic skeleton waits on.
+  /// The state keys a `set` command on the success path of [steps] (the
+  /// steps and their `_then` chains) commits — the keys an automatic
+  /// skeleton waits on.
   final Set<String> writes;
 }
 

@@ -122,7 +122,14 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
 
   bool _hooksPrepared = false;
 
-  /// Whether this scope sits in a placeholder loop row and never runs hooks.
+  /// How many placeholder-row scopes are mounted, so scopes skip the
+  /// ancestor walk for [_inert] while there are none.
+  static int _placeholders = 0;
+
+  bool _placed = false;
+
+  /// Whether this scope sits in a placeholder loop row and never runs hooks,
+  /// even ones a later template update gives it.
   bool _inert = false;
 
   /// The loading flags of ancestor automatic skeletons this scope's
@@ -136,6 +143,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    if (widget.placeholder) _placeholders++;
     final seed = widget.config.state;
     _acceptedSeed = JsonValue.normalizeObject(seed);
     _env = ScopeEnvironment(
@@ -177,15 +185,35 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
       screenViewId: telemetry?.screenViewId,
     );
 
+    if (!_placed) {
+      _placed = true;
+      _inert =
+          _placeholders > 0 && _ancestors().any((s) => s.widget.placeholder);
+    }
+
     if (widget.lifecycle.isEmpty) return;
     _visible = _isVisible();
     if (!_hooksPrepared) {
       _hooksPrepared = true;
       _prepareHooks();
+    } else if (_waitingOn != null) {
+      // Reparented (a GlobalKey move): wait on the loading automatic
+      // skeletons above the new place, if any.
+      _stopWaiting();
+      _waitForAncestors();
     }
     if (_inert || _waitingOn != null) return;
     _startLifecycle();
   }
+
+  List<ScopeState> _ancestors() => [
+    for (
+      var scope = context.findAncestorStateOfType<ScopeState>();
+      scope != null;
+      scope = scope.context.findAncestorStateOfType<ScopeState>()
+    )
+      scope,
+  ];
 
   /// Forwards visibility to the lifecycle; the first call starts it, and an
   /// automatic skeleton arms its watchdog then, not while it still waits.
@@ -203,23 +231,20 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   /// scope under a still-loading automatic skeleton starts after it, keeping
   /// the parent-then-child mount order of a hand-drawn skeleton.
   void _prepareHooks() {
-    final ancestors = <ScopeState>[
-      for (
-        var scope = context.findAncestorStateOfType<ScopeState>();
-        scope != null;
-        scope = scope.context.findAncestorStateOfType<ScopeState>()
-      )
-        scope,
-    ];
-    if (ancestors.any((scope) => scope.widget.placeholder)) {
-      _inert = true;
+    if (_inert) {
       _lifecycle.hooks = const [];
       _loading.value = false;
       return;
     }
     if (widget.autoSkeleton) _pendMountWrites();
+    _waitForAncestors();
+  }
+
+  /// Waits on the loading flags of the still-loading automatic skeletons
+  /// above this scope, if any.
+  void _waitForAncestors() {
     final loading = [
-      for (final scope in ancestors)
+      for (final scope in _ancestors())
         if (scope.widget.autoSkeleton && scope._loading.value) scope._loading,
     ];
     if (loading.isEmpty) return;
@@ -350,6 +375,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
     if (_observerRegistered) {
       WidgetsBinding.instance.removeObserver(this);
     }
+    if (widget.placeholder) _placeholders--;
     _host.dispose();
     _env.dispose();
     _loading.dispose();

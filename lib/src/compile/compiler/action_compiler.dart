@@ -47,8 +47,9 @@ class ActionCompiler {
     return Action(steps: steps, dedupe: true, writes: _writesOf(steps));
   }
 
-  /// The keys every `set` command in [steps] commits, through all handler
-  /// flows. Other drivers' writes cannot be read from their parameters.
+  /// The keys every `set` command on the success path of [steps] commits —
+  /// the steps and their `_then` chains, not `_error`, `_dismiss` or
+  /// `_always`. Other drivers' writes cannot be read from their parameters.
   static Set<String> _writesOf(Flow steps) {
     final keys = <String>{};
     void flow(Flow? steps) {
@@ -57,9 +58,6 @@ class ActionCompiler {
         for (final command in batch) {
           if (command.type == 'set') keys.addAll(command.params.keys);
           flow(command.then);
-          command.onError?.values.forEach(flow);
-          flow(command.dismiss);
-          flow(command.always);
         }
       }
     }

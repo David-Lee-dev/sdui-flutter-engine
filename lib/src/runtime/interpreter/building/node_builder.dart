@@ -43,8 +43,8 @@ final class NodeBuilder {
   /// (and core key) for life, so revealing never remounts their subtree.
   static final _wasPending = Expando<GlobalKey>('NodeBuilder.wasPending');
 
-  /// Node elements that have been held: they keep their pointer guard for
-  /// life, so releasing it never remounts their subtree.
+  /// Leaf node elements that have been held: they keep their pointer guard
+  /// for life, so releasing it never remounts their subtree.
   static final _wasHeld = Expando<bool>('NodeBuilder.wasHeld');
 
   /// Whether any node has been pending or held, so apps that never use an
@@ -169,8 +169,9 @@ final class NodeBuilder {
   /// leniently, text draws placeholder words in the real style, icons and
   /// images keep their declared box, events and motion stay off, and a leaf
   /// paints as bones under a [SkeletonMask]. A [held] node reads a waiting
-  /// key anywhere (props, event payloads or motion parameters) and ignores
-  /// pointers until it arrives; every pending node is held.
+  /// key anywhere (props, event payloads or motion parameters) and fires none
+  /// of its own events until it arrives — a leaf ignores pointers, a layout
+  /// node leaves its children's input working; every pending node is held.
   static Widget assemble(
     BuildContext context,
     PlainDirective directive,
@@ -268,7 +269,8 @@ final class NodeBuilder {
     }
     final coreKey = _anyWasPending ? _wasPending[context] : null;
     final masked = coreKey != null && _isLeaf(directive);
-    final guarded = _anyWasPending && _wasHeld[context] != null;
+    final guarded =
+        _anyWasPending && _wasHeld[context] != null && _isLeaf(directive);
     if (decorated || masked || guarded) {
       widget = _inside(widget, (child) {
         // A once-pending node keeps its core under one key so gaining the
@@ -287,6 +289,7 @@ final class NodeBuilder {
             scrolls: scrolls,
             isolate: isolate && box,
             box: box,
+            held: held,
           );
         }
         if (masked) {
@@ -404,7 +407,8 @@ final class NodeBuilder {
       };
 
   /// Wraps a node's [widget] in its motion, interaction, scroll-event and
-  /// repaint-boundary layers. Only a [box] node gets repaint boundaries.
+  /// repaint-boundary layers. Only a [box] node gets repaint boundaries; a
+  /// [held] node's event layers fire nothing.
   static Widget _decorate(
     BuildContext context,
     PlainDirective directive,
@@ -415,6 +419,7 @@ final class NodeBuilder {
     required bool scrolls,
     required bool isolate,
     required bool box,
+    required bool held,
   }) {
     final off = _offMotions[context];
     for (final (index, motion) in directive.motions.indexed) {
@@ -460,6 +465,7 @@ final class NodeBuilder {
         payloads: ExpressionEvaluator.resolveMap(directive.onEvent, env),
         feedback: directive.tapFeedback,
         onPressed: directive.pressedAs == null ? null : PressScope.of(context),
+        held: held,
         child: widget,
       );
     }
@@ -469,6 +475,7 @@ final class NodeBuilder {
         timing: directive.timing,
         endThreshold: PropsResolver.number(props['end_threshold']),
         startThreshold: PropsResolver.number(props['start_threshold']),
+        held: held,
         child: widget,
       );
     }

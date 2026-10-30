@@ -270,8 +270,8 @@ class _ClockScope extends InheritedWidget {
 /// One stand-in loop row of an automatic skeleton.
 ///
 /// It ignores pointers and is hidden from accessibility. While any stand-in
-/// row is mounted in a scroll view, that scroll view's scroll events are held
-/// (see [holdsScroll]), so paging never runs over placeholders.
+/// row is mounted in a scroll view, that scroll view's edge events are held
+/// (see [heldBy]), so paging never runs over placeholders.
 class SkeletonRow extends StatefulWidget {
   const SkeletonRow({super.key, required this.child});
 
@@ -283,14 +283,24 @@ class SkeletonRow extends StatefulWidget {
 
   static final _rows = Expando<int>('SkeletonRow.rows');
 
-  /// Whether stand-in rows are mounted in the scroll view that sent
-  /// [notification].
-  static bool holdsScroll(ScrollNotification notification) {
-    if (_live == 0) return false;
+  static final _onRelease = Expando<Set<VoidCallback>>('SkeletonRow.release');
+
+  /// The scroll view that sent [notification] when stand-in rows are
+  /// mounted in it, else `null`.
+  static ScrollableState? heldBy(ScrollNotification notification) {
+    if (_live == 0) return null;
     final scrollable = notification.context
         ?.findAncestorStateOfType<ScrollableState>();
-    return scrollable != null && (_rows[scrollable] ?? 0) > 0;
+    return scrollable != null && holds(scrollable) ? scrollable : null;
   }
+
+  /// Whether stand-in rows are mounted in [scrollable].
+  static bool holds(ScrollableState scrollable) => (_rows[scrollable] ?? 0) > 0;
+
+  /// Calls [callback] once after the frame in which the last stand-in row
+  /// leaves [scrollable], when the real rows have been laid out.
+  static void whenReleased(ScrollableState scrollable, VoidCallback callback) =>
+      (_onRelease[scrollable] ??= {}).add(callback);
 
   @override
   State<SkeletonRow> createState() => _SkeletonRowState();
@@ -315,7 +325,17 @@ class _SkeletonRowState extends State<SkeletonRow> {
     SkeletonRow._live--;
     final scrollable = _scrollable;
     if (scrollable != null) {
-      SkeletonRow._rows[scrollable] = SkeletonRow._rows[scrollable]! - 1;
+      final rows = SkeletonRow._rows[scrollable] =
+          SkeletonRow._rows[scrollable]! - 1;
+      final callbacks = SkeletonRow._onRelease[scrollable];
+      if (rows == 0 && callbacks != null) {
+        SkeletonRow._onRelease[scrollable] = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          for (final callback in callbacks) {
+            callback();
+          }
+        });
+      }
     }
     super.dispose();
   }

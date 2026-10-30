@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
+import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_error.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
@@ -134,7 +135,8 @@ void main() {
 
       final env = _envAt(tester, find.text('static'));
       expect(env.pendingOf('a'), PendState.pending);
-      expect(env.pendingOf('b'), PendState.pending);
+      // Only success flows are awaited; the `_error` write of `b` is not.
+      expect(env.pendingOf('b'), PendState.none);
       expect(env.pendingOf('c'), PendState.none);
 
       _open('load', 1);
@@ -614,6 +616,70 @@ void main() {
     });
   });
 
+  group('auto skeleton — held containers', () {
+    testWidgets('payload만 기다리는 비-leaf는 자기 tap만 막고 안의 정적 버튼은 동작한다', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          extra: {
+            'go': {'_type': 'gate', 'tag': 'go'},
+            'inner': {'_type': 'gate', 'tag': 'inner'},
+          },
+          children: [
+            {
+              '_type': 'container',
+              'width': 200,
+              'height': 100,
+              'color': '#ff0000',
+              'alignment': 'top_left',
+              '_on': {
+                'tap': {'do': 'go', 'event': r'${a}'},
+              },
+              '_children': [
+                {
+                  '_type': 'text',
+                  'value': 'inner',
+                  '_on': {'tap': 'inner'},
+                },
+              ],
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      final box = tester.getRect(
+        find.byWidgetPredicate(
+          (w) => w is InteractionWrapper && w.on['tap'] == 'go',
+        ),
+      );
+      expect(box.height, 100);
+      final innerCore = tester.element(find.byType(RichText));
+
+      await tester.tap(find.text('inner'));
+      await tester.pump();
+      expect(_calls, contains('inner'));
+      await tester.tapAt(box.bottomCenter - const Offset(0, 5));
+      await tester.pump();
+      expect(_calls, isNot(contains('go')));
+
+      _open('a', 'ready');
+      _open('inner');
+      await tester.pumpAndSettle();
+      await tester.tapAt(box.bottomCenter - const Offset(0, 5));
+      await tester.pump();
+      expect(_calls.where((c) => c == 'go'), hasLength(1));
+      expect(
+        identical(tester.element(find.byType(RichText)), innerCore),
+        isTrue,
+      );
+      _open('go');
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('auto skeleton — branches', () {
     testWidgets('pending 조건은 pending 키를 읽는 가지(없으면 else)를 고른다', (tester) async {
       await _pump(
@@ -648,6 +714,54 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('empty'), findsOneWidget);
       expect(find.text('kim'), findsOneWidget);
+    });
+
+    testWidgets('_error가 쓰는 키는 기다리지 않아 오류 배너가 아닌 내용 가지가 bone', (tester) async {
+      await _pump(tester, {
+        '_type': 'column',
+        '_scope': {
+          '_state': {'items': null, 'error': null},
+          '_action': {
+            'load': {
+              '_type': 'gate',
+              'tag': 'items',
+              '_then': {'_type': 'set', 'items': r'${data}'},
+              '_error': {
+                '_': {'_type': 'set', 'error': 'failed'},
+              },
+            },
+          },
+          '_lifecycle': [
+            {'on': 'mount', 'action': 'load'},
+          ],
+          '_skeleton': 'auto',
+        },
+        '_children': [
+          {
+            '_type': 'cond',
+            '_children': [
+              {
+                '_type': 'text',
+                'value': r'error: ${error}',
+                '_if': r'${error != null}',
+              },
+              {'_type': 'text', 'value': r'${items}', '_else': true},
+            ],
+          },
+        ],
+      });
+      final env = _envAt(tester, find.byType(Text));
+      expect(env.pendingOf('error'), PendState.none);
+      expect(find.textContaining('error'), findsNothing);
+      expect(find.byType(SkeletonMask), findsOneWidget);
+      expect(
+        tester.widget<SkeletonMask>(find.byType(SkeletonMask)).pending,
+        isTrue,
+      );
+
+      _open('items', 'loaded');
+      await tester.pumpAndSettle();
+      expect(find.text('loaded'), findsOneWidget);
     });
 
     testWidgets('pending switch는 pending 키를 읽는 첫 case를 고른다', (tester) async {
@@ -778,6 +892,44 @@ void main() {
       expect(find.text('n0'), findsOneWidget);
     });
 
+    testWidgets('세로 스크롤 안의 row·wrap 루프는 viewport로 세지 않고 경고와 함께 1칸', (
+      tester,
+    ) async {
+      final lines = <String>[];
+      EngineLog.configure(output: lines.add);
+      addTearDown(() => EngineLog.configure(output: debugPrint));
+
+      for (final wrap in ['row', 'wrap']) {
+        _gates.clear();
+        lines.clear();
+        await tester.pumpWidget(const SizedBox());
+        await _pump(tester, {
+          '_type': 'sizedbox',
+          'height': 420,
+          '_child': {
+            '_type': 'single_child_scroll_view',
+            '_child': _screen(
+              state: {'items': null},
+              children: [
+                {...rows(wrap), 'width': 120},
+              ],
+            ),
+          },
+        });
+        await tester.pump();
+        expect(tester.takeException(), isNull, reason: wrap);
+        expect(find.byType(SkeletonMask), findsOneWidget, reason: wrap);
+        expect(
+          lines.where((l) => l.contains('_skeleton')),
+          hasLength(1),
+          reason: wrap,
+        );
+        _open('items', items(2));
+        await tester.pumpAndSettle();
+        expect(find.text('n1'), findsOneWidget, reason: wrap);
+      }
+    });
+
     testWidgets('스크롤 밖에서 N이 없으면 경고와 함께 1행 / grid는 cross_axis_count칸', (
       tester,
     ) async {
@@ -804,42 +956,111 @@ void main() {
       expect(find.text('n1'), findsNWidgets(2));
     });
 
-    testWidgets('placeholder 행이 있는 동안 감싼 스크롤의 end_reached·scroll은 발화하지 않는다', (
+    /// A 400-high scroll view paging `more` and reporting `moved`, over a
+    /// loop of [count] 50-high rows.
+    Map<String, Object?> paged({int count = 20}) => _screen(
+      state: {'items': null},
+      extra: {
+        'more': {'_type': 'gate', 'tag': 'more'},
+        'moved': {'_type': 'gate', 'tag': 'moved'},
+      },
+      children: [
+        {
+          '_type': 'sizedbox',
+          'height': 400,
+          '_on': {'end_reached': 'more', 'scroll': 'moved'},
+          '_children': [rows('list', count: count)],
+        },
+      ],
+    );
+
+    testWidgets('placeholder 행이 있는 동안 scroll은 발화하고 end_reached만 막힌다', (
       tester,
     ) async {
-      await _pump(
-        tester,
-        _screen(
-          state: {'items': null},
-          extra: {
-            'more': {'_type': 'gate', 'tag': 'more'},
-            'moved': {'_type': 'gate', 'tag': 'moved'},
-          },
-          children: [
-            {
-              '_type': 'sizedbox',
-              'height': 400,
-              '_on': {'end_reached': 'more', 'scroll': 'moved'},
-              '_children': [rows('list', count: 20)],
-            },
-          ],
-        ),
-      );
+      await _pump(tester, paged());
+      ScrollPosition position() =>
+          tester.state<ScrollableState>(find.byType(Scrollable)).position;
+      position().jumpTo(100);
+      await tester.pump();
+      position().jumpTo(position().maxScrollExtent);
+      await tester.pump();
+      expect(_calls, ['items', 'moved']);
+
+      // Leaving the end zone while held owes nothing on release.
+      position().jumpTo(0);
+      await tester.pump();
+      _open('items', items(20));
+      await tester.pumpAndSettle();
+      expect(_calls, isNot(contains('more')));
+
+      position().jumpTo(position().maxScrollExtent);
+      await tester.pump();
+      expect(_calls.where((c) => c == 'more'), hasLength(1));
+      _open('more');
+      _open('moved');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('placeholder 동안 끝에 머문 사용자는 공개 직후 end_reached를 한 번 받는다', (
+      tester,
+    ) async {
+      await _pump(tester, paged());
       ScrollPosition position() =>
           tester.state<ScrollableState>(find.byType(Scrollable)).position;
       position().jumpTo(position().maxScrollExtent);
       await tester.pump();
-      expect(_calls, ['items']);
+      expect(_calls, isNot(contains('more')));
 
       _open('items', items(20));
       await tester.pumpAndSettle();
-      position().jumpTo(0);
-      await tester.pump();
-      position().jumpTo(position().maxScrollExtent);
-      await tester.pump();
-      expect(_calls, containsAll(['more', 'moved']));
+      expect(_calls.where((c) => c == 'more'), hasLength(1));
       _open('more');
       _open('moved');
+      await tester.pumpAndSettle();
+      expect(_calls.where((c) => c == 'more'), hasLength(1));
+    });
+
+    testWidgets('다른 곳에 placeholder 행이 있어도 auto 밖 스크롤의 end_reached는 발화한다', (
+      tester,
+    ) async {
+      await _pump(tester, {
+        '_type': 'column',
+        '_scope': {
+          '_action': {
+            'outer_more': {'_type': 'gate', 'tag': 'outer_more'},
+          },
+        },
+        '_children': [
+          {
+            '_type': 'sizedbox',
+            'height': 200,
+            '_on': {'end_reached': 'outer_more'},
+            '_child': {
+              '_type': 'single_child_scroll_view',
+              '_child': {'_type': 'container', 'height': 1000},
+            },
+          },
+          _screen(
+            state: {'items': null},
+            children: [
+              {
+                '_type': 'sizedbox',
+                'height': 200,
+                '_children': [rows('list', count: 5)],
+              },
+            ],
+          ),
+        ],
+      });
+      expect(find.byType(SkeletonRow), findsWidgets);
+      final outer = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
+      outer.position.jumpTo(outer.position.maxScrollExtent);
+      await tester.pump();
+      expect(_calls, contains('outer_more'));
+      _open('outer_more');
+      _open('items', items(1));
       await tester.pumpAndSettle();
     });
 
@@ -1518,6 +1739,98 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('H=x'), findsOneWidget);
       expect(find.text('S=x'), findsOneWidget);
+    });
+
+    testWidgets('조상 auto scope를 기다리던 scope가 GlobalKey로 밖에 옮겨지면 바로 출발한다', (
+      tester,
+    ) async {
+      final outer =
+          TemplateCompiler.buildDirectiveTree(
+                TemplateParser.buildUiTree(
+                  _screen(state: {'a': null}, children: const []),
+                ),
+              )
+              as ScopeDirective;
+      final nested = KeyedSubtree(
+        key: GlobalKey(),
+        child: _build({
+          '_type': 'text',
+          'value': 'nested',
+          '_scope': {
+            '_action': {
+              'row': {'_type': 'gate', 'tag': 'row'},
+            },
+            '_lifecycle': [
+              {'on': 'mount', 'action': 'row'},
+            ],
+          },
+        }),
+      );
+      Widget tree({required bool inside}) => MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              Scope(
+                config: outer.config,
+                actions: outer.actions,
+                lifecycle: outer.lifecycle,
+                autoSkeleton: true,
+                child: inside ? nested : const SizedBox(),
+              ),
+              if (!inside) nested,
+            ],
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(tree(inside: true));
+      expect(_calls, ['a']);
+
+      await tester.pumpWidget(tree(inside: false));
+      expect(find.text('nested'), findsOneWidget);
+      expect(_calls, ['a', 'row']);
+
+      _open('a', 'x');
+      _open('row');
+      await tester.pumpAndSettle();
+      expect(_calls, ['a', 'row']);
+    });
+
+    testWidgets('lifecycle 없이 생긴 placeholder 행 scope는 나중에 훅을 받아도 발화하지 않는다', (
+      tester,
+    ) async {
+      Map<String, Object?> template({required bool hooks}) => _screen(
+        state: {'items': null},
+        children: [
+          {
+            '_type': 'text',
+            'value': r'${item.name}',
+            '_loop': {
+              '_in': r'${items}',
+              '_key': r'${item.id}',
+              '_skeleton': 2,
+            },
+            '_scope': {
+              '_action': {
+                'row': {'_type': 'gate', 'tag': 'row'},
+              },
+              if (hooks)
+                '_lifecycle': [
+                  {'on': 'mount', 'action': 'row'},
+                ],
+            },
+          },
+        ],
+      );
+
+      await _pump(tester, template(hooks: false));
+      expect(find.byType(SkeletonMask), findsNWidgets(2));
+      await _pump(tester, template(hooks: true));
+      await tester.pump();
+      expect(find.byType(SkeletonMask), findsNWidgets(2));
+      expect(_calls, isNot(contains('row')));
+      _open('items', const <Object?>[]);
+      await tester.pumpAndSettle();
     });
   });
 }
