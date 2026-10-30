@@ -14,25 +14,9 @@ class ConditionObserver extends StatelessWidget {
 
   final ConditionDirective directive;
 
-  Widget _resolve(BuildContext context, Environment env) {
-    if (NodeBuilder.isPending(context, env, () => directive.roots)) {
-      return _resolvePending(env);
-    }
+  Widget _resolve(Environment env) {
     for (final branch in directive.branches) {
       if (ExpressionEvaluator.evaluateTruthy(branch.predicate, env)) {
-        return NodeBuilder.build(branch.body);
-      }
-    }
-    final fallback = directive.fallback;
-    if (fallback == null) return const SizedBox.shrink();
-    return NodeBuilder.build(fallback);
-  }
-
-  /// While the predicates wait on an automatic skeleton, shows the first
-  /// branch that will draw the awaited data, else the fallback.
-  Widget _resolvePending(Environment env) {
-    for (final branch in directive.branches) {
-      if (NodeBuilder.readsPending(branch.body, env)) {
         return NodeBuilder.build(branch.body);
       }
     }
@@ -45,8 +29,7 @@ class ConditionObserver extends StatelessWidget {
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget resolve() =>
-        NodeGuard.run(directive.path, () => _resolve(context, env));
+    Widget resolve() => NodeGuard.run(directive.path, () => _resolve(env));
     if (listenable == null) return resolve();
     return ListenableBuilder(
       listenable: listenable,

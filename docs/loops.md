@@ -11,7 +11,6 @@
 | `_index` | identifier | `index` | Read-only zero-based index binding. |
 | `_key` | non-empty whole expression string | required | Must evaluate per item to a unique string or finite number. |
 | `_wrap` | strategy string or `{_type: strategy, ...params}` | `column` | Wrapper and bindable wrapper parameters. |
-| `_skeleton` | positive integer | none | Placeholder row count while `_in` waits on an [automatic skeleton](lifecycle.md#automatic-skeleton). |
 
 ```yaml
 _type: text
@@ -49,10 +48,6 @@ _loop:
 | `dismissible` | lazy/mutating | box | `scroll_direction`, `padding`, `shrink_wrap`, `direction` (default `horizontal`); removes the dismissed item. |
 
 These are the validator's complete accepted names. `box`, `data`, `event`, and `set` are not loop wrappers; they belong to other concepts.
-
-## Automatic skeleton rows
-
-While `_in` reads a key an enclosing `_skeleton: auto` scope still awaits, the loop draws stand-in rows from its real row template: each row's frame (`_as`, `_index`) reads as pending, so data nodes draw bones and static nodes draw as they are. Rows ignore pointers, are hidden from accessibility, and nested scopes inside them never run hooks, even ones a later template update adds. Stand-in rows relate only to a scroll view inside the same automatic skeleton. While they are laid out in such a scroll view, the `start_reached` and `end_reached` events of the node around that scroll view are held, so paging does not run during the first load; `scroll` keeps firing, and other scroll views — including a feed outside the skeleton whose cards each load their own rows — are unaffected. An edge zone entered while held (and still occupied when the stand-in rows leave) fires its event once right after the real rows lay out, without another scroll. The count is `_skeleton` when given; otherwise a lazy `list`/`grid` (not shrink-wrapped) or `sliver_list`/`sliver_grid` lays out as many rows (grid: rows of `cross_axis_count` cells) as fill its viewport, at most 20; a loop that lays out along the axis of the scrollable around it inside the automatic skeleton (`column` or `grid` in a vertical one, `row` in a horizontal one, a shrink-wrapped `list` along its `scroll_direction`) lays out one row and fills that viewport with as many; anywhere else — including `wrap`, serpentines, a wrap across the scroll axis and a scroll view outside the skeleton — the loop draws one row (`cross_axis_count` cells for grids) and logs a debug warning. Stand-in rows are replaced by the real rows when the source arrives, in the same scroll view, so its scroll position is kept.
 
 ## Mutation and constraints
 

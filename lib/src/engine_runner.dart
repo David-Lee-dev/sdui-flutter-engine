@@ -276,7 +276,6 @@ class _EngineRunnerState extends State<EngineRunner> {
         skeleton: directive.skeleton == null
             ? null
             : NodeBuilder.build(directive.skeleton!),
-        autoSkeleton: directive.autoSkeleton,
         child: NodeBuilder.build(directive.child),
       );
     }

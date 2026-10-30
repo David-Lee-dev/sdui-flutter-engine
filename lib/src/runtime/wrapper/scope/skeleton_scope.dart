@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import 'skeleton_shimmer.dart';
-
 enum _Phase { holding, showing, revealing, done }
 
 /// Bridges a scope's loading state to its content with a skeleton placeholder.
@@ -133,9 +131,13 @@ class _Shimmer extends StatefulWidget {
 
 class _ShimmerState extends State<_Shimmer>
     with SingleTickerProviderStateMixin {
+  static const Color _base = Color(0xFF2C2C2C); // surface30
+  static const Color _highlight = Color(0xFF4B4B4B); // surface50
+
+  // Standard shimmer cadence (the `shimmer` package's default period).
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: SkeletonShimmer.period,
+    duration: const Duration(milliseconds: 1500),
   )..repeat();
 
   @override
@@ -151,8 +153,32 @@ class _ShimmerState extends State<_Shimmer>
     builder: (context, child) => ShaderMask(
       blendMode: BlendMode.srcATop,
       shaderCallback: (bounds) =>
-          SkeletonShimmer.gradient(_controller.value).createShader(bounds),
+          _gradient(_controller.value).createShader(bounds),
       child: child,
     ),
   );
+
+  /// The standard shimmer gradient: a highlight band padded by base on both ends
+  /// (so a base gap follows each pass), swept left→right as [t] goes 0→1. Clamp
+  /// tiling keeps everything base once the band slides off. Matches the widely
+  /// used `shimmer` package's default colors/stops/direction.
+  static LinearGradient _gradient(double t) => LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.centerRight,
+    colors: const [_base, _base, _highlight, _base, _base],
+    stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
+    transform: _SlideTransform(2 * t - 1),
+  );
+}
+
+/// Translates a gradient horizontally by [percent] of the bounds' width, moving
+/// the highlight band across (and past) the subtree each cycle.
+class _SlideTransform extends GradientTransform {
+  const _SlideTransform(this.percent);
+
+  final double percent;
+
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.translationValues(bounds.width * percent, 0, 0);
 }

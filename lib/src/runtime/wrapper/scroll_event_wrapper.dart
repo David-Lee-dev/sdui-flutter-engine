@@ -4,7 +4,6 @@ import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
 import 'event_timing_controller.dart';
 import 'scope/scope.dart';
-import 'scroll_edge_hold.dart';
 
 /// Dispatches scrolling and threshold-entry events from the nearest descendant scrollable.
 ///
@@ -12,9 +11,6 @@ import 'scroll_edge_hold.dart';
 /// debounce) rate-limits it — e.g. `{ do: on_scroll, throttle: 16 }` caps updates
 /// per window, `{ do: on_settle, debounce: 150 }` fires only the final offset.
 /// `start_reached` / `end_reached` are edge-gated (once per zone entry).
-/// While something holds the scrollable ([ScrollEdgeHold], such as an
-/// automatic skeleton's stand-in rows) the edge events are held; one whose
-/// zone is still occupied when the hold goes fires then.
 class ScrollEventWrapper extends StatefulWidget {
   const ScrollEventWrapper({
     super.key,
@@ -22,7 +18,6 @@ class ScrollEventWrapper extends StatefulWidget {
     this.timing = const {},
     double? endThreshold,
     double? startThreshold,
-    this.held = false,
     required this.child,
   }) : endThreshold = endThreshold ?? _defaultThreshold,
        startThreshold = startThreshold ?? _defaultThreshold;
@@ -39,10 +34,6 @@ class ScrollEventWrapper extends StatefulWidget {
 
   final double startThreshold;
 
-  /// Whether the node waits on an automatic skeleton: nothing fires, and an
-  /// edge entered meanwhile fires on the first notification after it.
-  final bool held;
-
   final Widget child;
 
   @override
@@ -52,13 +43,6 @@ class ScrollEventWrapper extends StatefulWidget {
 class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
   bool _inEndZone = false;
   bool _inStartZone = false;
-
-  /// Whether an edge zone was entered and its event has not fired yet.
-  bool _endOwed = false;
-  bool _startOwed = false;
-
-  /// The held scroll view whose edge events wait on its release.
-  ScrollableState? _heldBy;
 
   final EventTimingController _timing = EventTimingController();
 
@@ -85,44 +69,6 @@ class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
     });
   }
 
-  /// Tracks the edge zones of [metrics] and fires the edge events owed: an
-  /// edge is owed on entering its zone and fires once while not [holding],
-  /// so an entry made while held fires on release if still in the zone.
-  void _edges(ScrollMetrics metrics, {required bool holding}) {
-    final nearEnd = metrics.extentAfter <= widget.endThreshold;
-    if (nearEnd && !_inEndZone) _endOwed = true;
-    if (!nearEnd) _endOwed = false;
-    _inEndZone = nearEnd;
-    final endAction = widget.on['end_reached'];
-    if (_endOwed && !holding) {
-      _endOwed = false;
-      if (endAction != null) _emit('end_reached', endAction, _metrics(metrics));
-    }
-
-    final nearStart = metrics.extentBefore <= widget.startThreshold;
-    if (nearStart && !_inStartZone) _startOwed = true;
-    if (!nearStart) _startOwed = false;
-    _inStartZone = nearStart;
-    final startAction = widget.on['start_reached'];
-    if (_startOwed && !holding) {
-      _startOwed = false;
-      if (startAction != null) {
-        _emit('start_reached', startAction, _metrics(metrics));
-      }
-    }
-  }
-
-  /// Fires the edge events owed once the hold on [_heldBy] has gone,
-  /// against its settled position.
-  void _released() {
-    final scrollable = _heldBy;
-    _heldBy = null;
-    if (!mounted || scrollable == null || !scrollable.mounted) return;
-    final position = scrollable.position;
-    if (!position.hasContentDimensions || !position.hasPixels) return;
-    _edges(position, holding: ScrollEdgeHold.holds(scrollable) || widget.held);
-  }
-
   @override
   Widget build(BuildContext context) {
     return NotificationListener<ScrollNotification>(
@@ -130,18 +76,23 @@ class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
         if (notification.depth != 0) return false;
         final metrics = notification.metrics;
         final scrollAction = widget.on['scroll'];
-        if (notification is ScrollUpdateNotification &&
-            scrollAction != null &&
-            !widget.held) {
+        if (notification is ScrollUpdateNotification && scrollAction != null) {
           _emit('scroll', scrollAction, _metrics(metrics));
         }
 
-        final heldBy = ScrollEdgeHold.heldBy(notification);
-        if (heldBy != null) {
-          _heldBy = heldBy;
-          ScrollEdgeHold.whenReleased(heldBy, _released);
+        final nearEnd = metrics.extentAfter <= widget.endThreshold;
+        final endAction = widget.on['end_reached'];
+        if (nearEnd && !_inEndZone && endAction != null) {
+          _emit('end_reached', endAction, _metrics(metrics));
         }
-        _edges(metrics, holding: heldBy != null || widget.held);
+        _inEndZone = nearEnd;
+
+        final nearStart = metrics.extentBefore <= widget.startThreshold;
+        final startAction = widget.on['start_reached'];
+        if (nearStart && !_inStartZone && startAction != null) {
+          _emit('start_reached', startAction, _metrics(metrics));
+        }
+        _inStartZone = nearStart;
         return false;
       },
       child: widget.child,

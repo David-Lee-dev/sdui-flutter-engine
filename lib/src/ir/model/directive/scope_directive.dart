@@ -12,7 +12,6 @@ final class ScopeDirective extends Directive {
     this.actions = const {},
     this.lifecycle = const [],
     this.skeleton,
-    this.autoSkeleton = false,
   });
 
   final ScopeConfig config;
@@ -20,10 +19,6 @@ final class ScopeDirective extends Directive {
 
   /// Placeholder subtree displayed while mount actions are completing.
   final Directive? skeleton;
-
-  /// Whether `_skeleton: auto` draws the placeholder from [child] itself,
-  /// revealing each node when the mount-written state it reads arrives.
-  final bool autoSkeleton;
 
   /// Dispatches named [actions] at this scope's lifecycle boundaries.
   final List<LifecycleHook> lifecycle;

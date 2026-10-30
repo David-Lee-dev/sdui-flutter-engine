@@ -82,14 +82,6 @@ final class ActionHost implements ActionSink {
     return () => _disposalCallbacks.remove(cleanup);
   }
 
-  /// Finds the host that defines [name] along the parent chain — the scope
-  /// whose state the action's `set` commands write.
-  ({ScopeEnvironment owner, Action action})? resolve(String name) {
-    final action = actions[name];
-    if (action != null) return (owner: env, action: action);
-    return parent?.resolve(name);
-  }
-
   @override
   /// Starts [name] without waiting for its foreground flow to complete.
   ///

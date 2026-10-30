@@ -9,17 +9,9 @@ import 'scope_store.dart';
 ///
 /// Local subscriptions survive reparenting, while combined subscriptions are
 /// invalidated so they cannot retain the previous outer scope.
-class ScopeEnvironment extends Environment implements StateWriter {
-  /// A [placeholder] layer is a stand-in frame (a skeleton loop row) whose
-  /// every key starts pending.
-  ScopeEnvironment(
-    Map<String, Object?> initial, {
-    CommitScheduler? scheduler,
-    bool placeholder = false,
-  }) : _store = ScopeStore(initial, scheduler: scheduler, pendAll: placeholder);
-
-  /// [ScopeStore.pendingKeys]: how many keys pend across every live layer.
-  static int get pendingKeys => ScopeStore.pendingKeys;
+class ScopeEnvironment implements Environment, StateWriter {
+  ScopeEnvironment(Map<String, Object?> initial, {CommitScheduler? scheduler})
+    : _store = ScopeStore(initial, scheduler: scheduler);
 
   final ScopeStore _store;
 
@@ -72,26 +64,13 @@ class ScopeEnvironment extends Environment implements StateWriter {
         : Listenable.merge([localSub, restListenable]);
   }
 
-  @override
-  PendState pendingOf(String name) => _store.pendOf(name);
-
-  /// A write releases its keys from an automatic skeleton (see [pend]).
-  void set(String key, Object? value) =>
-      _store.commit({key: value}, release: true);
+  void set(String key, Object? value) => _store.commit({key: value});
 
   @override
-  void commit(Map<String, Object?> changes) =>
-      _store.commit(changes, release: true);
+  void commit(Map<String, Object?> changes) => _store.commit(changes);
 
-  /// Reseeds from the template; it is not the awaited write, so pending keys
-  /// stay pending.
   void syncState(Map<String, Object?> next) =>
       _store.commit(next, immediate: true);
-
-  /// Marks [keys] as awaited until their first write or [settle].
-  void pend(Set<String> keys) => _store.pend(keys);
-
-  void settle(Set<String> keys) => _store.settle(keys);
 
   void dispose() => _store.dispose();
 }

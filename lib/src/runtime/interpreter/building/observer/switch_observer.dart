@@ -21,22 +21,7 @@ class SwitchObserver extends StatelessWidget {
     return directive.fallback;
   }
 
-  /// While the selector waits on an automatic skeleton, the first case that
-  /// will draw the awaited data, else the fallback.
-  Directive? _pendingMatch(Environment env) {
-    for (final branch in directive.cases) {
-      if (NodeBuilder.readsPending(branch.branch, env)) return branch.branch;
-    }
-    return directive.fallback;
-  }
-
-  Widget _resolve(BuildContext context, Environment env) {
-    if (NodeBuilder.isPending(context, env, () => directive.roots)) {
-      final branch = _pendingMatch(env);
-      return branch == null
-          ? const SizedBox.shrink()
-          : NodeBuilder.build(branch);
-    }
+  Widget _resolve(Environment env) {
     final branch = _match(
       ExpressionEvaluator.evaluate(directive.selector, env),
     );
@@ -48,8 +33,7 @@ class SwitchObserver extends StatelessWidget {
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget resolve() =>
-        NodeGuard.run(directive.path, () => _resolve(context, env));
+    Widget resolve() => NodeGuard.run(directive.path, () => _resolve(env));
     if (listenable == null) return resolve();
     return ListenableBuilder(
       listenable: listenable,

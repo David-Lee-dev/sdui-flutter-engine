@@ -1,3 +1,4 @@
+
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/widgets.dart' hide Action;
 
@@ -12,8 +13,6 @@ import '../../engine_errors.dart';
 import '../../engine_host.dart';
 import '../../telemetry/telemetry.dart';
 import 'action_host.dart';
-import 'auto_skeleton.dart';
-import 'auto_skeleton_gate.dart';
 import 'lifecycle_runner.dart';
 import 'skeleton_scope.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
@@ -33,8 +32,7 @@ class _ScopeLayer extends InheritedWidget {
 class _ActionLayer extends InheritedWidget {
   const _ActionLayer({required this.host, required super.child});
 
-  /// The host below this layer; null hides every host above it.
-  final ActionHost? host;
+  final ActionHost host;
 
   static ActionHost? of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_ActionLayer>()?.host;
@@ -52,19 +50,13 @@ class Scope extends StatefulWidget {
     this.actions = const {},
     this.lifecycle = const [],
     this.skeleton,
-    this.autoSkeleton = false,
-  }) : placeholder = false;
+  });
 
-  Scope.ofState(
-    Map<String, Object?> state, {
-    super.key,
-    required this.child,
-    this.placeholder = false,
-  }) : config = ScopeConfig(state: state),
-       actions = const {},
-       lifecycle = const [],
-       skeleton = null,
-       autoSkeleton = false;
+  Scope.ofState(Map<String, Object?> state, {super.key, required this.child})
+    : config = ScopeConfig(state: state),
+      actions = const {},
+      lifecycle = const [],
+      skeleton = null;
 
   final ScopeConfig config;
 
@@ -74,14 +66,6 @@ class Scope extends StatefulWidget {
 
   /// Placeholder displayed while this scope's mount actions are completing.
   final Widget? skeleton;
-
-  /// Whether [child] draws its own skeleton: each node reading a key the
-  /// mount hooks write shows a bone until that key is first written.
-  final bool autoSkeleton;
-
-  /// Whether this is a stand-in loop row drawn while the loop's source is
-  /// pending: every key reads as pending and nested scopes never start.
-  final bool placeholder;
 
   final Widget child;
 
@@ -96,13 +80,6 @@ class Scope extends StatefulWidget {
   static ActionHost? actionHost(BuildContext context) =>
       _ActionLayer.of(context);
 
-  /// Makes [host] the action host visible to [child] without creating
-  /// another action owner; a null [host] leaves [child] without one.
-  static Widget provideActions({
-    required ActionHost? host,
-    required Widget child,
-  }) => _ActionLayer(host: host, child: child);
-
   @override
   ScopeState createState() => ScopeState();
 }
@@ -112,55 +89,32 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   late final ScopeEnvironment _env;
   late final ActionHost _host;
   late final ValueNotifier<bool> _loading;
-  late final AutoSkeletonGate _gate;
   late final LifecycleRunner _lifecycle;
 
   late Map<String, Object?> _acceptedSeed;
 
   bool _observerRegistered = false;
 
-  bool _hooksPrepared = false;
-
-  bool _visible = true;
-
-  bool get _skeletal => widget.skeleton != null || widget.autoSkeleton;
-
   @override
   void initState() {
     super.initState();
     final seed = widget.config.state;
     _acceptedSeed = JsonValue.normalizeObject(seed);
-    _env = ScopeEnvironment(
-      seed,
-      scheduler: FlutterCommitScheduler(),
-      placeholder: widget.placeholder,
-    );
+    _env = ScopeEnvironment(seed, scheduler: FlutterCommitScheduler());
     _host = ActionHost(actions: widget.actions, env: _env);
     _loading = ValueNotifier(
-      _skeletal &&
+      widget.skeleton != null &&
           widget.lifecycle.any(
             (hook) => hook.trigger == LifecycleTrigger.mount,
           ),
     );
-    _gate = AutoSkeletonGate(
-      placeholder: widget.placeholder,
-      auto: () => widget.autoSkeleton,
-      loading: _loading,
+    _lifecycle = LifecycleRunner(
       host: _host,
-      ancestors: () => _ancestors().map((scope) => scope._gate),
-      onReady: () {
-        if (mounted) _startLifecycle();
-      },
-    );
-    _lifecycle =
-        LifecycleRunner(
-            host: _host,
-            isMounted: () => mounted,
-            onMountSettled: _gate.mountSettled,
-          )
-          ..hooks = widget.lifecycle
-          ..deferMountForSkeleton = _skeletal
-          ..onMountActionSettled = _gate.mountActionSettled;
+      isMounted: () => mounted,
+      onMountSettled: () => _loading.value = false,
+    )
+      ..hooks = widget.lifecycle
+      ..deferMountForSkeleton = widget.skeleton != null;
     if (widget.lifecycle.isNotEmpty) {
       WidgetsBinding.instance.addObserver(this);
       _observerRegistered = true;
@@ -179,39 +133,8 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
       screenViewId: telemetry?.screenViewId,
     );
 
-    _gate.place();
-
     if (widget.lifecycle.isEmpty) return;
-    _visible = _isVisible();
-    if (!_hooksPrepared) {
-      // Before the lifecycle first starts; a scope inside a placeholder row
-      // never runs hooks.
-      _hooksPrepared = true;
-      if (_gate.inert) _lifecycle.hooks = const [];
-      _gate.prepare(widget.lifecycle);
-    } else {
-      _gate.moved();
-    }
-    if (_gate.holds) return;
-    _startLifecycle();
-  }
-
-  /// The scopes above this one, nearest first, walked lazily.
-  Iterable<ScopeState> _ancestors() sync* {
-    for (
-      var scope = context.findAncestorStateOfType<ScopeState>();
-      scope != null;
-      scope = scope.context.findAncestorStateOfType<ScopeState>()
-    ) {
-      yield scope;
-    }
-  }
-
-  /// Forwards visibility to the lifecycle; the first call starts it, and an
-  /// automatic skeleton arms its watchdog then, not while it still waits.
-  void _startLifecycle() {
-    _gate.armWatchdog();
-    _lifecycle.visibilityChanged(_visible);
+    _lifecycle.visibilityChanged(_isVisible());
   }
 
   bool _isVisible() {
@@ -230,10 +153,10 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   void didUpdateWidget(Scope oldWidget) {
     super.didUpdateWidget(oldWidget);
     _host.actions = widget.actions;
-    if (!identical(widget.lifecycle, oldWidget.lifecycle) && !_gate.inert) {
+    if (!identical(widget.lifecycle, oldWidget.lifecycle)) {
       _lifecycle
         ..hooks = widget.lifecycle
-        ..deferMountForSkeleton = _skeletal;
+        ..deferMountForSkeleton = widget.skeleton != null;
       if (widget.lifecycle.isNotEmpty && !_observerRegistered) {
         WidgetsBinding.instance.addObserver(this);
         _observerRegistered = true;
@@ -241,7 +164,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
         WidgetsBinding.instance.removeObserver(this);
         _observerRegistered = false;
       }
-      if (!_gate.waiting) _lifecycle.reconcile();
+      _lifecycle.reconcile();
     }
     final newSeed = widget.config.state;
     if (JsonValue.structurallyEqual(_acceptedSeed, newSeed)) return;
@@ -269,7 +192,6 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   void dispose() {
     // Dispose hooks need a live host; invalidation follows their dispatch.
     _lifecycle.dispose();
-    _gate.dispose();
     if (_observerRegistered) {
       WidgetsBinding.instance.removeObserver(this);
     }
@@ -283,15 +205,13 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final child = widget.skeleton != null
-        ? SkeletonScope(
+    final child = widget.skeleton == null
+        ? widget.child
+        : SkeletonScope(
             loading: _loading,
             skeleton: widget.skeleton!,
             child: widget.child,
-          )
-        : widget.autoSkeleton
-        ? SkeletonClock(loading: _loading, child: widget.child)
-        : widget.child;
+          );
     return _ScopeLayer(
       env: _env,
       child: _ActionLayer(host: _host, child: child),
