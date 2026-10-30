@@ -42,6 +42,9 @@ final class LifecycleRunner {
   /// Whether mount flows await behind a skeleton (deferred awaitable path).
   bool deferMountForSkeleton = false;
 
+  /// Called as each awaited mount hook settles, with its action name.
+  void Function(String action)? onMountActionSettled;
+
   final List<Timer> _timers = [];
   bool _started = false;
   bool _wasObscured = false;
@@ -66,8 +69,10 @@ final class LifecycleRunner {
   }
 
   /// Forwarded from the owner's [WidgetsBindingObserver]: returning from
-  /// background fires `remount`.
+  /// background fires `remount`. Ignored until the hooks have started, so a
+  /// scope still waiting to mount never remounts first.
   void appLifecycleChanged(AppLifecycleState state) {
+    if (!_started) return;
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _inBackground = true;
@@ -137,13 +142,16 @@ final class LifecycleRunner {
                     .whenComplete(completer.complete);
               }),
             );
+            completer.future.then((_) => _mountActionSettled(hook));
           } else {
             mountFutures.add(
               _isMounted()
-                  ? _host.handleAwaitable(
-                      hook.action,
-                      invocation: _invocation(hook.trigger),
-                    )
+                  ? _host
+                        .handleAwaitable(
+                          hook.action,
+                          invocation: _invocation(hook.trigger),
+                        )
+                        .whenComplete(() => _mountActionSettled(hook))
                   : Future.value(),
             );
           }
@@ -163,6 +171,10 @@ final class LifecycleRunner {
         if (_isMounted()) _onMountSettled();
       });
     }
+  }
+
+  void _mountActionSettled(LifecycleHook hook) {
+    if (_isMounted()) onMountActionSettled?.call(hook.action);
   }
 
   void _fire(LifecycleHook hook) {

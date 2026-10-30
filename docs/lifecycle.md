@@ -32,10 +32,44 @@ Here `op` is application vocabulary understood by the configured `NetworkClient`
 
 ## Trigger semantics
 
-- `mount` fires during the first dependency initialization, before layout/paint. With `_scope._skeleton`, the skeleton remains until all foreground mount actions complete; without a skeleton, mount actions are dispatched without awaiting UI presentation.
+- `mount` fires during the first dependency initialization, before layout/paint. With a map `_scope._skeleton`, the skeleton remains until all foreground mount actions complete; with `_skeleton: auto`, each node reveals when the state it reads is first written (see [automatic skeleton](#automatic-skeleton)); without a skeleton, mount actions are dispatched without awaiting UI presentation.
 - `render` fires after the first frame.
 - `remount` fires when a previously obscured scope becomes visible again or when the app returns from paused/hidden state. Visibility combines the current route with `TickerMode`, covering outer navigators and inactive shell branches.
 - `interval` fires once after `delay` and then periodically every `every` while mounted. Its high-frequency engine logging is suppressed.
 - `dispose` dispatches immediately before action-host invalidation as fire-and-forget work.
 
 Timers are cancelled on disposal. Updating the lifecycle list cancels old schedules and starts the new set. Mount/render hooks therefore run again when lifecycle configuration is replaced on an existing scope; ordinary widget rebuilds do not restart them. A genuinely remounted/key-changed scope is a fresh scope and runs initial hooks again.
+
+## Automatic skeleton
+
+`_scope._skeleton` is omitted, `auto`, or a map. A map is a hand-drawn tree shown in place of the scope until every mount action settles. Any other value fails compilation (engines up to 0.13 reject `auto`, so gate migrated templates by app version).
+
+```yaml
+_type: column
+_scope:
+  _state: { partners: null }
+  _action:
+    load_partners:
+      _type: net
+      op: partners
+      _then: { _type: set, partners: '${data}' }
+  _lifecycle:
+    - { 'on': mount, action: load_partners }
+  _skeleton: auto
+_children:
+  - { _type: text, value: 'Partners' }            # static: drawn at once
+  - _type: text
+    value: '${item.name}'
+    _loop: { _in: '${partners}', _key: '${item.id}', _skeleton: 9 }
+```
+
+With `auto` the real tree is the skeleton:
+
+- **Awaited keys.** The keys written by `set` commands on the success path of the scope's `mount` hooks — the action's steps and their `_then` chains, nested `_then` included — wait, on the scope that defines each action. Keys written only in `_error`, `_dismiss` or `_always` flows do not wait, so an error banner (`_if: ${error != null}`) stays hidden while the content branch draws bones; such a write still releases an awaited key it happens to write — a mount hook naming an ancestor's action waits on the ancestor's state. Keys written by other drivers are not inferred; nodes reading them render as usual.
+- **Release.** A key stops waiting on its first write by an action, even with an equal value — so a mount flow whose first step `set`s an awaited key releases it at once. A template reseed does not release it. Several automatic skeletons whose mount hooks write the same key of a shared owner scope wait on that one key and reveal together on its first write. When a mount hook settles (success, failure, or skipped by `_when`) its remaining keys are released, and so are they when the scope is disposed first. If the mount hooks have not all settled 15 seconds after the scope's lifecycle starts (after any outer automatic skeleton it waits on), every remaining key is released and nested scopes start, with a debug warning. A released key never waits again, so `remount`, reload, and paging keep showing content.
+- **Pending nodes.** A node inside a `_skeleton: auto` scope (including its stand-in loop rows) is pending while one of its props reads a waiting key (event payloads and motion parameters do not count). A node outside every automatic skeleton ignores waiting keys and renders as usual, even when it reads the same key — for example a header above a section whose scope loads its parent's `partners`. Layout keeps the real geometry: text lays out placeholder words in its real style — literal fragments and line breaks are kept, and text whose lines come from data spans `max_lines` lines (or one) — icons keep their `size`, images and videos their `width`/`height` without loading (an unsized one logs a debug warning), and a prop that fails to evaluate on missing data is dropped alone. A pending content leaf paints rounded bones (one per text line, a circle for icons) instead of its content and is hidden from accessibility; `_on` events and `_motion` are attached only once it reveals. Layout nodes draw their own children.
+- **Input.** As with a hand-drawn skeleton, nothing waiting can be operated: a node inside a `_skeleton: auto` scope fires none of its own `_on` events while any of its bindings — props, `_on` event payloads or `_motion` parameters — reads a waiting key, even when it is drawn for real because its props do not wait. A content leaf also ignores pointers and focus; a layout node (one with children) only silences its own events, so static buttons inside it keep working — except a widget that acts on its own (`dismissible`, `page_view`, `refresh_indicator`, input widgets such as `text_field`, and other action widgets), which ignores pointers and focus with its children so it cannot dismiss, page, refresh or report input early. While its props wait (it is pending), an action widget (`swipe_layout`, `spin_grid`, an app-registered action widget) has no action host, and neither has a `swipe` or `spin_grid` loop wrap over stand-in rows: anything it starts itself — autoplay, a spin that settles, a timer — is not reported, because it runs over stand-in data. This includes a pending `spin_grid`'s `on_finish`, which is not replayed on release. While only its `_on` payloads or `_motion` parameters wait (its props are real), it runs for real and what it dispatches itself is delivered; only user input is blocked. A waiting `text_field` with `autofocus` takes focus when it is released, as it would have without the skeleton (unless something else in its focus scope has focus by then, or its route is behind another route such as an open dialog). A waiting sliver node ignores pointers as a sliver; its box descendants draw the bones, and a sliver spec always builds for real, whatever its `SkeletonForm`. Its `_motion` layers (whose parameters may still miss the data) are attached when it is released, and its event payloads evaluate leniently meanwhile, so it never loses an animation or fails to render for missing data. It accepts input from the first frame the key is released, without remounting.
+- **Branches.** A `cond` or `switch` whose predicate waits shows the first branch that reads a waiting key, else the fallback, else nothing.
+- **Loops.** A loop over a waiting source draws stand-in rows from its row template; see [loops](loops.md#automatic-skeleton-rows).
+- **Nested scopes.** A scope inside a still-loading automatic skeleton starts its lifecycle after the outer scope's mount hooks settle, keeping the parent-then-child order of a hand-drawn skeleton. Until it starts, returning from background does not fire its `remount`. A nested `_skeleton: auto` scope that pends a key of an ancestor scope marks it when it first builds, so a node of a still-loading automatic skeleton reading that key built earlier may show its content for one frame before turning into a bone; that node changes structure once and remounts its subtree, losing focus, image and other element state once. Once an automatic skeleton's mount hooks have settled, its content never turns back into bones: a scope mounted later that starts awaiting a shared key shows bones only for its own subtree. A waiting scope moved elsewhere in the tree (a `GlobalKey` reparent) waits on the loading automatic skeletons above its new place, and starts at once if there are none.
+- **Timing.** Bones stay unpainted for 300 ms after the scope mounts, so data arriving within it never shows a bone. Later, all bones of the scope share one shimmer sweep aligned to the scope's box, and a revealing node fades its bones out over 250 ms above its real content without remounting. With reduced motion, bones are static and reveal at once.

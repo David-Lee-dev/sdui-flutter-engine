@@ -26,6 +26,7 @@ class InteractionWrapper extends StatefulWidget {
     this.payloads = const {},
     this.feedback = true,
     this.onPressed,
+    this.held = false,
     required this.child,
   });
 
@@ -47,6 +48,10 @@ class InteractionWrapper extends StatefulWidget {
 
   /// Receives the `pressed_as` state, if the node declares one.
   final ValueChanged<bool>? onPressed;
+
+  /// Whether the node waits on an automatic skeleton: its gestures are taken
+  /// but fire nothing, leaving the tree (and its descendants' input) as is.
+  final bool held;
 
   final Widget child;
 
@@ -82,6 +87,7 @@ class _InteractionWrapperState extends State<InteractionWrapper> {
     final action = widget.on[event];
     if (action == null) return null;
     return () {
+      if (widget.held) return;
       final scope = TelemetryScope.maybeOf(context);
       final key = '${scope?.screenViewId}|${widget.node.path}|$event';
       final window = _attempts.putIfAbsent(
@@ -164,7 +170,7 @@ class _InteractionWrapperState extends State<InteractionWrapper> {
   };
 
   void _down(PointerDownEvent event) {
-    if (_pointer != null) return;
+    if (_pointer != null || widget.held) return;
     _pointer = event.pointer;
     _origin = event.position;
     widget.onPressed?.call(true);

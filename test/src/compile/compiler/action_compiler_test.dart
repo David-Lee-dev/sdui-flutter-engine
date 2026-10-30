@@ -21,6 +21,17 @@ void main() {
         expect(cmd.params, {'loading': true});
       });
 
+      test('writes는 컴파일된 흐름의 set 키이며 수정할 수 없다', () {
+        final action = compile({
+          '_type': 'net',
+          '_then': {'_type': 'set', 'a': 1},
+          '_dedupe': false,
+        });
+
+        expect(action.writes, {'a'});
+        expect(() => action.writes.add('b'), throwsUnsupportedError);
+      });
+
       test('list 값은 flow — 바깥=순차 배치·안=병렬(중첩 list)', () {
         final action = compile([
           [

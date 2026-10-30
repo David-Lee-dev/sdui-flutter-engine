@@ -36,12 +36,34 @@ class ActionCompiler {
         for (final entry in def.entries)
           if ('${entry.key}' != '_dedupe') '${entry.key}': entry.value,
       };
+      final steps = _flow(command, path);
       return Action(
-        steps: _flow(command, path),
+        steps: steps,
         dedupe: _dedupe(def['_dedupe'], path),
+        writes: _writesOf(steps),
       );
     }
-    return Action(steps: _flow(def, path), dedupe: true);
+    final steps = _flow(def, path);
+    return Action(steps: steps, dedupe: true, writes: _writesOf(steps));
+  }
+
+  /// The keys every `set` command on the success path of [steps] commits —
+  /// the steps and their `_then` chains, not `_error`, `_dismiss` or
+  /// `_always`. Other drivers' writes cannot be read from their parameters.
+  static Set<String> _writesOf(Flow steps) {
+    final keys = <String>{};
+    void flow(Flow? steps) {
+      if (steps == null) return;
+      for (final batch in steps) {
+        for (final command in batch) {
+          if (command.type == 'set') keys.addAll(command.params.keys);
+          flow(command.then);
+        }
+      }
+    }
+
+    flow(steps);
+    return Set.unmodifiable(keys);
   }
 
   static bool _dedupe(Object? raw, String path) {

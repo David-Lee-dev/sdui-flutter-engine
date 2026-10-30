@@ -26,10 +26,24 @@ class PlainObserver extends StatelessWidget {
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget assemble() => NodeGuard.run(
-      directive.path,
-      () => NodeBuilder.assemble(context, directive, env, isolate: isolate),
-    );
+    Widget assemble() => NodeGuard.run(directive.path, () {
+      // Props are a subset of all roots, so only a held node can be pending.
+      final held = NodeBuilder.isPending(context, env, () => directive.roots);
+      return NodeBuilder.assemble(
+        context,
+        directive,
+        env,
+        isolate: isolate,
+        held: held,
+        pending:
+            held &&
+            NodeBuilder.isPending(
+              context,
+              env,
+              () => NodeBuilder.visualRoots(directive),
+            ),
+      );
+    });
     if (listenable == null) return assemble();
     return ListenableBuilder(
       listenable: listenable,
