@@ -1,5 +1,7 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/engine_runner.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
 import 'package:sdui_engine/src/runtime/motion/motion_factory.dart';
@@ -515,6 +517,128 @@ void main() {
       await tester.pump();
 
       expect(speeds, [1, 2]); // 상태 변경이 모션 인자 재해석을 유발
+    });
+  });
+
+  group('Scope RepaintBoundary', () {
+    Widget mount(Map<String, Object?> template) => MaterialApp(
+      home: Scaffold(body: EngineRunner(template: template)),
+    );
+
+    Finder boundaryAbove(String text) => find.ancestor(
+      of: find.text(text),
+      matching: find.descendant(
+        of: find.byType(Scope),
+        matching: find.byType(RepaintBoundary),
+      ),
+    );
+
+    testWidgets('scope 밖의 상태 변경은 그 section을 다시 그리지 않는다', (tester) async {
+      await tester.pumpWidget(
+        mount({
+          '_type': 'column',
+          '_scope': {
+            '_state': {'tick': 0},
+            '_action': {
+              'inc': {'_type': 'set', 'tick': r'${tick + 1}'},
+            },
+            '_lifecycle': [
+              {'on': 'interval', 'action': 'inc', 'every': 100},
+            ],
+          },
+          '_children': [
+            {'_type': 'text', 'value': r'tick ${tick}'},
+            {
+              '_type': 'text',
+              'value': 'static',
+              '_scope': {
+                '_state': {'local': 0},
+              },
+            },
+          ],
+        }),
+      );
+      await tester.pump();
+      var paints = 0;
+      debugProfilePaintsEnabled = true;
+      debugOnProfilePaint = (object) {
+        if (object is RenderParagraph &&
+            object.text.toPlainText() == 'static') {
+          paints++;
+        }
+      };
+      addTearDown(() {
+        debugProfilePaintsEnabled = false;
+        debugOnProfilePaint = null;
+      });
+
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      debugProfilePaintsEnabled = false;
+      debugOnProfilePaint = null;
+
+      expect(find.text('tick 0'), findsNothing);
+      expect(paints, 0);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('expanded 노드의 scope는 parent data를 지킨다', (tester) async {
+      await tester.pumpWidget(
+        mount({
+          '_type': 'row',
+          '_children': [
+            {
+              '_type': 'expanded',
+              '_scope': {
+                '_state': {'n': 1},
+              },
+              '_child': {'_type': 'text', 'value': r'n ${n}'},
+            },
+          ],
+        }),
+      );
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.text('n 1')).width, greaterThan(0));
+      expect(
+        find.ancestor(
+          of: boundaryAbove('n 1'),
+          matching: find.byType(Expanded),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sliver 노드의 scope는 RepaintBoundary를 넣지 않는다', (tester) async {
+      await tester.pumpWidget(
+        mount({
+          '_type': 'custom_scroll_view',
+          '_children': [
+            {
+              '_type': 'sliver_to_box_adapter',
+              '_scope': {
+                '_state': {'n': 1},
+              },
+              '_child': {'_type': 'text', 'value': r'n ${n}'},
+            },
+          ],
+        }),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('n 1'), findsOneWidget);
+      expect(
+        find
+            .descendant(
+              of: find.byType(CustomScrollView),
+              matching: find.byType(RepaintBoundary),
+            )
+            .evaluate()
+            .where(
+              (e) =>
+                  e.findAncestorWidgetOfExactType<SliverToBoxAdapter>() == null,
+            ),
+        isEmpty,
+      );
     });
   });
 }

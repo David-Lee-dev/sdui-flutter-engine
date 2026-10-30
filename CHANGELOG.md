@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+Performance only; what is shown, padded and dispatched is unchanged.
+
+- Reduced-motion reads (engine page transition decision, `shared_element`,
+  spring `_morph`) now depend only on `MediaQuery` `disableAnimations`, so
+  keyboard inset, padding and rotation changes no longer rebuild the
+  navigator's page list or re-run their setup.
+- The background refresh after a cache hit now starts once the page's entrance
+  transition has completed (after the first frame when there is none), so its
+  decode never lands inside the transition. A page popped mid-transition
+  starts it when it leaves; every open still refreshes once.
+- `single_child_scroll_view` puts its content in a repaint boundary, and the
+  box node under each `_scope` gets one (never on slivers; inside
+  parent-data widgets). A state change or scroll repaints only the affected
+  section instead of the whole page.
+- Debug logging: per-frame `scroll` event actions run silently like interval
+  ticks (`start_reached`/`end_reached` still log), and the default minimum
+  level is `info`; pass `debugLogLevel: LogLevel.debug` for the previous
+  detail. Release builds were already silent.
+
 ## 0.14.0
 
 **Behavior change (Android only):** a `sys_haptic` tap now picks its native

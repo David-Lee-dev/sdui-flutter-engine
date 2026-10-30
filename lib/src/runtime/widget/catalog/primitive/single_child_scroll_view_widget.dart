@@ -57,7 +57,8 @@ final class SingleChildScrollViewWidget {
         physics: physics,
         keyboardDismissBehavior: keyboardDismissBehavior,
         clipBehavior: clipBehavior,
-        child: children.isEmpty ? null : children.first,
+        // Scrolling then moves the content's layer instead of repainting it.
+        child: children.isEmpty ? null : RepaintBoundary(child: children.first),
       ),
     );
   }

@@ -44,26 +44,28 @@ final class NodeBuilder {
       LoopDirective loop => LoopObserver(directive: loop),
       MorphDirective morph when morph.spring != null => SpringMorphScope(
         directive: morph,
-        child: _continuous(morph.child),
+        child: _isolated(morph.child),
       ),
       MorphDirective morph => MorphScope(
         directive: morph,
-        child: morph.repeat ? _continuous(morph.child) : build(morph.child),
+        child: morph.repeat ? _isolated(morph.child) : build(morph.child),
       ),
       SwitchDirective sw => SwitchObserver(directive: sw),
+      // A scope's state changes repaint only its own section, not the
+      // sections around it.
       ScopeDirective scope => Scope(
         config: scope.config,
         actions: scope.actions,
         lifecycle: scope.lifecycle,
         skeleton: scope.skeleton == null ? null : build(scope.skeleton!),
-        child: build(scope.child),
+        child: _isolated(scope.child),
       ),
     };
   }
 
   /// Builds [directive] as the direct widget of a continuously animating
-  /// morph: a plain node gets its own repaint boundary.
-  static Widget _continuous(Directive directive) => directive is PlainDirective
+  /// morph or of a scope: a plain box node gets its own repaint boundary.
+  static Widget _isolated(Directive directive) => directive is PlainDirective
       ? _plain(directive, isolate: true)
       : build(directive);
 

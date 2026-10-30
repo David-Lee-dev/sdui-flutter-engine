@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/primitive/single_child_scroll_view_widget.dart';
@@ -369,6 +370,37 @@ void main() {
 
         expect(padding(tester), const EdgeInsets.fromLTRB(16, 16, 16, 50));
       });
+    });
+
+    testWidgets('스크롤은 바뀌지 않은 내용을 다시 그리지 않는다', (tester) async {
+      await _pump(
+        tester,
+        const {},
+        children: [
+          Column(children: [for (var i = 0; i < 80; i++) Text('row $i')]),
+        ],
+      );
+      var paints = 0;
+      debugProfilePaintsEnabled = true;
+      debugOnProfilePaint = (object) {
+        if (object is RenderParagraph) paints++;
+      };
+      addTearDown(() {
+        debugProfilePaintsEnabled = false;
+        debugOnProfilePaint = null;
+      });
+
+      final drag = await tester.startGesture(const Offset(100, 300));
+      for (var i = 0; i < 5; i++) {
+        await drag.moveBy(const Offset(0, -20));
+        await tester.pump();
+      }
+      await drag.up();
+      debugProfilePaintsEnabled = false;
+      debugOnProfilePaint = null;
+
+      expect(tester.getTopLeft(find.text('row 0')).dy, lessThan(0));
+      expect(paints, 0);
     });
   });
 }
