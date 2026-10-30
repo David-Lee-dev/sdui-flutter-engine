@@ -415,7 +415,7 @@ final class NodeBuilder {
   static void _autofocusOnRelease(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!context.mounted) return;
-      if (ModalRoute.of(context)?.isCurrent == false) return;
+      if (ModalRoute.isCurrentOf(context) == false) return;
       void visit(Element element) {
         final widget = element.widget;
         if (widget is EditableText && widget.autofocus) {
