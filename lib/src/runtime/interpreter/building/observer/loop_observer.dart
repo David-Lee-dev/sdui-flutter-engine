@@ -85,7 +85,7 @@ class LoopObserver extends StatelessWidget {
     }
     final resolved = LoopResolver.resolve(directive, env);
     final p = ExpressionEvaluator.resolveMap(directive.wrapParams, env);
-    return _container(
+    final container = _container(
       context,
       env,
       p,
@@ -93,6 +93,14 @@ class LoopObserver extends StatelessWidget {
       (i) => _item(resolved[i]),
       resolved: resolved,
     );
+    // Real rows stay under the wrapper the stand-in rows filled the viewport
+    // with, so the reveal keeps the scroll view (and its offset).
+    final filled =
+        directive.skeletonCount == null &&
+        SkeletonClock.maybeOf(context) != null &&
+        _fill(context, p) != null;
+    if (!filled) return container;
+    return _FillViewport(fill: null, builder: (_, _) => container);
   }
 
   static final _roots = Expando<Set<String>>('LoopObserver.sourceRoots');
@@ -120,24 +128,8 @@ class LoopObserver extends StatelessWidget {
         _container(context, env, p, count, (i) => _placeholder(i, firstRow));
     final count = directive.skeletonCount;
     if (count != null) return build(count);
-    final cells = _gridWraps.contains(directive.wrap)
-        ? PropsResolver.integer(p['cross_axis_count']) ?? 2
-        : 1;
-    final sliver = directive.wrap.startsWith('sliver');
-    final shrinks = PropsResolver.flag(p['shrink_wrap']) ?? false;
-    if (_lazyWraps.contains(directive.wrap) && (sliver || !shrinks)) {
-      // A lazy wrap builds only the rows its viewport reaches, so it starts
-      // at the cap and settles on the estimate.
-      return _FillViewport(
-        builder: build,
-        perLine: cells < 1 ? 1 : cells,
-        initial: _maxLazyRows,
-        max: _maxLazyRows,
-      );
-    }
-    if (_fillsEnclosing(context, p, shrinks: shrinks)) {
-      return _FillViewport(builder: build);
-    }
+    final fill = _fill(context, p);
+    if (fill != null) return _FillViewport(fill: fill, builder: build);
     if (_warned[directive] == null) {
       _warned[directive] = true;
       EngineLog.warn(
@@ -147,7 +139,32 @@ class LoopObserver extends StatelessWidget {
         tag: 'widget',
       );
     }
-    return build(cells < 1 ? 1 : cells);
+    return build(_cells(p));
+  }
+
+  /// Stand-in cells per line along the scroll axis: a grid's cross-axis
+  /// count, else one.
+  int _cells(Map<String, Object?> p) {
+    final cells = _gridWraps.contains(directive.wrap)
+        ? PropsResolver.integer(p['cross_axis_count']) ?? 2
+        : 1;
+    return cells < 1 ? 1 : cells;
+  }
+
+  /// How stand-in rows without a `_skeleton` count fill the scroll viewport
+  /// they lay out in, or `null` when they do not fill one.
+  _Fill? _fill(BuildContext context, Map<String, Object?> p) {
+    final sliver = directive.wrap.startsWith('sliver');
+    final shrinks = PropsResolver.flag(p['shrink_wrap']) ?? false;
+    if (_lazyWraps.contains(directive.wrap) && (sliver || !shrinks)) {
+      // A lazy wrap builds only the rows its viewport reaches, so it starts
+      // at the cap and settles on the estimate.
+      return (perLine: _cells(p), initial: _maxLazyRows, max: _maxLazyRows);
+    }
+    if (_fillsEnclosing(context, p, shrinks: shrinks)) {
+      return (perLine: 1, initial: 1, max: 100);
+    }
+    return null;
   }
 
   /// Whether the stand-in rows lay out along the axis of the scroll view
@@ -155,13 +172,14 @@ class LoopObserver extends StatelessWidget {
   /// in a vertical scroll view, a `row` in a horizontal one, a shrink-wrapped
   /// list or grid along its own scroll direction, and a `reorderable` or
   /// `dismissible` list in its own viewport. Other wraps (`wrap`,
-  /// serpentines, carousels) never fill it.
+  /// serpentines, carousels) never fill it, nor does any wrap fill a scroll
+  /// view outside its automatic skeleton.
   bool _fillsEnclosing(
     BuildContext context,
     Map<String, Object?> p, {
     required bool shrinks,
   }) {
-    final scrollable = Scrollable.maybeOf(context);
+    final scrollable = SkeletonClock.scrollableWithin(context);
     if (scrollable == null) return false;
     final axis = axisDirectionToAxis(scrollable.axisDirection);
     final listAxis = PropsResolver.axis(p['scroll_direction']) ?? Axis.vertical;
@@ -190,8 +208,7 @@ class LoopObserver extends StatelessWidget {
   );
 
   /// Lays out [count] rows in the `_wrap` container. Only real rows carry
-  /// [resolved], which reorder, dismiss and the index finder need; stand-in
-  /// rows lay out as a list.
+  /// [resolved], which reorder, dismiss and the index finder need.
   Widget _container(
     BuildContext context,
     Environment env,
@@ -282,25 +299,20 @@ class LoopObserver extends StatelessWidget {
             findChildIndexCallback: finder,
           ),
         );
-      case 'reorderable' || 'dismissible' when resolved == null:
-        return ListView.builder(
-          scrollDirection:
-              PropsResolver.axis(p['scroll_direction']) ?? Axis.vertical,
-          padding: PropsResolver.edge(context, p['padding']),
-          shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
-          itemCount: count,
-          itemBuilder: (context, i) => row(i),
-        );
+      // Stand-in rows keep the same list widget as the real ones, so the
+      // reveal keeps its scroll view, but they cannot be dragged or dismissed.
       case 'reorderable':
         return ReorderableListView.builder(
           scrollDirection:
               PropsResolver.axis(p['scroll_direction']) ?? Axis.vertical,
           padding: PropsResolver.edge(context, p['padding']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
+          buildDefaultDragHandles: resolved != null,
           itemCount: count,
           itemBuilder: (context, i) => row(i),
-          onReorder: (oldIndex, newIndex) =>
-              _reorder(context, env, oldIndex, newIndex),
+          onReorder: (oldIndex, newIndex) {
+            if (resolved != null) _reorder(context, env, oldIndex, newIndex);
+          },
         );
       case 'dismissible':
         return ListView.builder(
@@ -309,14 +321,17 @@ class LoopObserver extends StatelessWidget {
           padding: PropsResolver.edge(context, p['padding']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
           itemCount: count,
-          itemBuilder: (context, i) => Dismissible(
-            key: ValueKey('dismiss:${resolved![i].key}'),
-            direction:
-                PropsResolver.dismissDirection(p['direction']) ??
-                DismissDirection.horizontal,
-            onDismissed: (_) => _dismissKey(context, env, resolved[i].key),
-            child: row(i),
-          ),
+          itemBuilder: (context, i) => resolved == null
+              ? row(i)
+              : Dismissible(
+                  key: ValueKey('dismiss:${resolved[i].key}'),
+                  direction:
+                      PropsResolver.dismissDirection(p['direction']) ??
+                      DismissDirection.horizontal,
+                  onDismissed: (_) =>
+                      _dismissKey(context, env, resolved[i].key),
+                  child: row(i),
+                ),
         );
       default:
         return _eager(context, 'column', p, rows());
@@ -411,27 +426,24 @@ class LoopObserver extends StatelessWidget {
   }
 }
 
+/// How stand-in rows fill a viewport: [initial] rows are laid out first,
+/// then [perLine] rows per line along the scroll axis (a grid's cells), at
+/// most [max].
+typedef _Fill = ({int perLine, int initial, int max});
+
 /// Grows stand-in rows until they cover the scroll viewport they lay out in.
 ///
-/// Row extent is only known after layout, so [initial] rows are laid out
-/// first, the first one measured, and the count set once from the viewport's
-/// extent: [perLine] rows per line along the scroll axis (a grid's cells), at
-/// most [max].
+/// Row extent is only known after layout, so [_Fill.initial] rows are laid
+/// out first, the first one measured, and the count set once from the
+/// viewport's extent. Real rows ([fill] `null`) stay under the same wrapper,
+/// so the reveal keeps the container's element (and scroll view).
 class _FillViewport extends StatefulWidget {
-  const _FillViewport({
-    required this.builder,
-    this.perLine = 1,
-    this.initial = 1,
-    this.max = 100,
-  });
+  const _FillViewport({required this.fill, required this.builder});
 
+  final _Fill? fill;
+
+  /// Builds the rows; real rows ignore the count and first-row key.
   final Widget Function(int count, Key firstRow) builder;
-
-  final int perLine;
-
-  final int initial;
-
-  final int max;
 
   @override
   State<_FillViewport> createState() => _FillViewportState();
@@ -439,17 +451,18 @@ class _FillViewport extends StatefulWidget {
 
 class _FillViewportState extends State<_FillViewport> {
   final GlobalKey _firstRow = GlobalKey();
-  late int _count = widget.initial;
+  late int _count = widget.fill?.initial ?? 0;
   bool _measured = false;
 
   void _measure() {
-    if (!mounted || _measured) return;
+    final fill = widget.fill;
+    if (!mounted || _measured || fill == null) return;
     _measured = true;
     final rowContext = _firstRow.currentContext;
     final row = rowContext?.findRenderObject();
     final position = rowContext == null
         ? null
-        : Scrollable.maybeOf(rowContext)?.position;
+        : SkeletonClock.scrollableWithin(rowContext)?.position;
     if (row is! RenderBox || !row.hasSize || position == null) return;
     if (!position.hasViewportDimension) return;
     final extent = position.axis == Axis.vertical
@@ -457,13 +470,13 @@ class _FillViewportState extends State<_FillViewport> {
         : row.size.width;
     if (extent <= 0) return;
     final lines = (position.viewportDimension / extent).ceil();
-    final count = (lines * widget.perLine).clamp(1, widget.max);
+    final count = (lines * fill.perLine).clamp(1, fill.max);
     if (count != _count) setState(() => _count = count);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_measured) {
+    if (!_measured && widget.fill != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
     }
     return widget.builder(_count, _firstRow);

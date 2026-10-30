@@ -393,7 +393,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
             child: widget.child,
           )
         : widget.autoSkeleton
-        ? SkeletonClock(child: widget.child)
+        ? SkeletonClock(loading: _loading, child: widget.child)
         : widget.child;
     return _ScopeLayer(
       env: _env,

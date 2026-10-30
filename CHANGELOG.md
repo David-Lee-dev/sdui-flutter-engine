@@ -29,6 +29,15 @@
   overflowed); a nested scope moved away from a loading automatic skeleton by
   a `GlobalKey` stops waiting on it; and a placeholder-row scope never runs
   hooks a template update adds.
+- Automatic skeleton stability: a node whose event payloads or motion
+  parameters wait keeps its `_motion` (attached on release) and renders
+  instead of failing on the missing data; stand-in rows fill and hold only a
+  scroll view inside their own automatic skeleton, so a feed of cards that
+  each load rows keeps its layout and paging; a lazy, reorderable or
+  dismissible loop without `_skeleton` keeps its scroll view and offset on
+  reveal and fires a held edge event; and content an automatic skeleton has
+  revealed no longer turns back into bones when a later scope starts
+  awaiting a shared key.
 - `_loop._skeleton` is now validated: a value that is not a positive integer
   fails to compile.
 - A scope's `remount` on return from background no longer fires before its

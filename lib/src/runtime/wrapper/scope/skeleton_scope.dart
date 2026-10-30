@@ -190,12 +190,19 @@ class _SlideTransform extends GradientTransform {
 /// arrives quickly never flashes a placeholder. Afterwards all bones share
 /// one shimmer phase, swept across this widget's box so separate nodes read
 /// as one band. The shimmer runs only while some bone is visible.
+///
+/// Once [loading] (the scope's mount hooks) has gone from true to false, the
+/// clock is [SkeletonClockState.finished]: its content has been revealed and
+/// never turns back into bones, whatever a later scope starts awaiting.
 class SkeletonClock extends StatefulWidget {
   const SkeletonClock({
     super.key,
+    required this.loading,
     required this.child,
     this.grace = const Duration(milliseconds: 300),
   });
+
+  final ValueListenable<bool> loading;
 
   final Widget child;
 
@@ -204,6 +211,18 @@ class SkeletonClock extends StatefulWidget {
 
   static SkeletonClockState? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_ClockScope>()?.clock;
+
+  /// The nearest scroll view above [context] when it lies inside the same
+  /// automatic skeleton as [context], else `null`. Stand-in rows fill and
+  /// hold only such a scroll view, never one outside their skeleton.
+  static ScrollableState? scrollableWithin(BuildContext context) {
+    final scrollable = context.findAncestorStateOfType<ScrollableState>();
+    final clock = context.findAncestorStateOfType<SkeletonClockState>();
+    if (scrollable == null || clock == null) return null;
+    final enclosing = scrollable.context
+        .findAncestorStateOfType<SkeletonClockState>();
+    return identical(enclosing, clock) ? scrollable : null;
+  }
 
   @override
   State<SkeletonClock> createState() => SkeletonClockState();
@@ -220,6 +239,12 @@ class SkeletonClockState extends State<SkeletonClock>
 
   int _showing = 0;
 
+  bool _finished = false;
+
+  /// Whether the scope's mount hooks have settled after loading: nodes under
+  /// this clock no longer show as pending.
+  bool get finished => _finished;
+
   @override
   void initState() {
     super.initState();
@@ -228,6 +253,13 @@ class SkeletonClockState extends State<SkeletonClock>
       duration: const Duration(milliseconds: 1500),
     );
     _graceTimer = Timer(widget.grace, () => graced.value = true);
+    if (widget.loading.value) widget.loading.addListener(_loadingChanged);
+  }
+
+  void _loadingChanged() {
+    if (widget.loading.value) return;
+    _finished = true;
+    widget.loading.removeListener(_loadingChanged);
   }
 
   /// The box the shimmer sweep is aligned to.
@@ -247,6 +279,7 @@ class SkeletonClockState extends State<SkeletonClock>
 
   @override
   void dispose() {
+    widget.loading.removeListener(_loadingChanged);
     _graceTimer.cancel();
     graced.dispose();
     shimmer.dispose();
@@ -270,8 +303,9 @@ class _ClockScope extends InheritedWidget {
 /// One stand-in loop row of an automatic skeleton.
 ///
 /// It ignores pointers and is hidden from accessibility. While any stand-in
-/// row is mounted in a scroll view, that scroll view's edge events are held
-/// (see [heldBy]), so paging never runs over placeholders.
+/// row is mounted in a scroll view inside its own automatic skeleton, that
+/// scroll view's edge events are held (see [heldBy]), so paging never runs
+/// over placeholders; a scroll view outside the skeleton is left alone.
 class SkeletonRow extends StatefulWidget {
   const SkeletonRow({super.key, required this.child});
 
@@ -313,8 +347,7 @@ class _SkeletonRowState extends State<SkeletonRow> {
   void initState() {
     super.initState();
     SkeletonRow._live++;
-    final scrollable = _scrollable = context
-        .findAncestorStateOfType<ScrollableState>();
+    final scrollable = _scrollable = SkeletonClock.scrollableWithin(context);
     if (scrollable != null) {
       SkeletonRow._rows[scrollable] = (SkeletonRow._rows[scrollable] ?? 0) + 1;
     }

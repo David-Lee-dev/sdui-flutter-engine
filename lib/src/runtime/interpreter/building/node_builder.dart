@@ -39,9 +39,13 @@ final class NodeBuilder {
   /// parameters failed to evaluate; a layer stays off for the node's lifetime.
   static final _offMotions = Expando<Set<int>>('NodeBuilder.offMotions');
 
-  /// Node elements that have been pending: they keep their skeleton wrapper
-  /// (and core key) for life, so revealing never remounts their subtree.
-  static final _wasPending = Expando<GlobalKey>('NodeBuilder.wasPending');
+  /// Leaf node elements that have been pending: they keep their skeleton
+  /// wrapper for life, so revealing never remounts their subtree.
+  static final _wasPending = Expando<bool>('NodeBuilder.wasPending');
+
+  /// Node elements that have gone without their motion layers (pending, or
+  /// held with motions): they keep their core under one key for life.
+  static final _coreKeys = Expando<GlobalKey>('NodeBuilder.coreKeys');
 
   /// Leaf node elements that have been held: they keep their pointer guard
   /// for life, so releasing it never remounts their subtree.
@@ -61,9 +65,10 @@ final class NodeBuilder {
       _visualRoots[directive] ??= CompiledValue.rootsOf(directive.props);
 
   /// Whether a node at [context] reading [roots] shows as pending: only
-  /// inside an automatic skeleton, so nodes elsewhere reading the same
-  /// awaited key render as usual. While no key pends anywhere it returns
-  /// without computing [roots] or walking the environment chain.
+  /// inside an automatic skeleton that has not finished, so nodes elsewhere
+  /// (or already revealed) reading the same awaited key render as usual.
+  /// While no key pends anywhere it returns without computing [roots] or
+  /// walking the environment chain.
   static bool isPending(
     BuildContext context,
     Environment env,
@@ -71,7 +76,7 @@ final class NodeBuilder {
   ) =>
       Environment.pendingKeys > 0 &&
       env.pendState(roots()) == PendState.pending &&
-      SkeletonClock.maybeOf(context) != null;
+      SkeletonClock.maybeOf(context)?.finished == false;
 
   static final _treeRoots = Expando<Set<String>>('NodeBuilder.treeRoots');
 
@@ -261,20 +266,25 @@ final class NodeBuilder {
         directive.motions.isNotEmpty || interactive || scrolls || isolate;
     if (pending) {
       _anyWasPending = true;
-      _wasPending[context] ??= GlobalKey();
+      _wasPending[context] = true;
     }
     if (held) {
       _anyWasPending = true;
       _wasHeld[context] = true;
     }
-    final coreKey = _anyWasPending ? _wasPending[context] : null;
-    final masked = coreKey != null && _isLeaf(directive);
+    if (pending || (held && directive.motions.isNotEmpty)) {
+      _coreKeys[context] ??= GlobalKey();
+    }
+    final coreKey = _anyWasPending ? _coreKeys[context] : null;
+    final masked =
+        _anyWasPending && _wasPending[context] != null && _isLeaf(directive);
     final guarded =
         _anyWasPending && _wasHeld[context] != null && _isLeaf(directive);
     if (decorated || masked || guarded) {
       widget = _inside(widget, (child) {
-        // A once-pending node keeps its core under one key so gaining the
-        // decorations on reveal reparents it instead of remounting it.
+        // A node that went without decorations (or motions) keeps its core
+        // under one key so gaining them on reveal reparents it instead of
+        // remounting it.
         if (coreKey != null && decorated) {
           child = KeyedSubtree(key: coreKey, child: child);
         }
@@ -408,7 +418,8 @@ final class NodeBuilder {
 
   /// Wraps a node's [widget] in its motion, interaction, scroll-event and
   /// repaint-boundary layers. Only a [box] node gets repaint boundaries; a
-  /// [held] node's event layers fire nothing.
+  /// [held] node's event layers fire nothing and its motions wait, since
+  /// their parameters may still miss the awaited data.
   static Widget _decorate(
     BuildContext context,
     PlainDirective directive,
@@ -423,7 +434,7 @@ final class NodeBuilder {
   }) {
     final off = _offMotions[context];
     for (final (index, motion) in directive.motions.indexed) {
-      if (off != null && off.contains(index)) continue;
+      if (held || (off != null && off.contains(index))) continue;
       final List<(Motion, MotionParams)> atoms;
       try {
         final resolved = ExpressionEvaluator.resolveMap(motion.params, env);
@@ -461,8 +472,11 @@ final class NodeBuilder {
         node: node,
         timing: directive.timing,
         // Resolved here, in the node's own frame — a loop item's `${item.x}`
-        // means nothing in the scope that declares the action.
-        payloads: ExpressionEvaluator.resolveMap(directive.onEvent, env),
+        // means nothing in the scope that declares the action. A held node
+        // fires nothing, so its payloads may still miss the awaited data.
+        payloads: held
+            ? _resolveLeniently(directive.onEvent, env)
+            : ExpressionEvaluator.resolveMap(directive.onEvent, env),
         feedback: directive.tapFeedback,
         onPressed: directive.pressedAs == null ? null : PressScope.of(context),
         held: held,

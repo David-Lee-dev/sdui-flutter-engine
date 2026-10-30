@@ -871,15 +871,20 @@ void main() {
       expect(rowsIn(ListView), findsNWidgets(2));
     });
 
-    testWidgets('스크롤 안의 eager 루프도 viewport 높이만큼 행을 그린다', (tester) async {
-      await _pump(tester, {
-        '_type': 'sizedbox',
-        'height': 420,
-        '_child': {
-          '_type': 'single_child_scroll_view',
-          '_child': _screen(state: {'items': null}, children: [rows('column')]),
+    /// A 420-high scroll view inside the automatic skeleton, over [loop].
+    Map<String, Object?> scrolled(Map<String, Object?> loop) => _screen(
+      state: {'items': null},
+      children: [
+        {
+          '_type': 'sizedbox',
+          'height': 420,
+          '_child': {'_type': 'single_child_scroll_view', '_child': loop},
         },
-      });
+      ],
+    );
+
+    testWidgets('스크롤 안의 eager 루프도 viewport 높이만큼 행을 그린다', (tester) async {
+      await _pump(tester, scrolled(rows('column')));
       await tester.pump();
       final viewport = tester
           .state<ScrollableState>(find.byType(Scrollable))
@@ -903,19 +908,7 @@ void main() {
         _gates.clear();
         lines.clear();
         await tester.pumpWidget(const SizedBox());
-        await _pump(tester, {
-          '_type': 'sizedbox',
-          'height': 420,
-          '_child': {
-            '_type': 'single_child_scroll_view',
-            '_child': _screen(
-              state: {'items': null},
-              children: [
-                {...rows(wrap), 'width': 120},
-              ],
-            ),
-          },
-        });
+        await _pump(tester, scrolled({...rows(wrap), 'width': 120}));
         await tester.pump();
         expect(tester.takeException(), isNull, reason: wrap);
         expect(find.byType(SkeletonMask), findsOneWidget, reason: wrap);
@@ -1832,5 +1825,259 @@ void main() {
       _open('items', const <Object?>[]);
       await tester.pumpAndSettle();
     });
+  });
+
+  group('auto skeleton — stability', () {
+    testWidgets('motion 인자·payload만 기다리는 노드는 motion을 잃지 않고 오류 없이 그려진다', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'ms': null, 'p': null},
+          extra: {
+            'go': {'_type': 'gate', 'tag': 'go'},
+          },
+          children: [
+            {
+              '_type': 'text',
+              'value': 'moving',
+              '_motion': {'type': 'fade_in', 'duration': r'${ms * 1}'},
+            },
+            {
+              '_type': 'text',
+              'value': 'tapper',
+              '_on': {
+                'tap': {'do': 'go', 'event': r'${p * 2}'},
+              },
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      expect(tester.takeException(), isNull);
+      expect(find.text('moving'), findsOneWidget);
+      expect(find.text('tapper'), findsOneWidget);
+      await tester.tap(find.text('tapper'), warnIfMissed: false);
+      await tester.pump();
+      expect(_calls, isNot(contains('go')));
+      Element core() => tester.element(
+        find.descendant(
+          of: find.text('moving'),
+          matching: find.byType(RichText),
+        ),
+      );
+      final moving = core();
+
+      _open('ms', 200);
+      _open('p', 3);
+      await tester.pumpAndSettle();
+      expect(identical(core(), moving), isTrue);
+      expect(
+        find.ancestor(
+          of: find.text('moving'),
+          matching: find.byType(MotionWrapper),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('tapper'));
+      await tester.pump();
+      expect(_calls.where((c) => c == 'go'), hasLength(1));
+      _open('go');
+      await tester.pumpAndSettle();
+    });
+
+    /// A card under its own automatic skeleton: a label over a column loop
+    /// of 50-high rows (a fixed [count], or none).
+    Map<String, Object?> card(int i, {int? count}) => _screen(
+      state: {'items': null},
+      children: [
+        {'_type': 'text', 'value': 'card$i'},
+        {
+          '_type': 'container',
+          'height': 50,
+          '_loop': {
+            '_in': r'${items}',
+            '_key': r'${item.id}',
+            '_skeleton': ?count,
+          },
+          '_children': [
+            {'_type': 'text', 'value': r'${item.name}'},
+          ],
+        },
+      ],
+    );
+
+    testWidgets('바깥 피드 안 카드의 auto 루프는 피드 viewport를 채우지 않는다', (tester) async {
+      await _pump(tester, {
+        '_type': 'sizedbox',
+        'height': 600,
+        '_child': {
+          '_type': 'single_child_scroll_view',
+          '_child': {
+            '_type': 'column',
+            '_children': [for (var i = 0; i < 5; i++) card(i)],
+          },
+        },
+      });
+      await tester.pump();
+      int visible() => [
+        for (var i = 0; i < 5; i++)
+          if (tester.getRect(find.text('card$i')).top < 600) i,
+      ].length;
+      final loading = visible();
+
+      _open('items', const [
+        {'id': '0', 'name': 'n0'},
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.text('n0'), findsNWidgets(5));
+      expect(loading, visible());
+    });
+
+    testWidgets('일반 피드의 end_reached는 카드 안 placeholder 행에 막히지 않는다', (
+      tester,
+    ) async {
+      await _pump(tester, {
+        '_type': 'sizedbox',
+        'height': 400,
+        '_scope': {
+          '_action': {
+            'more': {'_type': 'gate', 'tag': 'more'},
+          },
+        },
+        '_on': {'end_reached': 'more'},
+        '_child': {
+          '_type': 'single_child_scroll_view',
+          '_child': {
+            '_type': 'column',
+            '_children': [for (var i = 0; i < 6; i++) card(i, count: 2)],
+          },
+        },
+      });
+      expect(find.byType(SkeletonRow), findsNWidgets(12));
+      final feed = tester.state<ScrollableState>(find.byType(Scrollable));
+      feed.position.jumpTo(feed.position.maxScrollExtent);
+      await tester.pump();
+      expect(_calls, contains('more'));
+      _open('more');
+      _open('items', const <Object?>[]);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+      '_skeleton 없는 lazy list는 공개 때 스크롤 위치를 지키고 밀린 end_reached를 한 번 보낸다',
+      (tester) async {
+        await _pump(
+          tester,
+          _screen(
+            state: {'items': null},
+            extra: {
+              'more': {'_type': 'gate', 'tag': 'more'},
+            },
+            children: [
+              {
+                '_type': 'sizedbox',
+                'height': 420,
+                '_on': {'end_reached': 'more'},
+                '_children': [
+                  {
+                    '_type': 'container',
+                    'height': 50,
+                    '_loop': {
+                      '_in': r'${items}',
+                      '_key': r'${item.id}',
+                      '_wrap': 'list',
+                    },
+                    '_children': [
+                      {'_type': 'text', 'value': r'${item.name}'},
+                    ],
+                  },
+                ],
+              },
+            ],
+          ),
+        );
+        await tester.pump();
+        final scrollable = tester.state<ScrollableState>(
+          find.byType(Scrollable),
+        );
+        scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+        await tester.pump();
+        final offset = scrollable.position.pixels;
+        expect(offset, greaterThan(0));
+        expect(_calls, isNot(contains('more')));
+
+        _open('items', [
+          for (var i = 0; i < 9; i++) {'id': '$i', 'name': 'n$i'},
+        ]);
+        await tester.pumpAndSettle();
+        expect(
+          identical(tester.state(find.byType(Scrollable)), scrollable),
+          isTrue,
+        );
+        expect(scrollable.position.pixels, offset);
+        expect(_calls.where((c) => c == 'more'), hasLength(1));
+        _open('more');
+        await tester.pumpAndSettle();
+        expect(_calls.where((c) => c == 'more'), hasLength(1));
+      },
+    );
+
+    testWidgets(
+      '공개를 마친 auto scope의 노드는 나중에 생긴 auto scope의 pend로 bone이 되지 않는다',
+      (tester) async {
+        await _pump(tester, {
+          '_type': 'column',
+          '_scope': {
+            '_state': {'b': 'seed', 'show': false},
+            '_action': {'load_b': _load('b', 'b')},
+          },
+          '_children': [
+            _screen(
+              state: {'a': null},
+              children: [
+                {'_type': 'text', 'value': r'A=${a}'},
+                {'_type': 'text', 'value': r'B=${b}'},
+              ],
+            ),
+            {
+              '_type': 'text',
+              '_if': r'${show}',
+              'value': r'late=${b}',
+              '_scope': {
+                '_lifecycle': [
+                  {'on': 'mount', 'action': 'load_b'},
+                ],
+                '_skeleton': 'auto',
+              },
+            },
+          ],
+        });
+        _open('a', 'x');
+        await tester.pumpAndSettle();
+        Element core() => tester.element(
+          find.descendant(
+            of: find.text('B=seed'),
+            matching: find.byType(RichText),
+          ),
+        );
+        final shown = core();
+
+        tester.state<ScopeState>(find.byType(Scope).first).set('show', true);
+        await tester.pump();
+        await tester.pump(_grace);
+        expect(_calls, contains('b'));
+        expect(find.text('B=seed'), findsOneWidget);
+        expect(identical(core(), shown), isTrue);
+        expect(_maskOf(find.text('B=seed')), findsNothing);
+        expect(_mask(tester, find.textContaining('late=')), paints..rrect());
+
+        _open('b', 'y');
+        await tester.pumpAndSettle();
+        expect(find.text('B=y'), findsOneWidget);
+        expect(find.text('late=y'), findsOneWidget);
+      },
+    );
   });
 }
