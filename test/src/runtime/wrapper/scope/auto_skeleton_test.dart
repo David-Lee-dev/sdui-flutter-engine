@@ -16,7 +16,7 @@ import 'package:sdui_engine/src/runtime/log/engine_log.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/interaction.dart';
 import 'package:sdui_engine/src/runtime/wrapper/motion.dart';
-import 'package:sdui_engine/src/runtime/wrapper/scope/skeleton_scope.dart';
+import 'package:sdui_engine/src/runtime/wrapper/scope/auto_skeleton.dart';
 
 /// 테스트가 직접 끝내는 비동기 driver — `tag`별 [Completer]가 응답을 쥔다.
 ///
@@ -1546,7 +1546,7 @@ void main() {
     testWidgets('auto scope와 placeholder 행을 내리면 전역 pending 수가 원래대로 돌아온다', (
       tester,
     ) async {
-      final base = Environment.pendingKeys;
+      final base = ScopeEnvironment.pendingKeys;
       await _pump(
         tester,
         _screen(
@@ -1566,10 +1566,10 @@ void main() {
         ),
       );
       expect(find.byType(SkeletonRow), findsNWidgets(3));
-      expect(Environment.pendingKeys, greaterThan(base));
+      expect(ScopeEnvironment.pendingKeys, greaterThan(base));
 
       await tester.pumpWidget(const SizedBox());
-      expect(Environment.pendingKeys, base);
+      expect(ScopeEnvironment.pendingKeys, base);
     });
 
     testWidgets(

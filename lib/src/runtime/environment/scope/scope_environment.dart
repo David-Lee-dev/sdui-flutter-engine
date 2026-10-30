@@ -10,17 +10,18 @@ import 'scope_store.dart';
 /// Local subscriptions survive reparenting, while combined subscriptions are
 /// invalidated so they cannot retain the previous outer scope.
 class ScopeEnvironment extends Environment implements StateWriter {
+  /// A [placeholder] layer is a stand-in frame (a skeleton loop row) whose
+  /// every key starts pending.
   ScopeEnvironment(
     Map<String, Object?> initial, {
     CommitScheduler? scheduler,
-    this.placeholder = false,
+    bool placeholder = false,
   }) : _store = ScopeStore(initial, scheduler: scheduler, pendAll: placeholder);
 
-  final ScopeStore _store;
+  /// [ScopeStore.pendingKeys]: how many keys pend across every live layer.
+  static int get pendingKeys => ScopeStore.pendingKeys;
 
-  /// Whether this layer is a stand-in frame (a skeleton loop row) whose every
-  /// key reads as pending.
-  final bool placeholder;
+  final ScopeStore _store;
 
   Environment? _parent;
 
@@ -72,10 +73,7 @@ class ScopeEnvironment extends Environment implements StateWriter {
   }
 
   @override
-  PendState pendingOf(String name) {
-    if (placeholder && _store.contains(name)) return PendState.pending;
-    return _store.pendOf(name);
-  }
+  PendState pendingOf(String name) => _store.pendOf(name);
 
   /// A write releases its keys from an automatic skeleton (see [pend]).
   void set(String key, Object? value) =>

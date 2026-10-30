@@ -14,7 +14,7 @@ import '../../../widget/factory.dart';
 import '../../../widget/contract/action_sink.dart';
 import '../../../wrapper/scope/scope.dart';
 import '../../../wrapper/scope/scope_binding.dart';
-import '../../../wrapper/scope/skeleton_scope.dart';
+import '../../../wrapper/scope/auto_skeleton.dart';
 import '../../binding/loop_resolver.dart';
 import '../../expression_evaluator.dart';
 import '../node_builder.dart';

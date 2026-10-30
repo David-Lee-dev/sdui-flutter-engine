@@ -8,6 +8,7 @@ import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import '../../log/engine_log.dart';
 import '../../environment/_base.dart';
+import '../../environment/scope/scope_environment.dart';
 import '../expression_evaluator.dart';
 import '../../motion/_base.dart';
 import '../../motion/composite/presets.dart';
@@ -22,7 +23,7 @@ import '../../wrapper/scope/bound_builder.dart';
 import '../../wrapper/scope/morph_scope.dart';
 import '../../wrapper/scope/press_scope.dart';
 import '../../wrapper/scope/scope.dart';
-import '../../wrapper/scope/skeleton_scope.dart';
+import '../../wrapper/scope/auto_skeleton.dart';
 import 'observer/loop_observer.dart';
 import 'observer/condition_observer.dart';
 import 'observer/plain_observer.dart';
@@ -52,7 +53,8 @@ final class NodeBuilder {
   static final _wasHeld = Expando<bool>('NodeBuilder.wasHeld');
 
   /// Whether any node has been pending or held, so apps that never use an
-  /// automatic skeleton skip the [_wasPending] and [_wasHeld] lookups.
+  /// automatic skeleton skip the [_wasPending], [_coreKeys] and [_wasHeld]
+  /// lookups. Process-wide and monotonic: it only gates those lookups.
   static bool _anyWasPending = false;
 
   static final _visualRoots = Expando<Set<String>>('NodeBuilder.visualRoots');
@@ -67,16 +69,16 @@ final class NodeBuilder {
   /// Whether a node at [context] reading [roots] shows as pending: only
   /// inside an automatic skeleton that has not finished, so nodes elsewhere
   /// (or already revealed) reading the same awaited key render as usual.
-  /// While no key pends anywhere it returns without computing [roots] or
-  /// walking the environment chain.
+  /// While no key pends anywhere, or outside a loading skeleton, it returns
+  /// without computing [roots] or walking the environment chain.
   static bool isPending(
     BuildContext context,
     Environment env,
     Set<String> Function() roots,
   ) =>
-      Environment.pendingKeys > 0 &&
-      env.pendState(roots()) == PendState.pending &&
-      SkeletonClock.maybeOf(context)?.finished == false;
+      ScopeEnvironment.pendingKeys > 0 &&
+      SkeletonClock.maybeOf(context)?.finished == false &&
+      env.pendState(roots()) == PendState.pending;
 
   static final _treeRoots = Expando<Set<String>>('NodeBuilder.treeRoots');
 

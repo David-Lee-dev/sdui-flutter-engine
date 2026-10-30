@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/widgets.dart' hide Action;
 
@@ -12,9 +10,10 @@ import '../../environment/scope/scope_environment.dart';
 import 'package:sdui_engine/src/contract/error_observer.dart';
 import '../../engine_errors.dart';
 import '../../engine_host.dart';
-import '../../log/engine_log.dart';
 import '../../telemetry/telemetry.dart';
 import 'action_host.dart';
+import 'auto_skeleton.dart';
+import 'auto_skeleton_gate.dart';
 import 'lifecycle_runner.dart';
 import 'skeleton_scope.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
@@ -105,36 +104,14 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   late final ScopeEnvironment _env;
   late final ActionHost _host;
   late final ValueNotifier<bool> _loading;
+  late final AutoSkeletonGate _gate;
   late final LifecycleRunner _lifecycle;
 
   late Map<String, Object?> _acceptedSeed;
 
   bool _observerRegistered = false;
 
-  /// How long an automatic skeleton waits on mount hooks before revealing.
-  static const _watchdogDelay = Duration(seconds: 15);
-
-  /// The keys each mount hook writes, on the scope that owns them, until the
-  /// hook settles.
-  final Map<String, ({ScopeEnvironment owner, Set<String> keys})> _awaited = {};
-
-  Timer? _watchdog;
-
   bool _hooksPrepared = false;
-
-  /// How many placeholder-row scopes are mounted, so scopes skip the
-  /// ancestor walk for [_inert] while there are none.
-  static int _placeholders = 0;
-
-  bool _placed = false;
-
-  /// Whether this scope sits in a placeholder loop row and never runs hooks,
-  /// even ones a later template update gives it.
-  bool _inert = false;
-
-  /// The loading flags of ancestor automatic skeletons this scope's
-  /// lifecycle waits on, or `null` once it may start.
-  List<ValueNotifier<bool>>? _waitingOn;
 
   bool _visible = true;
 
@@ -143,7 +120,6 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    if (widget.placeholder) _placeholders++;
     final seed = widget.config.state;
     _acceptedSeed = JsonValue.normalizeObject(seed);
     _env = ScopeEnvironment(
@@ -158,15 +134,25 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
             (hook) => hook.trigger == LifecycleTrigger.mount,
           ),
     );
+    _gate = AutoSkeletonGate(
+      placeholder: widget.placeholder,
+      auto: () => widget.autoSkeleton,
+      loading: _loading,
+      host: _host,
+      ancestors: () => _ancestors().map((scope) => scope._gate),
+      onReady: () {
+        if (mounted) _startLifecycle();
+      },
+    );
     _lifecycle =
         LifecycleRunner(
             host: _host,
             isMounted: () => mounted,
-            onMountSettled: _mountSettled,
+            onMountSettled: _gate.mountSettled,
           )
           ..hooks = widget.lifecycle
           ..deferMountForSkeleton = _skeletal
-          ..onMountActionSettled = _mountActionSettled;
+          ..onMountActionSettled = _gate.mountActionSettled;
     if (widget.lifecycle.isNotEmpty) {
       WidgetsBinding.instance.addObserver(this);
       _observerRegistered = true;
@@ -185,132 +171,39 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
       screenViewId: telemetry?.screenViewId,
     );
 
-    if (!_placed) {
-      _placed = true;
-      _inert =
-          _placeholders > 0 && _ancestors().any((s) => s.widget.placeholder);
-    }
+    _gate.place();
 
     if (widget.lifecycle.isEmpty) return;
     _visible = _isVisible();
     if (!_hooksPrepared) {
+      // Before the lifecycle first starts; a scope inside a placeholder row
+      // never runs hooks.
       _hooksPrepared = true;
-      _prepareHooks();
-    } else if (_waitingOn != null) {
-      // Reparented (a GlobalKey move): wait on the loading automatic
-      // skeletons above the new place, if any.
-      _stopWaiting();
-      _waitForAncestors();
+      if (_gate.inert) _lifecycle.hooks = const [];
+      _gate.prepare(widget.lifecycle);
+    } else {
+      _gate.moved();
     }
-    if (_inert || _waitingOn != null) return;
+    if (_gate.holds) return;
     _startLifecycle();
   }
 
-  List<ScopeState> _ancestors() => [
+  /// The scopes above this one, nearest first, walked lazily.
+  Iterable<ScopeState> _ancestors() sync* {
     for (
       var scope = context.findAncestorStateOfType<ScopeState>();
       scope != null;
       scope = scope.context.findAncestorStateOfType<ScopeState>()
-    )
-      scope,
-  ];
+    ) {
+      yield scope;
+    }
+  }
 
   /// Forwards visibility to the lifecycle; the first call starts it, and an
   /// automatic skeleton arms its watchdog then, not while it still waits.
   void _startLifecycle() {
-    if (widget.autoSkeleton && _loading.value && _watchdog == null) {
-      _watchdog = Timer(_watchdogDelay, _watchdogFired);
-    }
+    _gate.armWatchdog();
     _lifecycle.visibilityChanged(_visible);
-  }
-
-  /// Runs once the scope is wired, before its lifecycle first starts.
-  ///
-  /// A scope inside a placeholder row never runs hooks. An automatic skeleton
-  /// marks what its mount hooks write as pending on the owning scopes, and a
-  /// scope under a still-loading automatic skeleton starts after it, keeping
-  /// the parent-then-child mount order of a hand-drawn skeleton.
-  void _prepareHooks() {
-    if (_inert) {
-      _lifecycle.hooks = const [];
-      _loading.value = false;
-      return;
-    }
-    if (widget.autoSkeleton) _pendMountWrites();
-    _waitForAncestors();
-  }
-
-  /// Waits on the loading flags of the still-loading automatic skeletons
-  /// above this scope, if any.
-  void _waitForAncestors() {
-    final loading = [
-      for (final scope in _ancestors())
-        if (scope.widget.autoSkeleton && scope._loading.value) scope._loading,
-    ];
-    if (loading.isEmpty) return;
-    _waitingOn = loading;
-    for (final flag in loading) {
-      flag.addListener(_ancestorLoadingChanged);
-    }
-  }
-
-  void _pendMountWrites() {
-    for (final hook in widget.lifecycle) {
-      if (hook.trigger != LifecycleTrigger.mount) continue;
-      final resolved = _host.resolve(hook.action);
-      if (resolved == null || resolved.action.writes.isEmpty) continue;
-      resolved.owner.pend(resolved.action.writes);
-      _awaited[hook.action] = (
-        owner: resolved.owner,
-        keys: resolved.action.writes,
-      );
-    }
-  }
-
-  void _ancestorLoadingChanged() {
-    final waiting = _waitingOn;
-    if (waiting == null || waiting.any((flag) => flag.value)) return;
-    _stopWaiting();
-    if (mounted) _startLifecycle();
-  }
-
-  void _stopWaiting() {
-    for (final flag in _waitingOn ?? const <ValueNotifier<bool>>[]) {
-      flag.removeListener(_ancestorLoadingChanged);
-    }
-    _waitingOn = null;
-  }
-
-  void _mountActionSettled(String action) {
-    final awaited = _awaited.remove(action);
-    awaited?.owner.settle(awaited.keys);
-  }
-
-  void _mountSettled() {
-    _settleAwaited();
-    _loading.value = false;
-  }
-
-  /// Releases what the stalled mount hooks still hold: their keys, and the
-  /// nested scopes waiting to start.
-  void _watchdogFired() {
-    if (!mounted || !_loading.value) return;
-    EngineLog.warn(
-      'auto skeleton: mount hooks did not settle within '
-      '${_watchdogDelay.inSeconds}s — revealing '
-      '${_awaited.values.expand((entry) => entry.keys).join(', ')} and '
-      'starting nested scopes.',
-      tag: 'scope',
-    );
-    _mountSettled();
-  }
-
-  void _settleAwaited() {
-    _watchdog?.cancel();
-    for (final entry in _awaited.values) {
-      entry.owner.settle(entry.keys);
-    }
-    _awaited.clear();
   }
 
   bool _isVisible() {
@@ -329,7 +222,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   void didUpdateWidget(Scope oldWidget) {
     super.didUpdateWidget(oldWidget);
     _host.actions = widget.actions;
-    if (!identical(widget.lifecycle, oldWidget.lifecycle) && !_inert) {
+    if (!identical(widget.lifecycle, oldWidget.lifecycle) && !_gate.inert) {
       _lifecycle
         ..hooks = widget.lifecycle
         ..deferMountForSkeleton = _skeletal;
@@ -340,7 +233,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
         WidgetsBinding.instance.removeObserver(this);
         _observerRegistered = false;
       }
-      if (_waitingOn == null) _lifecycle.reconcile();
+      if (!_gate.waiting) _lifecycle.reconcile();
     }
     final newSeed = widget.config.state;
     if (JsonValue.structurallyEqual(_acceptedSeed, newSeed)) return;
@@ -368,14 +261,10 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
   void dispose() {
     // Dispose hooks need a live host; invalidation follows their dispatch.
     _lifecycle.dispose();
-    // Keys pended on an ancestor outlive this scope; release them so they
-    // never stay pending.
-    _settleAwaited();
-    _stopWaiting();
+    _gate.dispose();
     if (_observerRegistered) {
       WidgetsBinding.instance.removeObserver(this);
     }
-    if (widget.placeholder) _placeholders--;
     _host.dispose();
     _env.dispose();
     _loading.dispose();

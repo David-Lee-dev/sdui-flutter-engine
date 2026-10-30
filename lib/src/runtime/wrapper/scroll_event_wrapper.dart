@@ -4,7 +4,7 @@ import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
 import 'event_timing_controller.dart';
 import 'scope/scope.dart';
-import 'scope/skeleton_scope.dart';
+import 'scroll_edge_hold.dart';
 
 /// Dispatches scrolling and threshold-entry events from the nearest descendant scrollable.
 ///
@@ -12,9 +12,9 @@ import 'scope/skeleton_scope.dart';
 /// debounce) rate-limits it — e.g. `{ do: on_scroll, throttle: 16 }` caps updates
 /// per window, `{ do: on_settle, debounce: 150 }` fires only the final offset.
 /// `start_reached` / `end_reached` are edge-gated (once per zone entry).
-/// While the scrollable lays out automatic-skeleton stand-in rows
-/// ([SkeletonRow]) the edge events are held; one whose zone is still occupied
-/// when the rows leave fires then.
+/// While something holds the scrollable ([ScrollEdgeHold], such as an
+/// automatic skeleton's stand-in rows) the edge events are held; one whose
+/// zone is still occupied when the hold goes fires then.
 class ScrollEventWrapper extends StatefulWidget {
   const ScrollEventWrapper({
     super.key,
@@ -57,7 +57,7 @@ class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
   bool _endOwed = false;
   bool _startOwed = false;
 
-  /// The scroll view whose stand-in rows hold the edge events.
+  /// The held scroll view whose edge events wait on its release.
   ScrollableState? _heldBy;
 
   final EventTimingController _timing = EventTimingController();
@@ -112,7 +112,7 @@ class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
     }
   }
 
-  /// Fires the edge events owed once the stand-in rows have left [_heldBy],
+  /// Fires the edge events owed once the hold on [_heldBy] has gone,
   /// against its settled position.
   void _released() {
     final scrollable = _heldBy;
@@ -120,7 +120,7 @@ class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
     if (!mounted || scrollable == null || !scrollable.mounted) return;
     final position = scrollable.position;
     if (!position.hasContentDimensions || !position.hasPixels) return;
-    _edges(position, holding: SkeletonRow.holds(scrollable) || widget.held);
+    _edges(position, holding: ScrollEdgeHold.holds(scrollable) || widget.held);
   }
 
   @override
@@ -136,10 +136,10 @@ class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
           _emit('scroll', scrollAction, _metrics(metrics));
         }
 
-        final heldBy = SkeletonRow.heldBy(notification);
+        final heldBy = ScrollEdgeHold.heldBy(notification);
         if (heldBy != null) {
           _heldBy = heldBy;
-          SkeletonRow.whenReleased(heldBy, _released);
+          ScrollEdgeHold.whenReleased(heldBy, _released);
         }
         _edges(metrics, holding: heldBy != null || widget.held);
         return false;
