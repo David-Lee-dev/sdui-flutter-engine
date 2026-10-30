@@ -2557,37 +2557,45 @@ void main() {
     });
   });
 
-  group('auto skeleton — known defects', () {
-    testWidgets(
-      'KNOWN DEFECT: pending sliver leaf는 viewport 아래에서 box layer로 터진다',
-      (tester) async {
-        await _pump(
-          tester,
-          _screen(
-            state: {'a': null},
-            children: [
-              {
-                '_type': 'sizedbox',
-                'height': 300,
-                '_child': {
-                  '_type': 'custom_scroll_view',
-                  '_children': [
-                    {
-                      '_type': 'sliver_fill_remaining',
-                      'has_scroll_body': r'${a}',
-                    },
-                  ],
-                },
+  group('auto skeleton — slivers and self-acting widgets', () {
+    testWidgets('pending sliver leaf는 sliver로 남아 오류 없이 그려지고 공개된다', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          children: [
+            {
+              '_type': 'sizedbox',
+              'height': 300,
+              '_child': {
+                '_type': 'custom_scroll_view',
+                '_children': [
+                  {
+                    '_type': 'sliver_fill_remaining',
+                    'has_scroll_body': r'${a}',
+                  },
+                ],
               },
-            ],
-          ),
-        );
-        await tester.pump(_grace);
-        expect(tester.takeException(), isNotNull);
-        _open('a', false);
-        await tester.pumpAndSettle();
-      },
-    );
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SliverIgnorePointer), findsOneWidget);
+      expect(find.byType(SkeletonMask), findsNothing);
+      final sliver = tester.element(find.byType(SliverFillRemaining));
+
+      _open('a', false);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        identical(tester.element(find.byType(SliverFillRemaining)), sliver),
+        isTrue,
+      );
+    });
 
     /// [node] under an automatic skeleton whose `a` is still pending, with
     /// an `act` action recording its dispatch.
@@ -2607,24 +2615,37 @@ void main() {
       ),
     );
 
-    testWidgets('KNOWN DEFECT: pending dismissible은 밀면 on_dismissed를 보낸다', (
+    testWidgets('pending dismissible은 밀리지 않고, 공개 뒤엔 밀면 on_dismissed를 보낸다', (
       tester,
     ) async {
       await pumpEffectful(tester, {
         '_type': 'dismissible',
-        'key': r'${a}',
+        'direction': r'${a}',
         'on_dismissed': 'act',
         '_child': {'_type': 'text', 'value': 'swipe me'},
       });
       await tester.pump(_grace);
+      final core = tester.element(find.byType(Dismissible));
+      await tester.drag(
+        find.text('swipe me'),
+        const Offset(500, 0),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(_calls, isNot(contains('act')));
+      expect(tester.takeException(), isNull);
+
+      _open('a', 'horizontal');
+      await tester.pumpAndSettle();
+      expect(identical(tester.element(find.byType(Dismissible)), core), isTrue);
       await tester.drag(find.text('swipe me'), const Offset(500, 0));
       await tester.pumpAndSettle();
       expect(_calls, contains('act'));
-      // The dismissed widget stays in the tree, which Dismissible asserts on.
+      // Nothing removes the dismissed widget here, which Dismissible asserts on.
       tester.takeException();
     });
 
-    testWidgets('KNOWN DEFECT: pending page_view는 넘기면 on_page_changed를 보낸다', (
+    testWidgets('pending page_view는 넘어가지 않고, 공개 뒤엔 on_page_changed를 보낸다', (
       tester,
     ) async {
       await pumpEffectful(tester, {
@@ -2637,40 +2658,61 @@ void main() {
         ],
       });
       await tester.pump(_grace);
+      await tester.fling(
+        find.text('page0'),
+        const Offset(-300, 0),
+        1000,
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(_calls, isNot(contains('act')));
+
+      _open('a', 1.0);
+      await tester.pumpAndSettle();
       await tester.fling(find.text('page0'), const Offset(-300, 0), 1000);
       await tester.pumpAndSettle();
       expect(_calls, contains('act'));
-      _open('a', 1.0);
       _open('act');
       await tester.pumpAndSettle();
     });
 
-    testWidgets(
-      'KNOWN DEFECT: pending refresh_indicator는 당기면 on_refresh를 보낸다',
-      (tester) async {
-        await pumpEffectful(tester, {
-          '_type': 'refresh_indicator',
-          'color': r'${a}',
-          'on_refresh': 'act',
-          '_child': {
-            '_type': 'list_view',
-            '_children': [
-              {'_type': 'text', 'value': 'pull'},
-            ],
-          },
-        });
-        await tester.pump(_grace);
-        await tester.fling(find.text('pull'), const Offset(0, 300), 1000);
-        await tester.pump();
-        await tester.pump(const Duration(seconds: 1));
-        expect(_calls, contains('act'));
-        _open('act');
-        _open('a', '#FF0000');
-        await tester.pumpAndSettle();
-      },
-    );
+    testWidgets('pending refresh_indicator는 당겨지지 않고, 공개 뒤엔 on_refresh를 보낸다', (
+      tester,
+    ) async {
+      await pumpEffectful(tester, {
+        '_type': 'refresh_indicator',
+        'color': r'${a}',
+        'on_refresh': 'act',
+        '_child': {
+          '_type': 'list_view',
+          '_children': [
+            {'_type': 'text', 'value': 'pull'},
+          ],
+        },
+      });
+      await tester.pump(_grace);
+      await tester.fling(
+        find.text('pull'),
+        const Offset(0, 300),
+        1000,
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(_calls, isNot(contains('act')));
+      await tester.pumpAndSettle();
 
-    testWidgets('KNOWN DEFECT: pending text_field는 입력하면 change를 보낸다', (
+      _open('a', '#FF0000');
+      await tester.pumpAndSettle();
+      await tester.fling(find.text('pull'), const Offset(0, 300), 1000);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(_calls, contains('act'));
+      _open('act');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('pending text_field는 focus를 받지 않고, 공개 뒤엔 입력이 change를 보낸다', (
       tester,
     ) async {
       await pumpEffectful(tester, {
@@ -2679,27 +2721,47 @@ void main() {
         '_on': {'change': 'act'},
       });
       await tester.pump(_grace);
+      final core = tester.element(find.byType(EditableText));
+      await tester.showKeyboard(find.byType(EditableText));
+      await tester.pump();
+      expect(tester.testTextInput.hasAnyClients, isFalse);
+      expect(_calls, isNot(contains('act')));
+
+      _open('a', 'hint');
+      await tester.pumpAndSettle();
+      expect(
+        identical(tester.element(find.byType(EditableText)), core),
+        isTrue,
+      );
+      await tester.tap(find.byType(EditableText));
+      await tester.pump();
+      expect(tester.testTextInput.hasAnyClients, isTrue);
       await tester.enterText(find.byType(EditableText), 'hi');
       await tester.pump();
       expect(_calls, contains('act'));
       _open('act');
-      _open('a', 'hint');
       await tester.pumpAndSettle();
     });
 
-    testWidgets('KNOWN DEFECT: pending video는 실제 player를 띄운다', (tester) async {
+    testWidgets('pending video는 player를 띄우지 않고 box로, 공개 뒤에 player를 띄운다', (
+      tester,
+    ) async {
+      Finder player() => find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_VideoView',
+      );
       await pumpEffectful(tester, {
         '_type': 'video',
         'src': 'clip.mp4',
         'muted': r'${a}',
       });
       await tester.pump(_grace);
-      expect(
-        find.byWidgetPredicate((w) => w.runtimeType.toString() == '_VideoView'),
-        findsOneWidget,
-      );
+      expect(player(), findsNothing);
+      // Like the real player before its first frame, an unsized box.
+      expect(tester.getSize(find.byType(SkeletonMask)), const Size(300, 300));
+
       _open('a', true);
       await tester.pumpAndSettle();
+      expect(player(), findsOneWidget);
     });
   });
 }

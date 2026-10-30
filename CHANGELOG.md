@@ -38,6 +38,15 @@
   reveal and fires a held edge event; and content an automatic skeleton has
   revealed no longer turns back into bones when a later scope starts
   awaiting a shared key.
+- Automatic skeleton safety: a waiting sliver node (such as
+  `sliver_fill_remaining` with a waiting prop inside a `custom_scroll_view`)
+  no longer crashes its viewport — it ignores pointers as a sliver and its
+  box descendants draw the bones. A waiting widget that acts on its own
+  (`dismissible`, `page_view`, `refresh_indicator`, `text_field` and the
+  other input or action widgets) takes no pointer or focus, children
+  included, so it cannot dismiss, page, refresh or report input before its
+  data arrives; a waiting `video` draws its box and does not load until it
+  reveals.
 - `_loop._skeleton` is now validated: a value that is not a positive integer
   fails to compile.
 - A scope's `remount` on return from background no longer fires before its

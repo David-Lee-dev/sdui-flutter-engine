@@ -174,11 +174,12 @@ final class NodeBuilder {
   ///
   /// A [pending] node waits on an automatic skeleton: its props resolve
   /// leniently, text draws placeholder words in the real style, icons and
-  /// images keep their declared box, events and motion stay off, and a leaf
-  /// paints as bones under a [SkeletonMask]. A [held] node reads a waiting
-  /// key anywhere (props, event payloads or motion parameters) and fires none
-  /// of its own events until it arrives — a leaf ignores pointers, a layout
-  /// node leaves its children's input working; every pending node is held.
+  /// media keep their declared box, events and motion stay off, and a box
+  /// leaf paints as bones under a [SkeletonMask]. A [held] node reads a
+  /// waiting key anywhere (props, event payloads or motion parameters) and
+  /// fires none of its own events until it arrives — a leaf, or a widget that
+  /// acts on its own, ignores pointers and focus; a layout node leaves its
+  /// children's input working; every pending node is held.
   static Widget assemble(
     BuildContext context,
     PlainDirective directive,
@@ -216,7 +217,7 @@ final class NodeBuilder {
             IconTheme.of(context).size ??
             24,
       ),
-      _ when pending && directive.type == 'image' => _imageBox(
+      _ when pending && _boxed.contains(directive.type) => _box(
         context,
         directive,
         props,
@@ -278,10 +279,18 @@ final class NodeBuilder {
       _coreKeys[context] ??= GlobalKey();
     }
     final coreKey = _anyWasPending ? _coreKeys[context] : null;
+    // A sliver gets no (box) bones; its box descendants draw their own.
     final masked =
-        _anyWasPending && _wasPending[context] != null && _isLeaf(directive);
+        _anyWasPending &&
+        _wasPending[context] != null &&
+        _isLeaf(directive) &&
+        box;
+    // A node that acts on its own (dismiss, page, refresh, input) takes no
+    // input while held, children included, so it never acts on bones.
     final guarded =
-        _anyWasPending && _wasHeld[context] != null && _isLeaf(directive);
+        _anyWasPending &&
+        _wasHeld[context] != null &&
+        (_isLeaf(directive) || spec is ActionSpec || spec is BoundSpec);
     if (decorated || masked || guarded) {
       widget = _inside(widget, (child) {
         // A node that went without decorations (or motions) keeps its core
@@ -312,7 +321,12 @@ final class NodeBuilder {
           );
         }
         if (!guarded) return child;
-        return IgnorePointer(ignoring: held, child: child);
+        return ExcludeFocus(
+          excluding: held,
+          child: box
+              ? IgnorePointer(ignoring: held, child: child)
+              : SliverIgnorePointer(ignoring: held, sliver: child),
+        );
       });
     }
     final key = directive.key;
@@ -324,7 +338,7 @@ final class NodeBuilder {
   /// Whether a pending [directive] draws its own bones: content leaves do,
   /// layout nodes leave that to their children.
   static bool _isLeaf(PlainDirective directive) =>
-      directive.type == 'image' ||
+      _boxed.contains(directive.type) ||
       (directive.children.isEmpty && directive.slots.isEmpty);
 
   /// Resolves each value on its own, so one expression failing on missing
@@ -366,8 +380,12 @@ final class NodeBuilder {
     return List.filled(lines < 1 ? 1 : lines, text).join('\n');
   }
 
-  /// A pending image's declared box; an unsized one has nothing to hold.
-  static Widget _imageBox(
+  /// Types that draw only their declared box while pending, so media never
+  /// loads (or reports) for a bone.
+  static const _boxed = {'image', 'video'};
+
+  /// A pending media node's declared box; an unsized one has nothing to hold.
+  static Widget _box(
     BuildContext context,
     PlainDirective directive,
     Map<String, Object?> props,
@@ -377,8 +395,8 @@ final class NodeBuilder {
     if (width == null && height == null && _warnedUnsized[directive] == null) {
       _warnedUnsized[directive] = true;
       EngineLog.warn(
-        'image @${directive.path} has no width/height — its automatic '
-        'skeleton bone collapses until the image loads.',
+        '${directive.type} @${directive.path} has no width/height — its '
+        'automatic skeleton bone collapses until it loads.',
         tag: 'widget',
       );
     }
