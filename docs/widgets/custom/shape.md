@@ -43,7 +43,7 @@ The fold is `d = item₁`, then for each later item `union` → `smoothMin(d, it
 
 The shape paints in four stages, in this order: `shadow`, `backdrop`, `fill`, `rim`. Each stage is isolated: if one fails while painting it is reported once through the error observer (`nodeBuild`) and only that stage stops painting; the others go on.
 
-The smooth combination is drawn by the engine's fragment shader (`shaders/sdf_shapes.frag`), which `Sdui.initialize` loads in the background. Fill and rim coverage are painted separately, so a transparent fill with an opaque rim (or the reverse) works, and each takes its own gradient. Until the shader is loaded, or where it cannot load, `shape` paints the hard outline of the same primitives (`Path` union, difference and intersect in list order, no `smooth` blend): a smooth `subtract` then has sharp shoulders.
+The smooth combination is drawn by the engine's fragment shader (`shaders/sdf_shapes.frag`), which `Engine.initialize` (and so `Sdui.initialize`) loads in the background. Fill and rim coverage are painted separately, so a transparent fill with an opaque rim (or the reverse) works, and each takes its own gradient. Until the shader is loaded, or where it cannot load, `shape` paints the hard outline of the same primitives (`Path` union, difference and intersect in list order, no `smooth` blend): a smooth `subtract` then has sharp shoulders.
 
 The shader paints only inside the shape's own box; keep primitives (and a dip's shoulder) inside it, or give the shape a larger box and position the primitives with `inset` or `at`.
 

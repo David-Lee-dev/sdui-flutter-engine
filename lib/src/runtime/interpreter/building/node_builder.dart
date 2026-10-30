@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'package:flutter/widgets.dart';
 
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import '../../log/engine_log.dart';
 import '../../environment/_base.dart';
 import '../expression_evaluator.dart';
@@ -98,7 +99,11 @@ final class NodeBuilder {
       props = audit!;
       return true;
     }());
-    Widget widget = switch (WidgetFactory.specFor(directive.type)) {
+    final spec = WidgetFactory.specFor(directive.type);
+    // A sliver must stay the direct render child of its viewport, so it never
+    // gets a (box) repaint boundary.
+    final box = spec?.produces != LayoutProtocol.sliver;
+    Widget widget = switch (spec) {
       SlotSpec spec => spec.build(context, props, {
         for (final entry in directive.slots.entries)
           entry.key: build(entry.value),
@@ -153,7 +158,8 @@ final class NodeBuilder {
           child,
           interactive: interactive,
           scrolls: scrolls,
-          isolate: isolate,
+          isolate: isolate && box,
+          box: box,
         ),
       );
     }
@@ -197,7 +203,7 @@ final class NodeBuilder {
       };
 
   /// Wraps a node's [widget] in its motion, interaction, scroll-event and
-  /// repaint-boundary layers.
+  /// repaint-boundary layers. Only a [box] node gets repaint boundaries.
   static Widget _decorate(
     BuildContext context,
     PlainDirective directive,
@@ -207,6 +213,7 @@ final class NodeBuilder {
     required bool interactive,
     required bool scrolls,
     required bool isolate,
+    required bool box,
   }) {
     final off = _offMotions[context];
     for (final (index, motion) in directive.motions.indexed) {
@@ -232,6 +239,7 @@ final class NodeBuilder {
           motion: atom,
           params: params,
           path: directive.path,
+          repaintBoundary: box,
           child: widget,
         );
       }

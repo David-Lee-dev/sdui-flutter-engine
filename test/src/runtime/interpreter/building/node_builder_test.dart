@@ -309,6 +309,98 @@ void main() {
         );
         expect(logs.any((l) => l.contains('ignored prop(s): child')), isTrue);
       });
+
+      // 세로 스크롤은 ScrollInset의 지연 builder에서 위젯을 만든다. 감사는
+      // catalog build 직후 끝나므로 prop은 그 전에 읽혀야 한다.
+      const common = {
+        'reverse': false,
+        'primary': false,
+        'physics': 'clamping',
+        'keyboard_dismiss_behavior': 'manual',
+        'shrink_wrap': true,
+        'clip_behavior': 'hard_edge',
+        'inset_end': true,
+      };
+      final scrolls = <String, (Map<String, Object?>, List<Directive>)>{
+        'list_view': (
+          {...common, 'padding': 4, 'item_extent': 20},
+          const [
+            PlainDirective(
+              type: 'text',
+              props: {'value': 'a'},
+              children: [],
+              roots: <String>{},
+            ),
+          ],
+        ),
+        'grid_view': (
+          {
+            ...common,
+            'padding': 4,
+            'cross_axis_count': 2,
+            'main_axis_spacing': 2,
+            'cross_axis_spacing': 2,
+            'child_aspect_ratio': 1.5,
+          },
+          const [
+            PlainDirective(
+              type: 'text',
+              props: {'value': 'a'},
+              children: [],
+              roots: <String>{},
+            ),
+          ],
+        ),
+        'single_child_scroll_view': (
+          {
+            for (final e in common.entries)
+              if (e.key != 'shrink_wrap') e.key: e.value,
+            'padding': 4,
+          },
+          const [
+            PlainDirective(
+              type: 'text',
+              props: {'value': 'a'},
+              children: [],
+              roots: <String>{},
+            ),
+          ],
+        ),
+        'custom_scroll_view': (
+          common,
+          const [
+            PlainDirective(
+              type: 'sliver_to_box_adapter',
+              props: {},
+              children: [
+                PlainDirective(
+                  type: 'text',
+                  props: {'value': 'a'},
+                  children: [],
+                  roots: <String>{},
+                ),
+              ],
+              roots: <String>{},
+            ),
+          ],
+        ),
+      };
+      for (final scroll in scrolls.entries) {
+        testWidgets('세로 ${scroll.key}의 유효한 prop은 경고하지 않는다', (tester) async {
+          final (props, children) = scroll.value;
+          final logs = await pumpCapturing(
+            tester,
+            PlainDirective(
+              type: scroll.key,
+              props: props,
+              children: children,
+              roots: const <String>{},
+            ),
+          );
+          expect(find.text('a'), findsOneWidget);
+          expect(logs.where((l) => l.contains('ignored prop')), isEmpty);
+        });
+      }
     });
   });
 }

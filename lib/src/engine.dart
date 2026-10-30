@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'contract/error_observer.dart';
 import 'contract/external_command.dart';
 import 'contract/image_source.dart';
@@ -26,6 +28,7 @@ import 'runtime/engine_catalog.dart';
 import 'runtime/engine_errors.dart';
 import 'runtime/log/engine_log.dart';
 import 'runtime/media/image_source_registry.dart';
+import 'runtime/media/shader_registry.dart';
 import 'runtime/media/video_source_registry.dart';
 import 'runtime/telemetry/telemetry.dart';
 import 'runtime/widget/factory.dart';
@@ -107,6 +110,9 @@ final class Engine {
     DriverRegistry.ensureRegistered();
     EngineCatalog.freeze();
     _catalog = snapshotCatalog();
+    // Shaders load in the background: shapes paint with the Path fallback
+    // until their program is ready, so boot never waits on it.
+    unawaited(ShaderRegistry.warmUp());
   }
 
   /// The language as the runtime currently stands: registry snapshots for

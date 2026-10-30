@@ -128,8 +128,8 @@ A literal map gives `stiffness` (1–5000, required), `damping_ratio` (0.2–2, 
 - Any other misuse gives a morph without animation instead of a compile error: an expression (`'${preset}'`), a value that is neither a name nor a map (`5`, `true`, `null`), a missing, non-numeric, non-finite or out-of-range parameter, or combining `_spring` with `_duration`, `_curve`, `_repeat` or `_reverse`.
 - `_from`, `_delay` and `_trigger` work as for the tween; a trigger restarts from `_from` at rest.
 - A target equal to the current target is ignored. A target that is not a finite number, or whose expression fails to evaluate, keeps the previous target; with no good target yet the value is a valid `_from`, else `null`.
-- A simulation that has not settled after 5 seconds snaps to its target. When the platform asks to reduce motion (`MediaQuery.disableAnimations`), the value jumps to the target.
-- The morph's direct widget (a plain node) is drawn in its own `RepaintBoundary`, inside a parent-data widget such as `expanded`; so is the direct widget of a tween with `_repeat`. One-shot tweens add nothing (since 0.9.0).
+- A simulation that has not settled after 5 seconds snaps to its target. When the platform asks to reduce motion (`MediaQuery.disableAnimations`), the value jumps to the target; turning it on mid-flight or during `_delay` stops there at velocity `0`, and turning it off again does not replay (since 0.10.1).
+- The morph's direct widget (a plain node) is drawn in its own `RepaintBoundary`, inside a parent-data widget such as `expanded`; so is the direct widget of a tween with `_repeat`. One-shot tweens add nothing (since 0.9.0). A sliver node (`sliver_to_box_adapter`, `sliver_list`, ...) gets no boundary, since a sliver must stay the direct child of its viewport (since 0.10.1).
 
 Older engines reject `_spring` as an unknown morph key; declare `_requires: [spring_v1]` at the template root (see [Concepts](concepts.md#reserved-keys)).
 

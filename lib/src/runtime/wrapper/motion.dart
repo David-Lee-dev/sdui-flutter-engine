@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -14,7 +15,8 @@ import '../motion/_base.dart';
 ///
 /// When the platform asks to reduce motion (`MediaQuery.disableAnimations`)
 /// the layer draws its end state (t = 1) without running. A repeating layer
-/// isolates [child] in a [RepaintBoundary]; a one-shot layer adds nothing.
+/// isolates [child] in a [RepaintBoundary] unless [repaintBoundary] is false
+/// (a sliver child); a one-shot layer adds nothing.
 class MotionWrapper extends StatefulWidget {
   const MotionWrapper({
     super.key,
@@ -22,6 +24,7 @@ class MotionWrapper extends StatefulWidget {
     required this.params,
     required this.child,
     this.path,
+    this.repaintBoundary = true,
   });
 
   final Motion motion;
@@ -30,6 +33,9 @@ class MotionWrapper extends StatefulWidget {
 
   /// Template path of the owning node, for diagnostics.
   final String? path;
+
+  /// Whether a repeating layer may isolate [child]; false for a sliver.
+  final bool repaintBoundary;
 
   @override
   State<MotionWrapper> createState() => _MotionWrapperState();
@@ -98,7 +104,7 @@ class _MotionWrapperState extends State<MotionWrapper>
   void initState() {
     super.initState();
     _plan = _planned() ?? _restPlan;
-    _isolate = _plan.repeat;
+    _isolate = _plan.repeat && widget.repaintBoundary;
     _controller = AnimationController(vsync: this, duration: _plan.duration)
       ..addStatusListener(_onStatus);
     _curved = CurvedAnimation(parent: _controller, curve: _plan.curve);
@@ -229,9 +235,12 @@ class _MotionWrapperState extends State<MotionWrapper>
   /// motion's first frame collapses that box (a reveal starts at width or
   /// height 0, possibly inside other motions), the slot keeps this widget's
   /// position and takes the size of the first sized box beneath it, so the
-  /// frame's own clipping and offsets never decide visibility.
+  /// frame's own clipping and offsets never decide visibility. A sliver slot
+  /// is visible when its viewport lays it out as visible.
   bool _isVisible() {
-    final box = context.findRenderObject() as RenderBox?;
+    final slot = context.findRenderObject();
+    if (slot is RenderSliver) return slot.geometry?.visible ?? false;
+    final box = slot as RenderBox?;
     if (box == null || !box.attached || !box.hasSize) return false;
     final size = box.size.isEmpty ? _contentSize(box) : box.size;
     if (size == null) return false;

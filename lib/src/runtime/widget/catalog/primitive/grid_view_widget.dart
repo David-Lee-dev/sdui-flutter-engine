@@ -40,34 +40,44 @@ final class GridViewWidget {
     Map<String, Object?> props,
     List<Widget> children,
   ) {
+    // Props are read here, not in the deferred builder, so the debug prop
+    // audit that runs right after this build sees every read.
     final axis = PropsResolver.axis(props['scroll_direction']) ?? Axis.vertical;
+    final crossAxisCount =
+        PropsResolver.integer(props['cross_axis_count']) ?? 2;
+    final mainAxisSpacing =
+        PropsResolver.size(context, props['main_axis_spacing']) ?? 0;
+    final crossAxisSpacing =
+        PropsResolver.size(context, props['cross_axis_spacing']) ?? 0;
+    final childAspectRatio =
+        PropsResolver.number(props['child_aspect_ratio']) ?? 1.0;
+    final reverse = PropsResolver.flag(props['reverse']) ?? false;
+    final primary = PropsResolver.flag(props['primary']);
+    final padding = PropsResolver.edge(context, props['padding']);
+    final physics = PropsResolver.scrollPhysics(props['physics']);
+    final keyboardDismissBehavior = PropsResolver.keyboardDismissBehavior(
+      props['keyboard_dismiss_behavior'],
+    );
+    final shrinkWrap = PropsResolver.flag(props['shrink_wrap']) ?? false;
+    final clipBehavior =
+        PropsResolver.clip(props['clip_behavior']) ?? Clip.hardEdge;
     return ScrollInset.build(
       context,
       axis: axis,
       insetEnd: PropsResolver.flag(props['inset_end']),
       builder: (context, extent) => GridView.count(
-        crossAxisCount: PropsResolver.integer(props['cross_axis_count']) ?? 2,
-        mainAxisSpacing:
-            PropsResolver.size(context, props['main_axis_spacing']) ?? 0,
-        crossAxisSpacing:
-            PropsResolver.size(context, props['cross_axis_spacing']) ?? 0,
-        childAspectRatio:
-            PropsResolver.number(props['child_aspect_ratio']) ?? 1.0,
+        crossAxisCount: crossAxisCount,
+        mainAxisSpacing: mainAxisSpacing,
+        crossAxisSpacing: crossAxisSpacing,
+        childAspectRatio: childAspectRatio,
         scrollDirection: axis,
-        reverse: PropsResolver.flag(props['reverse']) ?? false,
-        primary: PropsResolver.flag(props['primary']),
-        padding: ScrollInset.endPadding(
-          PropsResolver.edge(context, props['padding']),
-          axis,
-          extent,
-        ),
-        physics: PropsResolver.scrollPhysics(props['physics']),
-        keyboardDismissBehavior: PropsResolver.keyboardDismissBehavior(
-          props['keyboard_dismiss_behavior'],
-        ),
-        shrinkWrap: PropsResolver.flag(props['shrink_wrap']) ?? false,
-        clipBehavior:
-            PropsResolver.clip(props['clip_behavior']) ?? Clip.hardEdge,
+        reverse: reverse,
+        primary: primary,
+        padding: ScrollInset.endPadding(padding, axis, extent),
+        physics: physics,
+        keyboardDismissBehavior: keyboardDismissBehavior,
+        shrinkWrap: shrinkWrap,
+        clipBehavior: clipBehavior,
         children: children,
       ),
     );

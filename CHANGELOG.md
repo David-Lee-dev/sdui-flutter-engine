@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.1
+
+### Fixed
+
+- A repeating `_morph`, a spring `_morph` or a repeating `_motion` on a
+  sliver node (`sliver_to_box_adapter`, `sliver_list`, ... inside
+  `custom_scroll_view`) no longer gets the 0.9.0 `RepaintBoundary`, which
+  broke the viewport's sliver protocol. Box nodes keep it. A `_motion` start
+  gate on a sliver node now reads the sliver's visibility instead of failing
+  on a box cast.
+- A spring `_morph` now reacts when reduced motion
+  (`MediaQuery.disableAnimations`) turns on mid-flight or during `_delay`: it
+  cancels the pending start and the simulation and rests on the target at
+  velocity `0`, as a tween does. Turning it off again does not replay.
+- The `shape` shader warm-up moved from `Sdui.initialize` to
+  `Engine.initialize`, so apps that boot with `Engine.initialize` and
+  `EngineRunner` get smooth shapes too. It still starts once and never
+  blocks boot.
+- Valid props of vertical `list_view`, `grid_view`, `single_child_scroll_view`
+  and `custom_scroll_view` no longer show a debug `ignored prop(s)` warning:
+  they are read during the widget build again, before the prop audit.
+
 ## 0.10.0
 
 **Behavior change (Android):** `scaffold` covers the system bottom inset over

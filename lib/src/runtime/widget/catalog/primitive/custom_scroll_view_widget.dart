@@ -38,9 +38,19 @@ final class CustomScrollViewWidget {
     Map<String, Object?> props,
     List<Widget> children,
   ) {
+    // Props are read here, not in the deferred builder, so the debug prop
+    // audit that runs right after this build sees every read.
     final axis = PropsResolver.axis(props['scroll_direction']) ?? Axis.vertical;
     final reverse = PropsResolver.flag(props['reverse']) ?? false;
     final insetEnd = PropsResolver.flag(props['inset_end']);
+    final primary = PropsResolver.flag(props['primary']);
+    final physics = PropsResolver.scrollPhysics(props['physics']);
+    final keyboardDismissBehavior = PropsResolver.keyboardDismissBehavior(
+      props['keyboard_dismiss_behavior'],
+    );
+    final shrinkWrap = PropsResolver.flag(props['shrink_wrap']) ?? false;
+    final clipBehavior =
+        PropsResolver.clip(props['clip_behavior']) ?? Clip.hardEdge;
     return ScrollInset.build(
       context,
       axis: axis,
@@ -48,14 +58,11 @@ final class CustomScrollViewWidget {
       builder: (context, extent) => CustomScrollView(
         scrollDirection: axis,
         reverse: reverse,
-        primary: PropsResolver.flag(props['primary']),
-        physics: PropsResolver.scrollPhysics(props['physics']),
-        keyboardDismissBehavior: PropsResolver.keyboardDismissBehavior(
-          props['keyboard_dismiss_behavior'],
-        ),
-        shrinkWrap: PropsResolver.flag(props['shrink_wrap']) ?? false,
-        clipBehavior:
-            PropsResolver.clip(props['clip_behavior']) ?? Clip.hardEdge,
+        primary: primary,
+        physics: physics,
+        keyboardDismissBehavior: keyboardDismissBehavior,
+        shrinkWrap: shrinkWrap,
+        clipBehavior: clipBehavior,
         slivers: _withInset(children, axis, reverse, insetEnd, extent),
       ),
     );

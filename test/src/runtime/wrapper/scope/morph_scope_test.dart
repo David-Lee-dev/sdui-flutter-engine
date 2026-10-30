@@ -1093,6 +1093,72 @@ void main() {
     });
   });
 
+  group('MorphScope 0.10.1 spring reduced motion mid-flight', () {
+    List<double> read(WidgetTester tester) => [
+      for (final part
+          in tester.widget<Text>(find.byType(Text)).data!.split('|'))
+        double.parse(part),
+    ];
+    double value(WidgetTester tester) => read(tester)[0];
+    double velocity(WidgetTester tester) => read(tester)[1];
+
+    Widget mount(bool reduce, Map<String, Object?> morph) => MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: reduce),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: EngineRunner(
+          template: {
+            '_type': 'text',
+            '_morph': {
+              '_from': 0,
+              '_to': 100,
+              '_as': 'n',
+              '_velocity': 'v',
+              '_spring': {'stiffness': 100, 'damping_ratio': 0.5},
+              ...morph,
+            },
+            'value': r'${n}|${v}',
+          },
+        ),
+      ),
+    );
+
+    testWidgets('비행 중 켜지면 목표로 이동하고 멈추며, 다시 꺼도 재생하지 않는다', (tester) async {
+      await tester.pumpWidget(mount(false, const {}));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(value(tester), inExclusiveRange(0, 100));
+
+      await tester.pumpWidget(mount(true, const {}));
+      await tester.pump();
+      expect(value(tester), 100);
+      expect(velocity(tester), 0);
+      expect(tester.hasRunningAnimations, isFalse);
+
+      await tester.pumpWidget(mount(false, const {}));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(value(tester), 100);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('_delay 대기 중 켜지면 타이머를 취소하고 목표로 이동한다', (tester) async {
+      await tester.pumpWidget(mount(false, const {'_delay': 200}));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(value(tester), 0);
+
+      await tester.pumpWidget(mount(true, const {'_delay': 200}));
+      await tester.pump();
+      expect(value(tester), 100);
+      expect(velocity(tester), 0);
+
+      await tester.pumpWidget(mount(false, const {'_delay': 200}));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(value(tester), 100);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
+
   group('MorphScope 0.9.0 RepaintBoundary', () {
     Finder boundaryAbove(Type scope) => find.ancestor(
       of: find.byType(Text),
@@ -1166,6 +1232,47 @@ void main() {
         findsOneWidget,
       );
     });
+
+    final sliverMorphs = {
+      '반복 tween': {'_duration': 100, '_repeat': true},
+      'spring': {'_spring': 'spatial_fast'},
+    };
+    for (final morph in sliverMorphs.entries) {
+      testWidgets('sliver 노드의 ${morph.key} morph는 RepaintBoundary를 넣지 않는다', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          mount({
+            '_type': 'custom_scroll_view',
+            '_children': [
+              {
+                '_type': 'sliver_to_box_adapter',
+                '_morph': {'_to': 1, '_as': 'n', ...morph.value},
+                '_child': {'_type': 'text', 'value': r'${n}'},
+              },
+            ],
+          }),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(tester.takeException(), isNull);
+        expect(find.byType(Text), findsOneWidget);
+        expect(
+          find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(RepaintBoundary),
+              )
+              .evaluate()
+              .where(
+                (e) =>
+                    e.findAncestorWidgetOfExactType<SliverToBoxAdapter>() ==
+                    null,
+              ),
+          isEmpty,
+        );
+        await tester.pumpWidget(const SizedBox());
+      });
+    }
   });
 }
 

@@ -244,6 +244,36 @@ void main() {
       );
       await tester.pumpAndSettle();
     });
+
+    testWidgets('sliver 노드의 반복 모션은 RepaintBoundary를 넣지 않는다', (tester) async {
+      MotionFactory.register(const _SliverSafeMotion());
+      addTearDown(MotionFactory.reset);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: EngineRunner(
+              template: {
+                '_type': 'custom_scroll_view',
+                '_children': [
+                  {
+                    '_type': 'sliver_to_box_adapter',
+                    '_motion': {'type': 'sliver_safe'},
+                    '_child': {'_type': 'text', 'value': 'hi'},
+                  },
+                ],
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(tester.takeException(), isNull);
+      expect(find.text('hi'), findsOneWidget);
+      expect(_boundaryInside, findsNothing);
+      // The start gate measured the visible sliver and let the layer run.
+      expect(tester.hasRunningAnimations, isTrue);
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 
   group('MotionWrapper', () {
@@ -1066,6 +1096,23 @@ class _MarkerMotion extends Motion {
     if (limit != null && t > limit) throw ArgumentError('frame failure');
     return ColoredBox(color: color, child: child);
   }
+}
+
+/// A repeating motion whose frame keeps the child's render protocol, so it
+/// may sit on a sliver node.
+class _SliverSafeMotion extends Motion {
+  const _SliverSafeMotion();
+
+  @override
+  String get type => 'sliver_safe';
+
+  @override
+  MotionPlan plan(MotionParams params) =>
+      const MotionPlan(duration: Duration(milliseconds: 100), repeat: true);
+
+  @override
+  Widget frame(BuildContext context, double t, Widget child, MotionParams p) =>
+      child;
 }
 
 final class _Capture extends SduiErrorObserver {

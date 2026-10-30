@@ -60,7 +60,7 @@ When the platform asks to reduce motion (`MediaQuery.disableAnimations`), every 
 
 ### Repaint isolation
 
-A repeating layer wraps its child in a `RepaintBoundary`, so the animation repaints only the moving subtree. The decision is made when the layer mounts. A one-shot layer adds nothing to the tree. Since 0.9.0.
+A repeating layer wraps its child in a `RepaintBoundary`, so the animation repaints only the moving subtree. The decision is made when the layer mounts. A one-shot layer adds nothing to the tree. Since 0.9.0. A layer on a sliver node gets no boundary (since 0.10.1).
 
 ### Parent-data widgets
 

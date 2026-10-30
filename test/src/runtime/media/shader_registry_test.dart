@@ -93,5 +93,39 @@ void main() {
       await tester.pump();
       expect(ShaderRegistry.available, isTrue);
     });
+
+    testWidgets('Engine.initialize만으로도 warm-up을 시작한다', (tester) async {
+      Engine.initialize(
+        networkClient: _NetworkClient(),
+        imageSource: _ImageSource(),
+        videoSource: _VideoSource(),
+        appStorage: _AppStorage(),
+        secureStorage: _SecureStorage(),
+      );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.pump();
+      expect(ShaderRegistry.available, isTrue);
+    });
+
+    testWidgets('Sdui.initialize도 warm-up을 한 번만 시작한다', (tester) async {
+      Sdui.initialize(
+        screenLoader: _Loader(),
+        networkClient: _NetworkClient(),
+        imageSource: _ImageSource(),
+        videoSource: _VideoSource(),
+        appStorage: _AppStorage(),
+        secureStorage: _SecureStorage(),
+      );
+      final started = ShaderRegistry.warmUp();
+      await tester.runAsync(() => started);
+      final program = ShaderRegistry.sdfShapes.value;
+      expect(program, isNotNull);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      expect(ShaderRegistry.sdfShapes.value, same(program));
+    });
   });
 }

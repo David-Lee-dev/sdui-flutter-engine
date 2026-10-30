@@ -228,7 +228,16 @@ class _SpringMorphScopeState extends State<SpringMorphScope>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations == true;
+    final reduce = MediaQuery.maybeOf(context)?.disableAnimations == true;
+    final target = _target;
+    if (reduce && !_reduceMotion && _started && target != null) {
+      // Same as the tween path: drop the pending start and the simulation,
+      // and rest on the target. Setting the value stops the controller.
+      _generation++;
+      _delayTimer?.cancel();
+      _controller.value = target;
+    }
+    _reduceMotion = reduce;
     _rebind(Scope.envOf(context) ?? MapEnvironment.empty);
     if (!_started) {
       _started = true;

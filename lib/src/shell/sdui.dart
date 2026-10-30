@@ -20,7 +20,6 @@ import 'screen_page.dart';
 import '../impl/noop_telemetry_sink.dart';
 import '../engine.dart';
 import '../runtime/log/engine_log.dart';
-import '../runtime/media/shader_registry.dart';
 import '../runtime/telemetry/telemetry.dart';
 import '../runtime/widget/factory.dart';
 import 'sdui_screen_page_builder.dart';
@@ -133,9 +132,6 @@ final class Sdui {
       debugLogLevel: debugLogLevel,
       logOutput: logOutput,
     );
-    // Shaders load in the background: shapes paint with the Path fallback
-    // until their program is ready, so boot never waits on it.
-    unawaited(ShaderRegistry.warmUp());
     return SduiState.cache.warm(preloadScreens, screenLoader);
   }
 
