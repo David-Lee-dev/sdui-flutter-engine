@@ -180,9 +180,11 @@ final class NodeBuilder {
   /// declared box, any other spec builds for real — events and motion stay
   /// off, and a box leaf paints as bones under a [SkeletonMask]. A [held]
   /// node reads a waiting key anywhere (props, event payloads or motion
-  /// parameters) and fires none of its own events until it arrives — a leaf,
-  /// or a widget that acts on its own, ignores pointers and focus; a layout
-  /// node leaves its children's input working; every pending node is held.
+  /// parameters) and fires none of its `_on` events until it arrives — a
+  /// leaf, or a widget that acts on its own, ignores pointers and focus; a
+  /// layout node leaves its children's input working; every pending node is
+  /// held. Only a pending action widget gets no action host; a held one runs
+  /// for real and what it starts itself is delivered.
   static Widget assemble(
     BuildContext context,
     PlainDirective directive,
@@ -256,7 +258,7 @@ final class NodeBuilder {
       ),
       ActionSpec spec => spec.build(context, props, [
         for (final child in directive.children) build(child),
-      ], held ? null : Scope.actionHost(context)),
+      ], pending ? null : Scope.actionHost(context)),
       null => throw StateError('Unknown widget type: "${directive.type}".'),
     };
     assert(() {
@@ -301,8 +303,8 @@ final class NodeBuilder {
   /// sliver ([WidgetSpec.produces]) gets a sliver guard and no box layers.
   /// The code builds them innermost first. The hold layer only covers
   /// wrappers that dispatch through [Scope.actionHost] and count toward
-  /// `decorated`; an action widget gets no host from [assemble] while held,
-  /// and a guarded node applies the autofocus its exclusion dropped on
+  /// `decorated`. An action widget gets no host from [assemble] while
+  /// pending. A guarded node applies the autofocus its exclusion dropped on
   /// release.
   static Widget _layers(
     BuildContext context,
@@ -378,12 +380,7 @@ final class NodeBuilder {
           );
         }
         if (!guarded) return child;
-        if (held) {
-          _focusHeld[context] = true;
-        } else if (_focusHeld[context] != null) {
-          _focusHeld[context] = null;
-          _autofocusOnRelease(context);
-        }
+        _trackFocusHold(context, held: held);
         return ExcludeFocus(
           excluding: held,
           child: box
@@ -398,13 +395,27 @@ final class NodeBuilder {
         : KeyedSubtree(key: ValueKey(key), child: widget);
   }
 
+  /// Records that the guarded node at [context] excludes focus while [held],
+  /// and on its release schedules [_autofocusOnRelease].
+  static void _trackFocusHold(BuildContext context, {required bool held}) {
+    if (held) {
+      _focusHeld[context] = true;
+    } else if (_focusHeld[context] != null) {
+      _focusHeld[context] = null;
+      _autofocusOnRelease(context);
+    }
+  }
+
   /// After the frame that releases a guarded node, asks its scope to
   /// autofocus each `autofocus` text field below [context] — the request their
   /// first build made while focus was excluded and the manager dropped. The
-  /// scope applies at most one, and only when nothing in it has focus.
+  /// scope applies at most one, and only when nothing in it has focus. A
+  /// node whose route is not current (behind a dialog) skips it, so the
+  /// release does not pull focus into the background route.
   static void _autofocusOnRelease(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!context.mounted) return;
+      if (ModalRoute.of(context)?.isCurrent == false) return;
       void visit(Element element) {
         final widget = element.widget;
         if (widget is EditableText && widget.autofocus) {

@@ -125,6 +125,10 @@ final class BoundSpec extends WidgetSpec {
 }
 
 /// Builds a widget with access to an optional action dispatcher.
+///
+/// `dispatch` is null while the node's props wait on an automatic skeleton
+/// and becomes non-null on release on the same State without remounting;
+/// read `widget.dispatch` when firing, do not cache it in initState.
 typedef ActionBuild =
     Widget Function(
       BuildContext context,
@@ -134,6 +138,8 @@ typedef ActionBuild =
     );
 
 /// Describes a widget that can dispatch its own gesture-driven actions.
+///
+/// See [ActionBuild] for when its `dispatch` is null.
 final class ActionSpec extends WidgetSpec {
   const ActionSpec(
     this.build, {

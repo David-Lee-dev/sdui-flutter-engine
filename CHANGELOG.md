@@ -46,12 +46,18 @@
   other input or action widgets) takes no pointer or focus, children
   included, so it cannot dismiss, page, refresh or report input before its
   data arrives; a waiting `video` draws its box and does not load until it
-  reveals. A waiting action widget (`swipe_layout` autoplay, `spin_grid`,
-  app-registered action widgets) and a `swipe`/`spin_grid` loop wrap over
-  stand-in rows dispatch nothing they start themselves until released; a
-  waiting `text_field` with `autofocus` takes focus on release; and a sliver
-  spec declaring a `circle` or `box` form builds for real instead of putting
-  a box into its viewport.
+  reveals. An action widget whose props wait (`swipe_layout` autoplay,
+  `spin_grid`, app-registered action widgets) and a `swipe`/`spin_grid` loop
+  wrap over stand-in rows dispatch nothing they start themselves until
+  released; one whose only `_on` payloads or `_motion` parameters wait runs
+  for real and its own dispatches are delivered. A waiting `text_field` with
+  `autofocus` takes focus on release unless its route is behind another
+  (such as an open dialog); and a sliver spec declaring a `circle` or `box`
+  form builds for real instead of putting a box into its viewport.
+- `ActionBuild`'s `dispatch` is null while the node's props wait on an
+  automatic skeleton and becomes non-null on release on the same State
+  without remounting; read `widget.dispatch` when firing, do not cache it in
+  `initState`.
 - Added `WidgetSpec.skeleton` (`SkeletonForm.real`, `text`, `circle`,
   `box`; default `real`): how a node of the spec draws while it waits on an
   automatic skeleton. `text`, `icon`, `image` and `video` declare theirs; an

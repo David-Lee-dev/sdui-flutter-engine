@@ -2812,6 +2812,31 @@ void main() {
       expect(field().widget.focusNode.hasFocus, isTrue);
     });
 
+    testWidgets(
+      'dialog가 열린 채 공개된 autofocus text_field는 뒤 화면에서 focus를 가져가지 않는다',
+      (tester) async {
+        await pumpEffectful(tester, {
+          '_type': 'text_field',
+          'autofocus': true,
+          'hint': r'${a}',
+        });
+        await tester.pump(_grace);
+        showDialog<void>(
+          context: tester.element(find.byType(Scaffold)),
+          builder: (_) => const SizedBox(width: 10, height: 10),
+        );
+        await tester.pumpAndSettle();
+        final inDialog = FocusManager.instance.primaryFocus;
+        expect(inDialog, isNotNull);
+
+        _open('a', 'hint');
+        await tester.pumpAndSettle();
+        final page = tester.state<EditableTextState>(find.byType(EditableText));
+        expect(page.widget.focusNode.hasFocus, isFalse);
+        expect(FocusManager.instance.primaryFocus, same(inDialog));
+      },
+    );
+
     testWidgets('pending video는 player를 띄우지 않고 box로, 공개 뒤에 player를 띄운다', (
       tester,
     ) async {
@@ -3090,7 +3115,88 @@ void main() {
         await tester.pumpWidget(const SizedBox());
       },
     );
+
+    testWidgets('motion 인자만 기다리는 spin_grid의 on_finish는 held 동안에도 간다', (
+      tester,
+    ) async {
+      await pumpEffectful(tester, {
+        '_type': 'spin_grid',
+        'winner_index': 0,
+        'trigger': 'draw',
+        'duration': 100,
+        'steps': 5,
+        'on_finish': 'act',
+        '_motion': {'type': 'fade_in', 'duration': r'${a}'},
+        '_children': [
+          {'_type': 'text', 'value': 'p0'},
+          {'_type': 'text', 'value': 'p1'},
+        ],
+      });
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(_calls.where((c) => c == 'act'), hasLength(1));
+
+      _open('a', 100);
+      _open('act');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('payload만 기다리는 등록 ActionSpec이 한 번 보내는 dispatch는 held 동안에도 간다', (
+      tester,
+    ) async {
+      WidgetFactory.register(
+        'custom_once',
+        ActionSpec(
+          (context, props, children, dispatch) => _Once(dispatch: dispatch),
+        ),
+      );
+      addTearDown(WidgetFactory.reset);
+      await pumpEffectful(tester, {
+        '_type': 'custom_once',
+        '_on': {
+          'tap': {'do': 'act', 'event': r'${a}'},
+        },
+      });
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(_calls.where((c) => c == 'act'), hasLength(1));
+
+      _open('a', 'x');
+      _open('act');
+      await tester.pumpAndSettle();
+      expect(_calls.where((c) => c == 'act'), hasLength(1));
+    });
   });
+}
+
+/// A self-acting widget that dispatches `act` once, 50ms after it mounts.
+class _Once extends StatefulWidget {
+  const _Once({required this.dispatch});
+
+  final ActionSink? dispatch;
+
+  @override
+  State<_Once> createState() => _OnceState();
+}
+
+class _OnceState extends State<_Once> {
+  late final Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(
+      const Duration(milliseconds: 50),
+      () => widget.dispatch?.handle('act'),
+    );
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(width: 40, height: 40);
 }
 
 /// A self-acting widget that dispatches `act` on a timer, reading its sink

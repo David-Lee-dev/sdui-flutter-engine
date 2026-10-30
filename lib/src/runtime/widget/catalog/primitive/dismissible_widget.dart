@@ -6,7 +6,8 @@ import '../../../util/props_resolver.dart';
 /// `dismissible` — Builds a [Dismissible] that dispatches the configured dismissal action.
 ///
 /// A missing key uses a stable fallback, and dismissal remains functional when
-/// no dispatcher is available.
+/// no dispatcher is available (no action host, or props still waiting on an
+/// automatic skeleton).
 ///
 /// ```yaml
 /// _type: dismissible
