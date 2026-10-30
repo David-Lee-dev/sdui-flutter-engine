@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../util/props_resolver.dart';
@@ -18,6 +19,11 @@ import '../../../util/props_resolver.dart';
 /// the bottom as before 0.8.0, and `extend_body`/`extend_body_behind_app_bar`
 /// to opt an edge out.
 ///
+/// On Android the body's bottom is covered by an opaque strip of the scaffold
+/// background as tall as the real system bottom inset (see
+/// [_BottomInsetCover]), so content scrolled under the system bar is hidden
+/// there. `cover_bottom_inset` forces it on (`true`) or off (`false`).
+///
 /// ```yaml
 /// _type: scaffold
 /// background_color: example
@@ -32,6 +38,7 @@ import '../../../util/props_resolver.dart';
 /// - `extend_body_behind_app_bar` (`flag`, default `false`) — lets the body extend behind the app bar.
 /// - `app_bar_height` (`size` (scaled by EngineMetrics), default `kToolbarHeight`) — height reserved for the fixed app bar.
 /// - `inset_bottom` (`flag`, default `false`) — clears the bottom system inset around the body (the behavior before 0.8.0).
+/// - `cover_bottom_inset` (`flag`, default `null` = Android only) — covers the system bottom inset over the body with the scaffold background. Not applied with a `bottom_navigation_bar` slot or `inset_bottom`.
 ///
 /// Child: `_slots: { app_bar, body, bottom_navigation_bar, bottom_sheet, drawer, end_drawer, floating_action_button }`.
 final class ScaffoldWidget {
@@ -46,15 +53,31 @@ final class ScaffoldWidget {
     final extendBody = PropsResolver.flag(props['extend_body']) ?? false;
     final extendBodyBehindAppBar =
         PropsResolver.flag(props['extend_body_behind_app_bar']) ?? false;
+    final insetBottom = PropsResolver.flag(props['inset_bottom']) ?? false;
+    final backgroundColor = PropsResolver.color(props['background_color']);
+    final body = _body(
+      slots['body'],
+      extendBody,
+      extendBodyBehindAppBar,
+      insetBottom,
+    );
+    // The bottom slot lays itself over the inset, and a bottom SafeArea leaves
+    // nothing under it, so the cover applies only when the body reaches it.
+    final cover =
+        (PropsResolver.flag(props['cover_bottom_inset']) ??
+            defaultTargetPlatform == TargetPlatform.android) &&
+        slots['bottom_navigation_bar'] == null &&
+        !(insetBottom && !extendBody);
     return Scaffold(
-      backgroundColor: PropsResolver.color(props['background_color']),
+      backgroundColor: backgroundColor,
       appBar: appBar == null ? null : _appBar(context, props, appBar),
-      body: _body(
-        slots['body'],
-        extendBody,
-        extendBodyBehindAppBar,
-        PropsResolver.flag(props['inset_bottom']) ?? false,
-      ),
+      body: body == null || !cover
+          ? body
+          : _BottomInsetCover(
+              color:
+                  backgroundColor ?? Theme.of(context).scaffoldBackgroundColor,
+              child: body,
+            ),
       drawer: slots['drawer'],
       endDrawer: slots['end_drawer'],
       bottomSheet: slots['bottom_sheet'],
@@ -122,6 +145,57 @@ final class ScaffoldWidget {
       child: SafeArea(
         bottom: false,
         child: SizedBox(height: height, child: content),
+      ),
+    );
+  }
+}
+
+/// Paints an opaque [color] strip over the bottom of the scaffold body, as tall
+/// as the system bottom inset the body actually reaches, so content scrolled
+/// under the Android system bar is hidden while scroll ends still stop above
+/// the inset. The strip is purely visual and takes no hit tests.
+///
+/// The height is the smaller of the view's real inset and the body's
+/// [MediaQuery] bottom padding. The real inset comes from the [View], because an
+/// app shell may add a floating tab bar to the [MediaQuery] padding; the
+/// [MediaQuery] bound drops the strip when something above already consumed
+/// the inset (a parent `SafeArea`, an outer scaffold's bottom bar, a dialog) or
+/// the keyboard is up. The view's keyboard inset is subtracted as well, in case
+/// the platform keeps reporting the bar under the keyboard.
+///
+/// The tree keeps the same shape when the height changes, so the body keeps
+/// its state while the keyboard opens and closes. The [Stack] fills the body
+/// region and places the body at the top left with the loose constraints the
+/// [Scaffold] gives it, so the body lays out as without the strip.
+class _BottomInsetCover extends StatelessWidget {
+  const _BottomInsetCover({required this.color, required this.child});
+
+  final Color color;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final view = View.maybeOf(context);
+    final real = view == null
+        ? 0.0
+        : (view.padding.bottom - view.viewInsets.bottom) /
+              view.devicePixelRatio;
+    final reached = MediaQuery.maybePaddingOf(context)?.bottom ?? 0;
+    final height = real.clamp(0.0, reached);
+
+    return SizedBox.expand(
+      child: Stack(
+        alignment: Alignment.topLeft,
+        children: [
+          child,
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: height,
+            child: IgnorePointer(child: ColoredBox(color: color)),
+          ),
+        ],
       ),
     );
   }

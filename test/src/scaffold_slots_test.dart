@@ -225,6 +225,29 @@ void main() {
       expect(scrollPadding(tester), const EdgeInsets.fromLTRB(16, 16, 16, 50));
     });
 
+    testWidgets(
+      'Android: 띠는 실제 inset만 덮고 스크롤 끝 여백은 셸 padding을 그대로 더한다',
+      (tester) async {
+        tester.view.padding = const FakeViewPadding(bottom: 48 * 3);
+        addTearDown(tester.view.reset);
+        // 앱 셸이 떠 있는 탭 바 높이(80)를 하단 padding에 더한 상태.
+        await mount(tester, screen(filled), inset: 48 + 80);
+
+        expect(
+          scrollPadding(tester),
+          const EdgeInsets.fromLTRB(16, 16, 16, 144),
+        );
+        final strip = find.descendant(
+          of: find.byWidgetPredicate(
+            (w) => w is IgnorePointer && w.child is ColoredBox,
+          ),
+          matching: find.byType(ColoredBox),
+        );
+        expect(tester.getRect(strip), const Rect.fromLTRB(0, 552, 800, 600));
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+    );
+
     testWidgets('nested_scroll_view body의 list_view가 inset을 한 번 더한다', (
       tester,
     ) async {

@@ -13,6 +13,7 @@ Assigns named engine slots to the corresponding [Scaffold] regions. This primiti
 | `extend_body_behind_app_bar` | `flag` | — | `false` | Yes | lets the body extend behind the app bar. |
 | `app_bar_height` | `size` (scaled by EngineMetrics) | — | `kToolbarHeight` | Yes | height reserved for the fixed app bar. |
 | `inset_bottom` | `flag` | — | `false` | Yes | clears the bottom system inset around the body (the behavior before 0.8.0). |
+| `cover_bottom_inset` | `flag` | — | `null` (Android only) | Yes | paints an opaque strip of the scaffold background over the bottom of the body, as tall as the system bottom inset, so scrolled content does not show behind the system bar. `true` forces it on every platform, `false` turns it off. |
 | `_slots` | map of widget nodes | app_bar, body, bottom_navigation_bar, bottom_sheet, drawer, end_drawer, floating_action_button | `{}` | No | Named children consumed by this slot widget; positional children are rejected. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 
@@ -51,6 +52,7 @@ _slots:
 
 - Use `_slots` only; the validator rejects `_child` and `_children`.
 - Since 0.8.0 the body clears the top, left and right insets but not the bottom: vertical scroll views draw under the home indicator and add the inset after their last item. Put a fixed bottom CTA in the `bottom_navigation_bar` slot (Flutter then removes the body's bottom padding, so the scroll adds nothing) or wrap it in `safe_area` with `top: false`. Do not wrap the whole body in a `safe_area` that keeps `bottom: true`; it consumes the inset before the scroll view sees it. `inset_bottom: true` restores the old behavior. See [Bottom inset](../../concepts.md#bottom-inset).
+- Since 0.10.0, on Android the scaffold covers the system bottom inset with its background (`background_color`, else the theme's scaffold background): content scrolls under the system bar but is hidden there, and the scroll end still stops above it. The strip takes the real inset from the device view, not the `MediaQuery` padding, so a floating tab bar an app shell adds to the padding is not covered. It does not take taps. There is no strip with a `bottom_navigation_bar` slot (the slot lies over the inset), with `inset_bottom: true`, when something above the scaffold already consumed the bottom padding, or while the keyboard is up. Set `cover_bottom_inset: false` for a body that should show through the system bar (an edge-to-edge image), or `true` to cover the home indicator area on iOS too.
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
 - Return to the [widget catalog](../README.md).

@@ -180,5 +180,176 @@ void main() {
         expect(media.padding.bottom, 0);
       });
     });
+
+    group('cover_bottom_inset', () {
+      const body = Key('body');
+      final android = TargetPlatformVariant.only(TargetPlatform.android);
+      final ios = TargetPlatformVariant.only(TargetPlatform.iOS);
+
+      /// 실제 기기 하단 inset(View)과 앱 셸이 부풀린 MediaQuery를 따로 준다.
+      Future<void> pump(
+        WidgetTester tester, {
+        double real = 48,
+        double? media,
+        double keyboard = 0,
+        Map<String, Object?> props = const {},
+        Map<String, Widget> slots = const {},
+        Widget content = const SizedBox.expand(key: body),
+      }) {
+        tester.view.devicePixelRatio = 3;
+        tester.view.physicalSize = const Size(2400, 1800);
+        tester.view.padding = FakeViewPadding(bottom: real * 3);
+        tester.view.viewPadding = FakeViewPadding(bottom: real * 3);
+        tester.view.viewInsets = FakeViewPadding(bottom: keyboard * 3);
+        addTearDown(tester.view.reset);
+        final bottom = keyboard > 0 ? 0.0 : (media ?? real);
+        return tester.pumpWidget(
+          MaterialApp(
+            theme: ThemeData(scaffoldBackgroundColor: const Color(0xFF123456)),
+            home: Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  padding: EdgeInsets.only(bottom: bottom),
+                  viewPadding: EdgeInsets.only(bottom: bottom),
+                ),
+                child: EngineMetrics(
+                  scale: 1,
+                  child: Builder(
+                    builder: (context) => ScaffoldWidget.build(context, props, {
+                      'body': content,
+                      ...slots,
+                    }),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      Finder strip() => find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is IgnorePointer && w.child is ColoredBox,
+        ),
+        matching: find.byType(ColoredBox),
+      );
+
+      testWidgets('Android: body 하단에 실제 inset 높이의 불투명 띠를 그린다', (tester) async {
+        await pump(tester);
+
+        expect(tester.getRect(strip()), const Rect.fromLTRB(0, 552, 800, 600));
+        expect(tester.getRect(find.byKey(body)).bottom, 600);
+      }, variant: android);
+
+      testWidgets('iOS 기본값은 띠를 그리지 않는다', (tester) async {
+        await pump(tester);
+
+        expect(strip(), findsNothing);
+      }, variant: ios);
+
+      testWidgets('cover_bottom_inset: true면 iOS에서도 그린다', (tester) async {
+        await pump(tester, real: 34, props: const {'cover_bottom_inset': true});
+
+        expect(tester.getRect(strip()), const Rect.fromLTRB(0, 566, 800, 600));
+      }, variant: ios);
+
+      testWidgets('cover_bottom_inset: false면 Android에서도 그리지 않는다', (
+        tester,
+      ) async {
+        await pump(tester, props: const {'cover_bottom_inset': false});
+
+        expect(strip(), findsNothing);
+      }, variant: android);
+
+      testWidgets('앱 셸이 MediaQuery 하단 padding을 부풀려도 띠는 실제 inset 높이다', (
+        tester,
+      ) async {
+        await pump(tester, real: 48, media: 48 + 80);
+
+        expect(tester.getSize(strip()).height, 48);
+        final media = MediaQuery.of(tester.element(find.byKey(body)));
+        expect(media.padding.bottom, 128);
+      }, variant: android);
+
+      testWidgets('상위가 하단 padding을 이미 소비했으면 띠 높이가 0이다', (tester) async {
+        await pump(tester, real: 48, media: 0);
+
+        expect(tester.getSize(strip()).height, 0);
+      }, variant: android);
+
+      testWidgets('띠 색은 background_color, 없으면 테마 scaffold 배경이다', (
+        tester,
+      ) async {
+        await pump(tester);
+        expect(
+          tester.widget<ColoredBox>(strip()).color,
+          const Color(0xFF123456),
+        );
+
+        await pump(tester, props: const {'background_color': '#FFAA0000'});
+        expect(
+          tester.widget<ColoredBox>(strip()).color,
+          const Color(0xFFAA0000),
+        );
+      }, variant: android);
+
+      testWidgets('키보드가 올라오면 띠 높이가 0이고 body 상태는 유지된다', (tester) async {
+        final field = GlobalKey();
+        Widget content() => SizedBox.expand(
+          key: body,
+          child: Text('x', key: field),
+        );
+        await pump(tester, content: content());
+        final before = field.currentContext;
+
+        await pump(tester, keyboard: 300, content: content());
+
+        expect(tester.getSize(strip()).height, 0);
+        expect(field.currentContext, same(before));
+      }, variant: android);
+
+      testWidgets('bottom_navigation_bar 슬롯이 있으면 그리지 않는다', (tester) async {
+        await pump(
+          tester,
+          slots: const {'bottom_navigation_bar': SizedBox(height: 60)},
+        );
+
+        expect(strip(), findsNothing);
+      }, variant: android);
+
+      testWidgets('inset_bottom이면 그리지 않는다', (tester) async {
+        await pump(tester, props: const {'inset_bottom': true});
+
+        expect(strip(), findsNothing);
+      }, variant: android);
+
+      testWidgets('띠는 탭을 막지 않는다', (tester) async {
+        var taps = 0;
+        await pump(
+          tester,
+          content: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => taps++,
+            child: const SizedBox.expand(key: body),
+          ),
+        );
+
+        await tester.tapAt(const Offset(400, 590));
+        expect(taps, 1);
+      }, variant: android);
+
+      testWidgets('작은 body의 위치는 바뀌지 않는다', (tester) async {
+        await pump(
+          tester,
+          content: const SizedBox(key: body, width: 100, height: 40),
+        );
+
+        expect(
+          tester.getRect(find.byKey(body)),
+          const Rect.fromLTRB(0, 0, 100, 40),
+        );
+        expect(tester.getRect(strip()).bottom, 600);
+      }, variant: android);
+    });
   });
 }

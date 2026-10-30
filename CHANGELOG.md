@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.0
+
+**Behavior change (Android):** `scaffold` covers the system bottom inset over
+its body with an opaque strip of its background (`background_color`, else the
+theme's scaffold background), so content scrolled under the Android system
+bar is hidden there. Scroll views still end above the inset as in 0.8.0. See
+[scaffold](docs/widgets/navigation/scaffold.md#pitfalls--related).
+
+- The strip is as tall as the device's real bottom inset (read from the view,
+  minus the keyboard), capped by the body's `MediaQuery` bottom padding. A
+  floating tab bar an app shell adds to the padding is not covered, and a
+  scaffold whose bottom padding was already consumed above it gets no strip.
+- No strip with a `bottom_navigation_bar` slot, with `inset_bottom: true`, or
+  while the keyboard is up. The strip takes no taps and does not change the
+  body's layout or state.
+- New flag `cover_bottom_inset`: absent means Android only, `true` covers on
+  every platform (e.g. the iOS home indicator area), `false` turns it off for
+  bodies that should show through the system bar.
+
 ## 0.9.0
 
 Motion, morph, interaction and expression additions. Templates that use any
