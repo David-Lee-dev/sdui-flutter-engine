@@ -932,35 +932,9 @@ final class TemplateCompiler {
       final name = '${entry.key}';
       _rejectReserved(name, 'action name', path);
       // A command map or a list-of-batches flow — ActionCompiler validates it.
-      final action = ActionCompiler.compile(entry.value, '$path/_action/$name');
-      result[name] = Action(
-        steps: action.steps,
-        dedupe: action.dedupe,
-        writes: _writesOf(action),
-      );
+      result[name] = ActionCompiler.compile(entry.value, '$path/_action/$name');
     }
     return result;
-  }
-
-  /// The keys every `set` command in [action] commits, through all handler
-  /// flows. Other drivers' writes cannot be read from their parameters.
-  static Set<String> _writesOf(Action action) {
-    final keys = <String>{};
-    void flow(Flow? steps) {
-      if (steps == null) return;
-      for (final batch in steps) {
-        for (final command in batch) {
-          if (command.type == 'set') keys.addAll(command.params.keys);
-          flow(command.then);
-          command.onError?.values.forEach(flow);
-          flow(command.dismiss);
-          flow(command.always);
-        }
-      }
-    }
-
-    flow(action.steps);
-    return keys;
   }
 
   static Directive _wrapIf(UiNode node, Directive child) {

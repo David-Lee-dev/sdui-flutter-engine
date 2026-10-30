@@ -15,7 +15,7 @@ class ConditionObserver extends StatelessWidget {
   final ConditionDirective directive;
 
   Widget _resolve(BuildContext context, Environment env) {
-    if (NodeBuilder.isPending(context, env, directive.roots)) {
+    if (NodeBuilder.isPending(context, env, () => directive.roots)) {
       return _resolvePending(env);
     }
     for (final branch in directive.branches) {

@@ -8,7 +8,6 @@ import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import '../../log/engine_log.dart';
 import '../../environment/_base.dart';
-import '../../environment/scope/scope_store.dart';
 import '../expression_evaluator.dart';
 import '../../motion/_base.dart';
 import '../../motion/composite/presets.dart';
@@ -44,8 +43,12 @@ final class NodeBuilder {
   /// (and core key) for life, so revealing never remounts their subtree.
   static final _wasPending = Expando<GlobalKey>('NodeBuilder.wasPending');
 
-  /// Whether any node has been pending, so apps that never use an automatic
-  /// skeleton skip the [_wasPending] lookup.
+  /// Node elements that have been held: they keep their pointer guard for
+  /// life, so releasing it never remounts their subtree.
+  static final _wasHeld = Expando<bool>('NodeBuilder.wasHeld');
+
+  /// Whether any node has been pending or held, so apps that never use an
+  /// automatic skeleton skip the [_wasPending] and [_wasHeld] lookups.
   static bool _anyWasPending = false;
 
   static final _visualRoots = Expando<Set<String>>('NodeBuilder.visualRoots');
@@ -60,14 +63,14 @@ final class NodeBuilder {
   /// Whether a node at [context] reading [roots] shows as pending: only
   /// inside an automatic skeleton, so nodes elsewhere reading the same
   /// awaited key render as usual. While no key pends anywhere it returns
-  /// without walking the environment chain.
+  /// without computing [roots] or walking the environment chain.
   static bool isPending(
     BuildContext context,
     Environment env,
-    Set<String> roots,
+    Set<String> Function() roots,
   ) =>
-      ScopeStore.pendingKeys > 0 &&
-      env.pendState(roots) == PendState.pending &&
+      Environment.pendingKeys > 0 &&
+      env.pendState(roots()) == PendState.pending &&
       SkeletonClock.maybeOf(context) != null;
 
   static final _treeRoots = Expando<Set<String>>('NodeBuilder.treeRoots');
@@ -165,12 +168,15 @@ final class NodeBuilder {
   /// A [pending] node waits on an automatic skeleton: its props resolve
   /// leniently, text draws placeholder words in the real style, icons and
   /// images keep their declared box, events and motion stay off, and a leaf
-  /// paints as bones under a [SkeletonMask].
+  /// paints as bones under a [SkeletonMask]. A [held] node reads a waiting
+  /// key anywhere (props, event payloads or motion parameters) and ignores
+  /// pointers until it arrives; every pending node is held.
   static Widget assemble(
     BuildContext context,
     PlainDirective directive,
     Environment env, {
     bool isolate = false,
+    bool held = false,
     bool pending = false,
   }) {
     final resolved = pending
@@ -256,9 +262,14 @@ final class NodeBuilder {
       _anyWasPending = true;
       _wasPending[context] ??= GlobalKey();
     }
+    if (held) {
+      _anyWasPending = true;
+      _wasHeld[context] = true;
+    }
     final coreKey = _anyWasPending ? _wasPending[context] : null;
     final masked = coreKey != null && _isLeaf(directive);
-    if (decorated || masked) {
+    final guarded = _anyWasPending && _wasHeld[context] != null;
+    if (decorated || masked || guarded) {
       widget = _inside(widget, (child) {
         // A once-pending node keeps its core under one key so gaining the
         // decorations on reveal reparents it instead of remounting it.
@@ -278,12 +289,15 @@ final class NodeBuilder {
             box: box,
           );
         }
-        if (!masked) return child;
-        return SkeletonMask(
-          pending: pending,
-          circle: directive.type == 'icon',
-          child: child,
-        );
+        if (masked) {
+          child = SkeletonMask(
+            pending: pending,
+            circle: directive.type == 'icon',
+            child: child,
+          );
+        }
+        if (!guarded) return child;
+        return IgnorePointer(ignoring: held, child: child);
       });
     }
     final key = directive.key;

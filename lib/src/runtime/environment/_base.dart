@@ -14,6 +14,15 @@ abstract class Environment {
 
   Listenable? listen(Set<String> keys);
 
+  static int _pendingKeys = 0;
+
+  /// How many keys pend across every live layer; while it is zero nothing
+  /// waits on an automatic skeleton and pending checks return at once.
+  static int get pendingKeys => _pendingKeys;
+
+  /// Adjusts [pendingKeys] as a layer's keys start or stop pending.
+  static void countPending(int delta) => _pendingKeys += delta;
+
   /// Whether this layer's [name] still waits on an automatic skeleton.
   PendState pendingOf(String name) => PendState.none;
 

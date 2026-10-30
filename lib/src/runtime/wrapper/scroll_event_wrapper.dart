@@ -4,6 +4,7 @@ import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
 import 'event_timing_controller.dart';
 import 'scope/scope.dart';
+import 'scope/skeleton_scope.dart';
 
 /// Dispatches scrolling and threshold-entry events from the nearest descendant scrollable.
 ///
@@ -11,6 +12,8 @@ import 'scope/scope.dart';
 /// debounce) rate-limits it — e.g. `{ do: on_scroll, throttle: 16 }` caps updates
 /// per window, `{ do: on_settle, debounce: 150 }` fires only the final offset.
 /// `start_reached` / `end_reached` are edge-gated (once per zone entry).
+/// Nothing fires while the scrollable lays out automatic-skeleton stand-in
+/// rows ([SkeletonRow]).
 class ScrollEventWrapper extends StatefulWidget {
   const ScrollEventWrapper({
     super.key,
@@ -74,6 +77,7 @@ class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         if (notification.depth != 0) return false;
+        if (SkeletonRow.holdsScroll(notification)) return false;
         final metrics = notification.metrics;
         final scrollAction = widget.on['scroll'];
         if (notification is ScrollUpdateNotification && scrollAction != null) {

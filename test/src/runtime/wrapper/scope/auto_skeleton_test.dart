@@ -535,7 +535,7 @@ void main() {
       expect(tester.getSize(find.byType(Container)), const Size(60, 40));
     });
 
-    testWidgets('pending 노드는 tap·motion을 걸지 않고, payload만 읽는 노드는 pending 아님', (
+    testWidgets('pending 노드는 tap·motion을 걸지 않고, payload만 읽는 노드는 그려지되 입력은 막힌다', (
       tester,
     ) async {
       await _pump(
@@ -582,6 +582,10 @@ void main() {
         find.ancestor(of: payload, matching: find.byType(InteractionWrapper)),
         findsOneWidget,
       );
+      await tester.tap(payload, warnIfMissed: false);
+      await tester.pump();
+      expect(_calls, isNot(contains('go')));
+      final payloadCore = tester.element(find.byType(RichText).last);
 
       _open('a', 'ready');
       await tester.pumpAndSettle();
@@ -592,7 +596,19 @@ void main() {
       );
       await tester.tap(ready);
       await tester.pump();
-      expect(_calls, contains('go'));
+      expect(_calls.where((c) => c == 'go'), hasLength(1));
+      _open('go');
+      await tester.pumpAndSettle();
+
+      // The payload node fires once its payload key arrives, on the same core.
+      expect(
+        identical(tester.element(find.byType(RichText).last), payloadCore),
+        isTrue,
+      );
+      _gates.remove('go');
+      await tester.tap(payload);
+      await tester.pump();
+      expect(_calls.where((c) => c == 'go'), hasLength(2));
       _open('go');
       await tester.pumpAndSettle();
     });
@@ -788,6 +804,93 @@ void main() {
       expect(find.text('n1'), findsNWidgets(2));
     });
 
+    testWidgets('placeholder 행이 있는 동안 감싼 스크롤의 end_reached·scroll은 발화하지 않는다', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'items': null},
+          extra: {
+            'more': {'_type': 'gate', 'tag': 'more'},
+            'moved': {'_type': 'gate', 'tag': 'moved'},
+          },
+          children: [
+            {
+              '_type': 'sizedbox',
+              'height': 400,
+              '_on': {'end_reached': 'more', 'scroll': 'moved'},
+              '_children': [rows('list', count: 20)],
+            },
+          ],
+        ),
+      );
+      ScrollPosition position() =>
+          tester.state<ScrollableState>(find.byType(Scrollable)).position;
+      position().jumpTo(position().maxScrollExtent);
+      await tester.pump();
+      expect(_calls, ['items']);
+
+      _open('items', items(20));
+      await tester.pumpAndSettle();
+      position().jumpTo(0);
+      await tester.pump();
+      position().jumpTo(position().maxScrollExtent);
+      await tester.pump();
+      expect(_calls, containsAll(['more', 'moved']));
+      _open('more');
+      _open('moved');
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('_skeleton 없는 lazy list는 viewport를 채우는 유한 행(최대 20)', (
+      tester,
+    ) async {
+      int? childCount() =>
+          (tester.widget<ListView>(find.byType(ListView)).childrenDelegate
+                  as SliverChildBuilderDelegate)
+              .childCount;
+      await _pump(
+        tester,
+        _screen(
+          state: {'items': null},
+          children: [
+            {
+              '_type': 'sizedbox',
+              'height': 400,
+              '_children': [rows('list')],
+            },
+          ],
+        ),
+      );
+      await tester.pump();
+      expect(childCount(), (400 / 50).ceil());
+      _open('items', items(2));
+      await tester.pumpAndSettle();
+
+      _gates.clear();
+      await tester.pumpWidget(const SizedBox());
+      await _pump(
+        tester,
+        _screen(
+          state: {'items': null},
+          children: [
+            {
+              '_type': 'sizedbox',
+              'height': 400,
+              '_children': [
+                {...rows('list'), 'height': 10},
+              ],
+            },
+          ],
+        ),
+      );
+      await tester.pump();
+      expect(childCount(), 20);
+      _open('items', items(2));
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('placeholder 행 안의 중첩 scope는 발화하지 않는다', (tester) async {
       await _pump(
         tester,
@@ -864,6 +967,42 @@ void main() {
 
       _open('p', const {'icon': 'home'});
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('pending 내용과 placeholder 행은 접근성 트리에서 빠지고 공개되면 돌아온다', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null, 'items': null},
+          children: [
+            {'_type': 'text', 'value': r'${a}'},
+            {
+              '_type': 'text',
+              'value': 'row label',
+              '_loop': {
+                '_in': r'${items}',
+                '_key': r'${item.id}',
+                '_skeleton': 2,
+              },
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      expect(find.bySemanticsLabel(RegExp('000000')), findsNothing);
+      expect(find.bySemanticsLabel('row label'), findsNothing);
+
+      _open('a', 'ready');
+      _open('items', [
+        {'id': '0'},
+      ]);
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('ready'), findsOneWidget);
+      expect(find.bySemanticsLabel('row label'), findsOneWidget);
+      semantics.dispose();
     });
 
     testWidgets('reduced motion이면 shimmer 없는 정적 bone, 공개는 즉시', (tester) async {
@@ -1080,6 +1219,49 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('조상을 기다리는 scope는 앱 복귀 remount를 mount 전에 발화하지 않는다', (
+      tester,
+    ) async {
+      await _pump(tester, {
+        '_type': 'column',
+        '_scope': {
+          '_state': {'a': null},
+          '_action': {'load': _load('outer', 'a')},
+          '_lifecycle': [
+            {'on': 'mount', 'action': 'load'},
+          ],
+          '_skeleton': 'auto',
+        },
+        '_children': [
+          {
+            '_type': 'text',
+            'value': 'inner',
+            '_scope': {
+              '_action': {
+                'go': {'_type': 'gate', 'tag': 'inner'},
+                'again': {'_type': 'gate', 'tag': 'again'},
+              },
+              '_lifecycle': [
+                {'on': 'mount', 'action': 'go'},
+                {'on': 'remount', 'action': 'again'},
+              ],
+            },
+          },
+        ],
+      });
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(_calls, ['outer']);
+
+      _open('outer', 1);
+      await tester.pump();
+      await tester.pump();
+      expect(_calls, ['outer', 'inner']);
+      _open('inner');
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('보이지 않는 scope도 mount 시작과 함께 watchdog를 잰다', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -1145,6 +1327,156 @@ void main() {
       _open('outer');
       _open('inner');
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('auto scope와 placeholder 행을 내리면 전역 pending 수가 원래대로 돌아온다', (
+      tester,
+    ) async {
+      final base = Environment.pendingKeys;
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null, 'items': null},
+          children: [
+            {'_type': 'text', 'value': r'${a}'},
+            {
+              '_type': 'text',
+              'value': r'${item.name}',
+              '_loop': {
+                '_in': r'${items}',
+                '_key': r'${item.id}',
+                '_skeleton': 3,
+              },
+            },
+          ],
+        ),
+      );
+      expect(find.byType(SkeletonRow), findsNWidgets(3));
+      expect(Environment.pendingKeys, greaterThan(base));
+
+      await tester.pumpWidget(const SizedBox());
+      expect(Environment.pendingKeys, base);
+    });
+
+    testWidgets(
+      '이벤트가 있는 비-leaf pending 노드와 parent-data 노드는 공개 때 자손 State를 지킨다',
+      (tester) async {
+        await _pump(
+          tester,
+          _screen(
+            state: {'a': null, 'b': null},
+            extra: {
+              'go': {'_type': 'gate', 'tag': 'go'},
+            },
+            children: [
+              {
+                '_type': 'sizedbox',
+                'width': r'${a}',
+                '_on': {'tap': 'go'},
+                '_children': [
+                  {'_type': 'text', 'value': 'inside'},
+                ],
+              },
+              {
+                '_type': 'row',
+                '_children': [
+                  {
+                    '_type': 'expanded',
+                    'flex': r'${b}',
+                    '_on': {'tap': 'go'},
+                    '_children': [
+                      {'_type': 'text', 'value': 'flexed'},
+                    ],
+                  },
+                ],
+              },
+            ],
+          ),
+        );
+        await tester.pump(_grace);
+        Element element(String text) => tester.element(
+          find.descendant(of: find.text(text), matching: find.byType(RichText)),
+        );
+        final inside = element('inside');
+        final flexed = element('flexed');
+
+        _open('a', 120);
+        _open('b', 2);
+        await tester.pumpAndSettle();
+        expect(identical(element('inside'), inside), isTrue);
+        expect(identical(element('flexed'), flexed), isTrue);
+        expect(
+          find.ancestor(
+            of: find.text('flexed'),
+            matching: find.byType(InteractionWrapper),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'Scope.didUpdateWidget의 template 재시드(syncState)는 pending을 풀지 않는다',
+      (tester) async {
+        Map<String, Object?> screen(Object? seed) => _screen(
+          state: {'a': seed},
+          children: [
+            {'_type': 'text', 'value': r'${a}'},
+          ],
+        );
+        await _pump(tester, screen(null));
+        final env = _envAt(tester, find.byType(Text));
+        expect(env.pendingOf('a'), PendState.pending);
+
+        await _pump(tester, screen('reseeded'));
+        await tester.pump(_grace);
+        expect(identical(_envAt(tester, find.byType(Text)), env), isTrue);
+        expect(env.read('a'), 'reseeded');
+        expect(env.pendingOf('a'), PendState.pending);
+        expect(_mask(tester, find.byType(Text)), paints..rrect());
+
+        _open('a', 'loaded');
+        await tester.pumpAndSettle();
+        expect(env.pendingOf('a'), PendState.settled);
+        expect(find.text('loaded'), findsOneWidget);
+      },
+    );
+
+    testWidgets('owner 키를 함께 기다리는 auto scope 둘은 함께 공개된다', (tester) async {
+      Map<String, Object?> section(String label) => {
+        '_type': 'column',
+        '_scope': {
+          '_lifecycle': [
+            {'on': 'mount', 'action': 'load_partners'},
+          ],
+          '_skeleton': 'auto',
+        },
+        '_children': [
+          {'_type': 'text', 'value': '$label=\${partners}'},
+        ],
+      };
+      await _pump(tester, {
+        '_type': 'column',
+        '_scope': {
+          '_state': {'partners': null},
+          '_action': {'load_partners': _load('p', 'partners')},
+        },
+        '_children': [section('S1'), section('S2')],
+      });
+      await tester.pump(_grace);
+      final s1 = find.textContaining('S1=');
+      final s2 = find.textContaining('S2=');
+      expect(_mask(tester, s1), paints..rrect());
+      expect(_mask(tester, s2), paints..rrect());
+
+      _open('p', 'x');
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('S1=x'), findsOneWidget);
+      expect(find.text('S2=x'), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(_mask(tester, s1), isNot(paints..rrect()));
+      expect(_mask(tester, s2), isNot(paints..rrect()));
     });
 
     testWidgets('auto scope 밖에서 같은 키를 읽는 노드는 pending으로 그리지 않는다', (

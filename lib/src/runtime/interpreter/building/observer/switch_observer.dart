@@ -31,7 +31,7 @@ class SwitchObserver extends StatelessWidget {
   }
 
   Widget _resolve(BuildContext context, Environment env) {
-    if (NodeBuilder.isPending(context, env, directive.roots)) {
+    if (NodeBuilder.isPending(context, env, () => directive.roots)) {
       final branch = _pendingMatch(env);
       return branch == null
           ? const SizedBox.shrink()

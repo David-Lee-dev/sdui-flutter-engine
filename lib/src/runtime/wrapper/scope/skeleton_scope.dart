@@ -267,13 +267,71 @@ class _ClockScope extends InheritedWidget {
   bool updateShouldNotify(_ClockScope oldWidget) => clock != oldWidget.clock;
 }
 
+/// One stand-in loop row of an automatic skeleton.
+///
+/// It ignores pointers and is hidden from accessibility. While any stand-in
+/// row is mounted in a scroll view, that scroll view's scroll events are held
+/// (see [holdsScroll]), so paging never runs over placeholders.
+class SkeletonRow extends StatefulWidget {
+  const SkeletonRow({super.key, required this.child});
+
+  final Widget child;
+
+  /// How many stand-in rows are mounted, so scroll views skip the lookup
+  /// while there are none.
+  static int _live = 0;
+
+  static final _rows = Expando<int>('SkeletonRow.rows');
+
+  /// Whether stand-in rows are mounted in the scroll view that sent
+  /// [notification].
+  static bool holdsScroll(ScrollNotification notification) {
+    if (_live == 0) return false;
+    final scrollable = notification.context
+        ?.findAncestorStateOfType<ScrollableState>();
+    return scrollable != null && (_rows[scrollable] ?? 0) > 0;
+  }
+
+  @override
+  State<SkeletonRow> createState() => _SkeletonRowState();
+}
+
+class _SkeletonRowState extends State<SkeletonRow> {
+  ScrollableState? _scrollable;
+
+  @override
+  void initState() {
+    super.initState();
+    SkeletonRow._live++;
+    final scrollable = _scrollable = context
+        .findAncestorStateOfType<ScrollableState>();
+    if (scrollable != null) {
+      SkeletonRow._rows[scrollable] = (SkeletonRow._rows[scrollable] ?? 0) + 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    SkeletonRow._live--;
+    final scrollable = _scrollable;
+    if (scrollable != null) {
+      SkeletonRow._rows[scrollable] = SkeletonRow._rows[scrollable]! - 1;
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      IgnorePointer(child: ExcludeSemantics(child: widget.child));
+}
+
 /// Shows one node of an automatic skeleton as bones while it is [pending].
 ///
 /// The node lays out with its real geometry throughout; while pending only
 /// bones are painted — one per text line, or the whole box (a circle when
-/// [circle]) — and hit testing is off. Bones wait for the clock's grace;
-/// revealing after it fades them out over [fade] above the real content, on
-/// the same element tree. Under reduced motion bones are static and reveal
+/// [circle]) — and hit testing and semantics are off. Bones wait for the
+/// clock's grace; revealing after it fades them out over [fade] above the
+/// real content, on the same element tree. Under reduced motion bones are static and reveal
 /// at once.
 class SkeletonMask extends StatefulWidget {
   const SkeletonMask({
@@ -352,13 +410,16 @@ class _SkeletonMaskState extends State<SkeletonMask>
   }
 
   @override
-  Widget build(BuildContext context) => _Bones(
-    pending: widget.pending,
-    circle: widget.circle,
-    opacity: _bones,
-    shimmer: _still ? null : _clock?.shimmer,
-    alignTo: _clock,
-    child: widget.child,
+  Widget build(BuildContext context) => ExcludeSemantics(
+    excluding: widget.pending,
+    child: _Bones(
+      pending: widget.pending,
+      circle: widget.circle,
+      opacity: _bones,
+      shimmer: _still ? null : _clock?.shimmer,
+      alignTo: _clock,
+      child: widget.child,
+    ),
   );
 }
 

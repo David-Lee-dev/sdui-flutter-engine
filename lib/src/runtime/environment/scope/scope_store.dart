@@ -21,14 +21,11 @@ final class ScopeStore {
     for (final key in _snapshot.keys) {
       _pend[key] = PendState.pending;
     }
-    _pendingKeys += _pend.length;
+    Environment.countPending(_pend.length);
   }
 
-  static int _pendingKeys = 0;
-
-  /// How many keys pend across every live store; while it is zero nothing
-  /// waits on an automatic skeleton and pending checks return at once.
-  static int get pendingKeys => _pendingKeys;
+  /// [Environment.pendingKeys], which every store keeps.
+  static int get pendingKeys => Environment.pendingKeys;
 
   ScopeSnapshot _snapshot;
   final CommitScheduler _scheduler;
@@ -101,7 +98,7 @@ final class ScopeStore {
     for (final key in marked) {
       _pend[key] = PendState.pending;
     }
-    _pendingKeys += marked.length;
+    Environment.countPending(marked.length);
     _scheduler.schedule(marked, _deliver);
   }
 
@@ -120,7 +117,7 @@ final class ScopeStore {
     for (final key in released) {
       _pend[key] = PendState.settled;
     }
-    _pendingKeys -= released.length;
+    Environment.countPending(-released.length);
     return released;
   }
 

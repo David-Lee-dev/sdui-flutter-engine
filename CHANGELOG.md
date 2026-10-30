@@ -13,6 +13,15 @@
   other value is a compile error. Engines up to 0.13 reject `auto`, so gate
   migrated templates by app version. See
   [Automatic skeleton](docs/lifecycle.md#automatic-skeleton).
+  While a node's props, event payloads or motion parameters read a waiting
+  key it ignores pointers; waiting content and stand-in rows are hidden from
+  accessibility; a scroll view laying out stand-in rows fires no `scroll`,
+  `start_reached` or `end_reached`; and a lazy wrap without `_skeleton` lays
+  out the rows that fill its viewport, at most 20.
+- `_loop._skeleton` is now validated: a value that is not a positive integer
+  fails to compile.
+- A scope's `remount` on return from background no longer fires before its
+  lifecycle has started (a scope waiting on an outer automatic skeleton).
 
 ## 0.13.0
 

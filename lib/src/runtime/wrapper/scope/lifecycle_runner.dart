@@ -69,8 +69,10 @@ final class LifecycleRunner {
   }
 
   /// Forwarded from the owner's [WidgetsBindingObserver]: returning from
-  /// background fires `remount`.
+  /// background fires `remount`. Ignored until the hooks have started, so a
+  /// scope still waiting to mount never remounts first.
   void appLifecycleChanged(AppLifecycleState state) {
+    if (!_started) return;
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       _inBackground = true;
