@@ -46,29 +46,37 @@ Future<(ValueNotifier<List<Page<void>>>, NavigatorState)> _pump(
   WidgetTester tester,
   Widget source, {
   bool reduced = false,
+  ValueNotifier<MediaQueryData>? media,
 }) async {
   final pages = ValueNotifier<List<Page<void>>>([_page('source', source)]);
   addTearDown(pages.dispose);
   final key = GlobalKey<NavigatorState>();
   final controller = HeroController();
   addTearDown(controller.dispose);
+  final navigator = ValueListenableBuilder<List<Page<void>>>(
+    valueListenable: pages,
+    builder: (_, value, _) => HeroControllerScope(
+      controller: controller,
+      child: Navigator(
+        key: key,
+        pages: value,
+        onDidRemovePage: (page) => pages.value = [...pages.value]..remove(page),
+      ),
+    ),
+  );
   await tester.pumpWidget(
     MaterialApp(
-      home: MediaQuery(
-        data: MediaQueryData(disableAnimations: reduced),
-        child: ValueListenableBuilder<List<Page<void>>>(
-          valueListenable: pages,
-          builder: (_, value, _) => HeroControllerScope(
-            controller: controller,
-            child: Navigator(
-              key: key,
-              pages: value,
-              onDidRemovePage: (page) =>
-                  pages.value = [...pages.value]..remove(page),
+      home: media == null
+          ? MediaQuery(
+              data: MediaQueryData(disableAnimations: reduced),
+              child: navigator,
+            )
+          : ValueListenableBuilder<MediaQueryData>(
+              valueListenable: media,
+              builder: (_, data, child) =>
+                  MediaQuery(data: data, child: child!),
+              child: navigator,
             ),
-          ),
-        ),
-      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -660,6 +668,34 @@ void main() {
       final (pages, _) = await _pump(tester, _box(), reduced: true);
       await _push(tester, pages);
       expect(_snapshot, findsOneWidget);
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'inset and padding changes do not rebuild; reduced motion still disables',
+    (tester) async {
+      final media = ValueNotifier(const MediaQueryData());
+      addTearDown(media.dispose);
+      var rebuilds = 0;
+      debugOnRebuildDirtyWidget = (element, _) {
+        if (element.widget is SharedElement) rebuilds++;
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      final (pages, _) = await _pump(tester, _box(), media: media);
+      final before = rebuilds;
+      for (var i = 1; i <= 5; i++) {
+        media.value = media.value.copyWith(
+          viewInsets: EdgeInsets.only(bottom: i * 40.0),
+          padding: EdgeInsets.only(bottom: 34.0 - i),
+        );
+        await tester.pump();
+      }
+      expect(rebuilds, before);
+      media.value = media.value.copyWith(disableAnimations: true);
+      await tester.pump();
+      await _push(tester, pages);
+      expect(_snapshots, findsNothing);
       await tester.pumpAndSettle();
     },
   );

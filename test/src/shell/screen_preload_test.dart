@@ -455,6 +455,54 @@ void main() {
     });
   }
 
+  testWidgets('C27: inset and padding changes do not rebuild the engine page', (
+    tester,
+  ) async {
+    await _init(_Loader(), preload: ['detail'], type: 'fade');
+    var built = 0;
+    final router = Sdui.router(
+      routes: [
+        GoRoute(
+          path: '/app/:screenId',
+          pageBuilder: (context, state) {
+            built++;
+            return Sdui.page(
+              context,
+              state,
+              screenId: state.pathParameters['screenId']!,
+              child: SduiScreenPage(
+                screenId: state.pathParameters['screenId']!,
+                loader: Sdui.screenLoader,
+              ),
+            );
+          },
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    final media = ValueNotifier(const MediaQueryData());
+    addTearDown(media.dispose);
+    await tester.pumpWidget(
+      ValueListenableBuilder<MediaQueryData>(
+        valueListenable: media,
+        builder: (_, data, child) => MediaQuery(data: data, child: child!),
+        child: MaterialApp.router(routerConfig: router),
+      ),
+    );
+    router.go('/app/detail');
+    await tester.pumpAndSettle();
+    expect(find.text('detail'), findsOneWidget);
+    final before = built;
+    for (var i = 1; i <= 5; i++) {
+      media.value = media.value.copyWith(
+        viewInsets: EdgeInsets.only(bottom: i * 40.0),
+        padding: EdgeInsets.only(bottom: 34.0 - i),
+      );
+      await tester.pump();
+    }
+    expect(built, before);
+  });
+
   testWidgets('C10: an invalid declaration is reported once per load', (
     tester,
   ) async {

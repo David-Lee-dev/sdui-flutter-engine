@@ -228,7 +228,7 @@ class _SpringMorphScopeState extends State<SpringMorphScope>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final reduce = MediaQuery.maybeOf(context)?.disableAnimations == true;
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) == true;
     final target = _target;
     if (reduce && !_reduceMotion && _started && target != null) {
       // Same as the tween path: drop the pending start and the simulation,

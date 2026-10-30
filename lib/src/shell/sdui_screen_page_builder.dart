@@ -98,7 +98,7 @@ _Decision _decide(BuildContext context, String screenId) {
 
   final reduced =
       style.respectReducedMotion &&
-      MediaQuery.maybeOf(context)?.disableAnimations == true;
+      MediaQuery.maybeDisableAnimationsOf(context) == true;
   final spec = reduced
       ? PageTransitionSpec(type: 'none')
       : screen?.transition ?? PageTransitionSpec(type: style.defaultType);

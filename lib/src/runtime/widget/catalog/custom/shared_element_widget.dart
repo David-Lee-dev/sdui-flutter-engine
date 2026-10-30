@@ -133,7 +133,7 @@ class _SharedElementState extends State<SharedElement> {
         context.findAncestorWidgetOfExactType<VisitObserver>()?.surfaceType !=
             'modal' &&
         !(EnginePresentation.value.transitions.respectReducedMotion &&
-            MediaQuery.maybeOf(context)?.disableAnimations == true);
+            MediaQuery.maybeDisableAnimationsOf(context) == true);
     _transition = SharedTransitionScope.of(context);
     final navigator = _navigator;
     _registry = navigator == null

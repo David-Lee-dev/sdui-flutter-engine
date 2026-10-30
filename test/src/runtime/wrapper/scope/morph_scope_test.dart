@@ -612,6 +612,53 @@ void main() {
       expect(tester.binding.hasScheduledFrame, isFalse);
     });
 
+    testWidgets('inset·padding만 바뀌면 다시 빌드하지 않고 reduced motion 전환에는 반응한다', (
+      tester,
+    ) async {
+      final media = ValueNotifier(const MediaQueryData());
+      addTearDown(media.dispose);
+      var rebuilds = 0;
+      debugOnRebuildDirtyWidget = (element, _) {
+        if (element.widget is SpringMorphScope) rebuilds++;
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      await tester.pumpWidget(
+        ValueListenableBuilder<MediaQueryData>(
+          valueListenable: media,
+          builder: (_, data, child) => MediaQuery(data: data, child: child!),
+          child: const Directionality(
+            textDirection: TextDirection.ltr,
+            child: EngineRunner(
+              template: {
+                '_type': 'text',
+                '_morph': {
+                  '_from': 0,
+                  '_to': 100,
+                  '_as': 'n',
+                  '_spring': 'spatial_slow',
+                },
+                'value': r'${n}',
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      final before = rebuilds;
+      for (var i = 1; i <= 5; i++) {
+        media.value = media.value.copyWith(
+          viewInsets: EdgeInsets.only(bottom: i * 40.0),
+          padding: EdgeInsets.only(bottom: 34.0 - i),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(rebuilds, before);
+      expect(value(tester), inExclusiveRange(0, 100));
+      media.value = media.value.copyWith(disableAnimations: true);
+      await tester.pump();
+      expect(value(tester), 100);
+    });
+
     testWidgets('_delay 동안 from에 머문 뒤 시뮬레이션을 시작한다', (tester) async {
       final sim = SpringSimulation(describe(100, 0.5), 0, 100, 0);
       await tester.pumpWidget(
