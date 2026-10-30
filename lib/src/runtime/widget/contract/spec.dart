@@ -6,19 +6,34 @@ import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'action_sink.dart';
 import 'child_builder.dart';
 
+/// How a node of a spec draws while it waits on an automatic skeleton
+/// (`_skeleton: auto`).
+///
+/// - [real] builds the widget with leniently resolved props under the bones.
+/// - [text] does the same with its `value` replaced by placeholder words.
+/// - [circle] draws a `size` square as a round bone without building it.
+/// - [box] draws its declared `width`/`height` without building it — for a
+///   spec that would load or report something from its props (media), and
+///   always drawn as a leaf.
+enum SkeletonForm { real, text, circle, box }
+
 /// Describes how the engine builds a widget and validates its layout protocol.
 ///
 /// [produces] identifies the node's own protocol. A null [childProtocol] opts
 /// out of uniform child validation for widgets with mixed child roles.
+/// [skeleton] is how the node draws while it waits on an automatic skeleton.
 sealed class WidgetSpec {
   const WidgetSpec({
     this.produces = LayoutProtocol.box,
     this.childProtocol = LayoutProtocol.box,
+    this.skeleton = SkeletonForm.real,
   });
 
   final LayoutProtocol produces;
 
   final LayoutProtocol? childProtocol;
+
+  final SkeletonForm skeleton;
 }
 
 /// Builds a widget from resolved props and positional children.
@@ -31,7 +46,12 @@ typedef EagerBuild =
 
 /// Describes a widget built from an already-built positional child list.
 final class EagerSpec extends WidgetSpec {
-  const EagerSpec(this.build, {super.produces, super.childProtocol});
+  const EagerSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.skeleton,
+  });
 
   final EagerBuild build;
 }
@@ -46,7 +66,12 @@ typedef SlotBuild =
 
 /// Describes a widget built from already-built children addressed by slot name.
 final class SlotSpec extends WidgetSpec {
-  const SlotSpec(this.build, {super.produces, super.childProtocol});
+  const SlotSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.skeleton,
+  });
 
   final SlotBuild build;
 }
@@ -62,7 +87,12 @@ typedef BuilderBuild =
 
 /// Describes a widget that requests children lazily through [ChildBuilder].
 final class BuilderSpec extends WidgetSpec {
-  const BuilderSpec(this.build, {super.produces, super.childProtocol});
+  const BuilderSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.skeleton,
+  });
 
   final BuilderBuild build;
 }
@@ -79,7 +109,12 @@ typedef BoundBuild =
 
 /// Describes a controlled widget supplied with live value and event callbacks.
 final class BoundSpec extends WidgetSpec {
-  const BoundSpec(this.build, {super.produces, super.childProtocol});
+  const BoundSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.skeleton,
+  });
 
   final BoundBuild build;
 }
@@ -95,7 +130,12 @@ typedef ActionBuild =
 
 /// Describes a widget that can dispatch its own gesture-driven actions.
 final class ActionSpec extends WidgetSpec {
-  const ActionSpec(this.build, {super.produces, super.childProtocol});
+  const ActionSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.skeleton,
+  });
 
   final ActionBuild build;
 }

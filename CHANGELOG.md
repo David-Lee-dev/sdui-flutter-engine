@@ -47,6 +47,12 @@
   included, so it cannot dismiss, page, refresh or report input before its
   data arrives; a waiting `video` draws its box and does not load until it
   reveals.
+- Added `WidgetSpec.skeleton` (`SkeletonForm.real`, `text`, `circle`,
+  `box`; default `real`): how a node of the spec draws while it waits on an
+  automatic skeleton. `text`, `icon`, `image` and `video` declare theirs; an
+  app-registered spec keeps building for real under the bones unless it opts
+  into `box`. A waiting `icon`, `image` or `video` no longer logs a debug
+  unknown-props warning for props its stand-in does not read.
 - `_loop._skeleton` is now validated: a value that is not a positive integer
   fails to compile.
 - A scope's `remount` on return from background no longer fires before its

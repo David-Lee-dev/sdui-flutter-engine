@@ -80,6 +80,7 @@ export 'src/runtime/widget/contract/spec.dart'
         BuilderSpec,
         EagerBuild,
         EagerSpec,
+        SkeletonForm,
         SlotBuild,
         SlotSpec,
         WidgetSpec;

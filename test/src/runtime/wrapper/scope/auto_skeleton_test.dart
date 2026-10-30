@@ -16,6 +16,7 @@ import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/observer/plain_observer.dart';
 import 'package:sdui_engine/src/runtime/log/engine_log.dart';
 import 'package:sdui_engine/src/runtime/telemetry/telemetry.dart';
+import 'package:sdui_engine/src/runtime/widget/factory.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/interaction.dart';
 import 'package:sdui_engine/src/runtime/wrapper/motion.dart';
@@ -2762,6 +2763,132 @@ void main() {
       _open('a', true);
       await tester.pumpAndSettle();
       expect(player(), findsOneWidget);
+    });
+  });
+
+  group('auto skeleton — default safety', () {
+    testWidgets('held 노드의 decoration 층은 action host를 못 보고, 자식과 공개 뒤엔 본다', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          extra: {
+            'go': {'_type': 'gate', 'tag': 'go'},
+            'inner': {'_type': 'gate', 'tag': 'inner'},
+          },
+          children: [
+            {
+              '_type': 'container',
+              'width': 200,
+              'height': 100,
+              '_on': {
+                'tap': {'do': 'go', 'event': r'${a}'},
+              },
+              '_children': [
+                {
+                  '_type': 'text',
+                  'value': 'inner',
+                  '_on': {'tap': 'inner'},
+                },
+              ],
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      // Where a new event layer of the container would resolve its sink.
+      Element decoration() => tester.element(
+        find.byWidgetPredicate(
+          (w) => w is InteractionWrapper && w.on['tap'] == 'go',
+        ),
+      );
+      final child = tester.element(find.byType(RichText));
+      expect(Scope.actionHost(decoration()), isNull);
+      expect(Scope.actionHost(child), isNotNull);
+      await tester.tap(find.text('inner'));
+      await tester.pump();
+      expect(_calls, contains('inner'));
+
+      _open('a', 'x');
+      _open('inner');
+      await tester.pumpAndSettle();
+      expect(Scope.actionHost(decoration()), same(Scope.actionHost(child)));
+      expect(identical(tester.element(find.byType(RichText)), child), isTrue);
+    });
+
+    testWidgets('stand-in으로 그린 pending icon·image는 읽지 않은 prop 경고를 내지 않는다', (
+      tester,
+    ) async {
+      final lines = <String>[];
+      EngineLog.configure(output: lines.add);
+      addTearDown(() => EngineLog.configure(output: debugPrint));
+      await _pump(
+        tester,
+        _screen(
+          state: {'p': null},
+          children: [
+            {'_type': 'icon', 'name': r'${p.icon}', 'size': 32},
+            {
+              '_type': 'image',
+              'src': r'${p.image}',
+              'width': 120,
+              'height': 80,
+            },
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      expect(find.byType(SkeletonMask), findsNWidgets(2));
+      expect(lines.where((l) => l.contains('ignored prop')), isEmpty);
+      _open('p', const {'icon': 'home'});
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('form 없이 등록한 leaf spec은 실제로 빌드되어 bone 아래서 입력을 받지 않는다', (
+      tester,
+    ) async {
+      final taps = <Object?>[];
+      WidgetFactory.register(
+        'custom_leaf',
+        EagerSpec(
+          (context, props, children) => GestureDetector(
+            onTap: () => taps.add(props['label']),
+            child: SizedBox(
+              width: 80,
+              height: 40,
+              child: Text('${props['label']}'),
+            ),
+          ),
+        ),
+      );
+      addTearDown(WidgetFactory.reset);
+      await _pump(
+        tester,
+        _screen(
+          state: {'a': null},
+          children: [
+            {'_type': 'custom_leaf', 'label': r'${a.name}'},
+          ],
+        ),
+      );
+      await tester.pump(_grace);
+      expect(tester.takeException(), isNull);
+      expect(find.text('null'), findsOneWidget);
+      expect(tester.getSize(_maskOf(find.text('null'))), const Size(80, 40));
+      final core = tester.element(find.byType(GestureDetector).last);
+      await tester.tap(find.text('null'), warnIfMissed: false);
+      expect(taps, isEmpty);
+
+      _open('a', const {'name': 'ok'});
+      await tester.pumpAndSettle();
+      expect(
+        identical(tester.element(find.byType(GestureDetector).last), core),
+        isTrue,
+      );
+      await tester.tap(find.text('ok'));
+      expect(taps, ['ok']);
     });
   });
 }

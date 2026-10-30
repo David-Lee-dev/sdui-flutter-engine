@@ -33,7 +33,8 @@ class _ScopeLayer extends InheritedWidget {
 class _ActionLayer extends InheritedWidget {
   const _ActionLayer({required this.host, required super.child});
 
-  final ActionHost host;
+  /// The host below this layer; null hides every host above it.
+  final ActionHost? host;
 
   static ActionHost? of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_ActionLayer>()?.host;
@@ -94,6 +95,13 @@ class Scope extends StatefulWidget {
   /// Returns the nearest action host visible from [context].
   static ActionHost? actionHost(BuildContext context) =>
       _ActionLayer.of(context);
+
+  /// Makes [host] the action host visible to [child] without creating
+  /// another action owner; a null [host] leaves [child] without one.
+  static Widget provideActions({
+    required ActionHost? host,
+    required Widget child,
+  }) => _ActionLayer(host: host, child: child);
 
   @override
   ScopeState createState() => ScopeState();

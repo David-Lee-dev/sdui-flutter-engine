@@ -167,19 +167,18 @@ final class NodeBuilder {
 
   /// Resolves and assembles one [PlainDirective] against [env].
   ///
-  /// Child delivery follows the widget specification, then motion, interaction,
-  /// scroll events, the repaint boundary ([isolate]) and identity wrappers are
-  /// applied in that order. For a parent-data widget (`positioned`,
-  /// `expanded`, ...) all but the identity wrapper go around its child.
+  /// Child delivery follows the widget specification; [_layers] then wraps
+  /// the result in its decoration, skeleton and identity layers.
   ///
   /// A [pending] node waits on an automatic skeleton: its props resolve
-  /// leniently, text draws placeholder words in the real style, icons and
-  /// media keep their declared box, events and motion stay off, and a box
-  /// leaf paints as bones under a [SkeletonMask]. A [held] node reads a
-  /// waiting key anywhere (props, event payloads or motion parameters) and
-  /// fires none of its own events until it arrives — a leaf, or a widget that
-  /// acts on its own, ignores pointers and focus; a layout node leaves its
-  /// children's input working; every pending node is held.
+  /// leniently and it draws its spec's [SkeletonForm] — text draws
+  /// placeholder words in the real style, icons and media keep their
+  /// declared box, any other spec builds for real — events and motion stay
+  /// off, and a box leaf paints as bones under a [SkeletonMask]. A [held]
+  /// node reads a waiting key anywhere (props, event payloads or motion
+  /// parameters) and fires none of its own events until it arrives — a leaf,
+  /// or a widget that acts on its own, ignores pointers and focus; a layout
+  /// node leaves its children's input working; every pending node is held.
   static Widget assemble(
     BuildContext context,
     PlainDirective directive,
@@ -188,10 +187,12 @@ final class NodeBuilder {
     bool held = false,
     bool pending = false,
   }) {
+    final spec = WidgetFactory.specFor(directive.type);
+    final form = pending ? spec?.skeleton : null;
     final resolved = pending
         ? _resolveLeniently(directive.props, env)
         : ExpressionEvaluator.resolveMap(directive.props, env);
-    if (pending && directive.type == 'text') {
+    if (form == SkeletonForm.text) {
       resolved['value'] = _placeholderText(
         directive.props['value'],
         resolved['max_lines'],
@@ -206,22 +207,16 @@ final class NodeBuilder {
       props = audit!;
       return true;
     }());
-    final spec = WidgetFactory.specFor(directive.type);
-    // A sliver must stay the direct render child of its viewport, so it never
-    // gets a (box) repaint boundary.
-    final box = spec?.produces != LayoutProtocol.sliver;
-    Widget widget = switch (spec) {
-      _ when pending && directive.type == 'icon' => SizedBox.square(
+    // A stand-in skips the spec builder, so its unread props say nothing.
+    final standIn = form == SkeletonForm.circle || form == SkeletonForm.box;
+    final widget = switch (spec) {
+      _ when form == SkeletonForm.circle => SizedBox.square(
         dimension:
             PropsResolver.size(context, props['size']) ??
             IconTheme.of(context).size ??
             24,
       ),
-      _ when pending && _boxed.contains(directive.type) => _box(
-        context,
-        directive,
-        props,
-      ),
+      _ when form == SkeletonForm.box => _box(context, directive, props),
       SlotSpec spec => spec.build(context, props, {
         for (final entry in directive.slots.entries)
           entry.key: build(entry.value),
@@ -258,9 +253,59 @@ final class NodeBuilder {
       null => throw StateError('Unknown widget type: "${directive.type}".'),
     };
     assert(() {
-      audit?.warnUnread(directive.type, directive.path);
+      if (!standIn) audit?.warnUnread(directive.type, directive.path);
       return true;
     }());
+    return _layers(
+      context,
+      directive,
+      spec!,
+      env,
+      props,
+      widget,
+      isolate: isolate,
+      held: held,
+      pending: pending,
+    );
+  }
+
+  /// Wraps the [core] widget of [directive] in its layers, outermost first:
+  ///
+  /// 1. `ValueKey(directive.key)` — the node's identity among its siblings.
+  /// 2. The parent-data widget (`positioned`, `expanded`, ...) the spec
+  ///    built, which must stay the direct widget of its parent; every
+  ///    further layer goes around its child ([_inside]).
+  /// 3. Pointer and focus guard (once held: a leaf, or a widget that acts on
+  ///    its own) — outside every event layer, so a held node takes nothing.
+  /// 4. [SkeletonMask] (once pending, box leaves only).
+  /// 5. Hold layer (once held, decorated): the decorations below see no
+  ///    action host while held, so an event layer that resolves
+  ///    [Scope.actionHost] fires nothing even without its own held check.
+  /// 6. Decorations ([_decorate]): motion, interaction, scroll events and
+  ///    the repaint boundary — present only once the node is not pending.
+  /// 7. Restore layer (once held, decorated): the real action host again,
+  ///    so the node's children keep firing.
+  /// 8. The core key (once pending, or held with motions) around [core]
+  ///    alone, so gaining decorations on reveal reparents the core instead
+  ///    of remounting it.
+  ///
+  /// The guard, mask, hold and restore layers stay for the element's life
+  /// once added, so a reveal never changes the tree above the core key. A
+  /// sliver ([WidgetSpec.produces]) gets a sliver guard and no box layers.
+  static Widget _layers(
+    BuildContext context,
+    PlainDirective directive,
+    WidgetSpec spec,
+    Environment env,
+    Map<String, Object?> props,
+    Widget core, {
+    required bool isolate,
+    required bool held,
+    required bool pending,
+  }) {
+    // A sliver must stay the direct render child of its viewport, so it never
+    // gets a (box) repaint boundary or bones.
+    final box = spec.produces != LayoutProtocol.sliver;
     final interactive = directive.on.keys.any(
       InteractionWrapper.events.contains,
     );
@@ -279,26 +324,23 @@ final class NodeBuilder {
       _coreKeys[context] ??= GlobalKey();
     }
     final coreKey = _anyWasPending ? _coreKeys[context] : null;
-    // A sliver gets no (box) bones; its box descendants draw their own.
+    final leaf = _isLeaf(directive, spec);
     final masked =
-        _anyWasPending &&
-        _wasPending[context] != null &&
-        _isLeaf(directive) &&
-        box;
+        _anyWasPending && _wasPending[context] != null && leaf && box;
+    final wasHeld = _anyWasPending && _wasHeld[context] != null;
+    final holding = wasHeld && decorated;
     // A node that acts on its own (dismiss, page, refresh, input) takes no
     // input while held, children included, so it never acts on bones.
     final guarded =
-        _anyWasPending &&
-        _wasHeld[context] != null &&
-        (_isLeaf(directive) || spec is ActionSpec || spec is BoundSpec);
+        wasHeld && (leaf || spec is ActionSpec || spec is BoundSpec);
+    Widget widget = core;
     if (decorated || masked || guarded) {
       widget = _inside(widget, (child) {
-        // A node that went without decorations (or motions) keeps its core
-        // under one key so gaining them on reveal reparents it instead of
-        // remounting it.
         if (coreKey != null && decorated) {
           child = KeyedSubtree(key: coreKey, child: child);
         }
+        final host = holding ? Scope.actionHost(context) : null;
+        if (holding) child = Scope.provideActions(host: host, child: child);
         if (!pending && decorated) {
           child = _decorate(
             context,
@@ -313,10 +355,13 @@ final class NodeBuilder {
             held: held,
           );
         }
+        if (holding) {
+          child = Scope.provideActions(host: held ? null : host, child: child);
+        }
         if (masked) {
           child = SkeletonMask(
             pending: pending,
-            circle: directive.type == 'icon',
+            circle: spec.skeleton == SkeletonForm.circle,
             child: child,
           );
         }
@@ -335,10 +380,11 @@ final class NodeBuilder {
         : KeyedSubtree(key: ValueKey(key), child: widget);
   }
 
-  /// Whether a pending [directive] draws its own bones: content leaves do,
-  /// layout nodes leave that to their children.
-  static bool _isLeaf(PlainDirective directive) =>
-      _boxed.contains(directive.type) ||
+  /// Whether a pending [directive] draws its own bones: content leaves (and
+  /// specs drawn as their declared box) do, layout nodes leave that to their
+  /// children.
+  static bool _isLeaf(PlainDirective directive, WidgetSpec spec) =>
+      spec.skeleton == SkeletonForm.box ||
       (directive.children.isEmpty && directive.slots.isEmpty);
 
   /// Resolves each value on its own, so one expression failing on missing
@@ -380,11 +426,8 @@ final class NodeBuilder {
     return List.filled(lines < 1 ? 1 : lines, text).join('\n');
   }
 
-  /// Types that draw only their declared box while pending, so media never
-  /// loads (or reports) for a bone.
-  static const _boxed = {'image', 'video'};
-
-  /// A pending media node's declared box; an unsized one has nothing to hold.
+  /// A pending [SkeletonForm.box] node's declared box; an unsized one has
+  /// nothing to hold.
   static Widget _box(
     BuildContext context,
     PlainDirective directive,
