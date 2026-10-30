@@ -14,9 +14,10 @@ Performance only; what is shown, padded and dispatched is unchanged.
   starts it when it leaves, and one whose tab is switched away mid-transition
   starts it then; every open still refreshes once.
 - `single_child_scroll_view` puts its content in a repaint boundary, and the
-  box node under each `_scope` gets one (never on slivers; inside
-  parent-data widgets). A state change or scroll repaints only the affected
-  section instead of the whole page.
+  box node under each `_scope` with `_lifecycle` hooks (a section that loads
+  or ticks) gets one (never on slivers; inside parent-data widgets). A state
+  change or scroll repaints only the affected section instead of the whole
+  page; scopes without hooks (e.g. a per-row `_action`) add no layer.
 - Debug logging: per-frame `scroll` event actions run silently like interval
   ticks (`start_reached`/`end_reached` still log), and the default minimum
   level is `info`; pass `debugLogLevel: LogLevel.debug` for the previous

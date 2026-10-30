@@ -553,6 +553,12 @@ void main() {
               'value': 'static',
               '_scope': {
                 '_state': {'local': 0},
+                '_action': {
+                  'load': {'_type': 'set', 'local': 0},
+                },
+                '_lifecycle': [
+                  {'on': 'mount', 'action': 'load'},
+                ],
               },
             },
           ],
@@ -583,6 +589,44 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
+    testWidgets('action만 가진 scope의 loop 행은 RepaintBoundary를 늘리지 않는다', (
+      tester,
+    ) async {
+      Map<String, Object?> rows({required bool scoped}) => {
+        '_type': 'single_child_scroll_view',
+        '_child': {
+          '_type': 'column',
+          '_scope': {
+            '_state': {'items': List.generate(50, (i) => i)},
+          },
+          '_children': [
+            {
+              '_type': 'text',
+              'value': r'row ${it}',
+              '_loop': {'_in': r'${items}', '_as': 'it', '_key': r'${it}'},
+              if (scoped) '_on': {'tap': 'pick'},
+              if (scoped)
+                '_scope': {
+                  '_action': {
+                    'pick': {'_type': 'navigate', 'route': r'/rows/${it}'},
+                  },
+                },
+            },
+          ],
+        },
+      };
+      int boundaries() => find.byType(RepaintBoundary).evaluate().length;
+
+      await tester.pumpWidget(mount(rows(scoped: false)));
+      final plain = boundaries();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(mount(rows(scoped: true)));
+      expect(tester.takeException(), isNull);
+      expect(find.text('row 49'), findsOneWidget);
+      expect(boundaries(), plain);
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('expanded 노드의 scope는 parent data를 지킨다', (tester) async {
       await tester.pumpWidget(
         mount({
@@ -592,6 +636,12 @@ void main() {
               '_type': 'expanded',
               '_scope': {
                 '_state': {'n': 1},
+                '_action': {
+                  'load': {'_type': 'set', 'n': 1},
+                },
+                '_lifecycle': [
+                  {'on': 'mount', 'action': 'load'},
+                ],
               },
               '_child': {'_type': 'text', 'value': r'n ${n}'},
             },
@@ -618,6 +668,12 @@ void main() {
               '_type': 'sliver_to_box_adapter',
               '_scope': {
                 '_state': {'n': 1},
+                '_action': {
+                  'load': {'_type': 'set', 'n': 1},
+                },
+                '_lifecycle': [
+                  {'on': 'mount', 'action': 'load'},
+                ],
               },
               '_child': {'_type': 'text', 'value': r'n ${n}'},
             },

@@ -51,14 +51,17 @@ final class NodeBuilder {
         child: morph.repeat ? _isolated(morph.child) : build(morph.child),
       ),
       SwitchDirective sw => SwitchObserver(directive: sw),
-      // A scope's state changes repaint only its own section, not the
-      // sections around it.
+      // A scope with lifecycle hooks (a section that loads or ticks) repaints
+      // only its own section, not the sections around it. Other scopes change
+      // only with an interaction, so they stay unisolated (no layer per row).
       ScopeDirective scope => Scope(
         config: scope.config,
         actions: scope.actions,
         lifecycle: scope.lifecycle,
         skeleton: scope.skeleton == null ? null : build(scope.skeleton!),
-        child: _isolated(scope.child),
+        child: scope.lifecycle.isEmpty
+            ? build(scope.child)
+            : _isolated(scope.child),
       ),
     };
   }
