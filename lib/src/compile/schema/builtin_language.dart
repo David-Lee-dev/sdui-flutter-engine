@@ -192,7 +192,7 @@ abstract final class BuiltinLanguage {
     'platform',
     'none',
     'fade',
-    'slide_up',
+    'slide',
     'zoom',
     'fade_through',
     'shared_axis',
@@ -201,30 +201,40 @@ abstract final class BuiltinLanguage {
     'tap_zoom',
   };
 
-  /// Built-in params: inclusive numeric bounds or allowed string values.
-  /// Empty schemas reject all keys; app effects without an entry accept
-  /// arbitrary static literal params.
+  /// Built-in params: inclusive numeric bounds, allowed string values, or a
+  /// boolean flag. Empty schemas reject all keys; app effects without an
+  /// entry accept arbitrary static literal params.
   static const Map<
     String,
-    Map<String, ({double? min, double? max, Set<String>? values})>
+    Map<String, ({double? min, double? max, Set<String>? values, bool isBool})>
   >
   transitionParams = {
     'platform': {},
     'none': {},
     'fade': {},
-    'slide_up': {'distance': (min: 0, max: 1, values: null)},
-    'zoom': {'begin_scale': (min: 0.5, max: 1, values: null)},
-    'fade_through': {'threshold': (min: 0, max: 1, values: null)},
-    'container_transform': {'scrim': (min: 0, max: 1, values: null)},
-    'card_stack': {
-      'scale': (min: 0.8, max: 1, values: null),
-      'radius': (min: 0, max: 40, values: null),
-      'dim': (min: 0, max: 0.6, values: null),
+    'slide': {
+      'x': (min: -1, max: 1, values: null, isBool: false),
+      'y': (min: -1, max: 1, values: null, isBool: false),
+      'fade': (min: null, max: null, values: null, isBool: true),
     },
-    'tap_zoom': {'begin_scale': (min: 0.05, max: 1, values: null)},
+    'zoom': {'begin_scale': (min: 0.5, max: 1, values: null, isBool: false)},
+    'fade_through': {
+      'threshold': (min: 0, max: 1, values: null, isBool: false),
+    },
+    'container_transform': {
+      'scrim': (min: 0, max: 1, values: null, isBool: false),
+    },
+    'card_stack': {
+      'scale': (min: 0.8, max: 1, values: null, isBool: false),
+      'radius': (min: 0, max: 40, values: null, isBool: false),
+      'dim': (min: 0, max: 0.6, values: null, isBool: false),
+    },
+    'tap_zoom': {
+      'begin_scale': (min: 0.05, max: 1, values: null, isBool: false),
+    },
     'shared_axis': {
-      'axis': (min: null, max: null, values: {'x', 'y', 'z'}),
-      'distance': (min: 0, max: 200, values: null),
+      'axis': (min: null, max: null, values: {'x', 'y', 'z'}, isBool: false),
+      'distance': (min: -200, max: 200, values: null, isBool: false),
     },
   };
 

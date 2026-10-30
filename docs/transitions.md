@@ -18,7 +18,7 @@ await Sdui.initialize(
   presentation: const SduiPresentation(
     transitions: PageTransitionStyle(
       enabled: true,
-      defaultType: 'slide_up',
+      defaultType: 'slide',
       respectReducedMotion: true,
     ),
   ),
@@ -62,7 +62,7 @@ Available since engine `0.2.0`. Pick by the relationship between the two screens
 | Switching between unrelated screens | `fade_through` | `_transition: { type: fade_through }` |
 | Sheet-like page (settings, compose, filters) over a context | `card_stack` | `_transition: { type: card_stack }` |
 | Page opened from a button/FAB with no card to grow from | `tap_zoom` | `_transition: { type: tap_zoom }` |
-| Vertical "present" without depth | `slide_up` | `_transition: { type: slide_up }` |
+| Vertical "present" without depth | `slide` | `_transition: { type: slide, params: { y: 0.08 } }` |
 | Quiet default for everything else | `fade` | `defaultType: 'fade'` in `PageTransitionStyle` |
 | No animation (e.g. replacing a splash or an auth gate) | `none` | `_transition: { type: none }` |
 
@@ -81,12 +81,12 @@ Rules of thumb:
 ```yaml
 _type: scaffold
 _transition:
-  type: slide_up
+  type: slide
   duration: 280
   reverse_duration: 220
   curve: ease_out
   params:
-    distance: 0.08
+    y: 0.08
 _slots:
   body:
     _type: text
@@ -111,10 +111,10 @@ Unknown declaration keys are rejected at compile time.
 | `platform` | Host Material/Cupertino route transition | none | Host route defaults |
 | `none` | Immediate page change | none | 0 / 0 ms |
 | `fade` | Opacity 0 → 1 | none | 150 / 120 ms |
-| `slide_up` | Bottom offset → 0, opacity 0 → 1 | `distance`: fraction of page height, default `0.08`, inclusive range `0..1` | 200 / 160 ms |
+| `slide` | Offset → 0, optional opacity 0 → 1 | `x`: fraction of page width, default `0`, inclusive range `-1..1`; `y`: fraction of page height, default `0`, inclusive range `-1..1`; `fade`: default `true` | 200 / 160 ms |
 | `zoom` | Centered scale → 1, opacity 0 → 1 | `begin_scale`: default `0.94`, inclusive range `0.5..1` | 200 / 160 ms |
 | `fade_through` | Outgoing opacity 1 → 0 before the threshold; incoming opacity 0 → 1 and scale 0.92 → 1 afterward | `threshold`: default `0.35`, inclusive range `0..1` | 220 / 180 ms |
-| `shared_axis` | x/y: incoming +distance → 0, outgoing 0 → −distance with cross-fade; z: incoming scale 0.8 → 1, outgoing 1 → 1.1 with cross-fade | `axis`: `x`, `y`, or `z`, default `x`; `distance`: logical pixels for x/y, default `30`, inclusive range `0..200` | 220 / 180 ms |
+| `shared_axis` | x/y: incoming +distance → 0, outgoing 0 → −distance with cross-fade; z: incoming scale 0.8 → 1, outgoing 1 → 1.1 with cross-fade | `axis`: `x`, `y`, or `z`, default `x`; `distance`: logical pixels for x/y, default `30`, inclusive range `-200..200` (negative reverses direction) | 220 / 180 ms |
 | `container_transform` | Captured source box grows into the full page, rounding to square with a fade-through snapshot | `scrim`: default `0`, inclusive range `0..1`; dims the previous engine page | 250 / 200 ms |
 | `card_stack` | Incoming page rises a full page height; previous engine page scales down, rounds and dims | `scale`: default `0.94`, `0.8..1`; `radius`: default `12`, `0..40`; `dim`: default `0.2`, `0..0.6` | 260 / 220 ms |
 | `tap_zoom` | Incoming page grows from the latest pointer-down position with a fade | `begin_scale`: default `0.1`, inclusive range `0.05..1` | 220 / 180 ms |

@@ -97,7 +97,7 @@ void main() {
       'platform',
       'none',
       'fade',
-      'slide_up',
+      'slide',
       'zoom',
       'fade_through',
       'shared_axis',
@@ -131,10 +131,11 @@ void main() {
       });
     }
     for (final (type, key, min, max) in [
-      ('slide_up', 'distance', 0.0, 1.0),
+      ('slide', 'x', -1.0, 1.0),
+      ('slide', 'y', -1.0, 1.0),
       ('zoom', 'begin_scale', 0.5, 1.0),
       ('fade_through', 'threshold', 0.0, 1.0),
-      ('shared_axis', 'distance', 0.0, 200.0),
+      ('shared_axis', 'distance', -200.0, 200.0),
       ('container_transform', 'scrim', 0.0, 1.0),
       ('card_stack', 'scale', 0.8, 1.0),
       ('card_stack', 'radius', 0.0, 40.0),
@@ -226,6 +227,90 @@ void main() {
         } else {
           expect(compile, throwsA(isA<InvalidTemplateException>()));
         }
+      }
+    });
+
+    test('slide validates the fade boolean param', () {
+      for (final value in <Object?>[true, false, 'true', 1, null, [], {}]) {
+        Object? compile() => Compile.build(
+          {
+            '_type': 'text',
+            'value': 'x',
+            '_transition': {
+              'type': 'slide',
+              'params': {'fade': value},
+            },
+          },
+          const {},
+          catalog: catalog,
+          screen: true,
+        );
+        if (value == true || value == false) {
+          expect(compile, returnsNormally);
+        } else {
+          expect(compile, throwsA(isA<InvalidTemplateException>()));
+        }
+      }
+    });
+
+    test('slide_up is rejected as an unknown transition type', () {
+      expect(
+        () => Compile.build(
+          {
+            '_type': 'text',
+            'value': 'x',
+            '_transition': {'type': 'slide_up'},
+          },
+          const {},
+          catalog: catalog,
+          screen: true,
+        ),
+        throwsA(
+          isA<InvalidTemplateException>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Unknown page transition type'),
+          ),
+        ),
+      );
+    });
+
+    test('shared_axis accepts negative distance bounds', () {
+      for (final distance in [-200.0, 200.0]) {
+        expect(
+          () => Compile.build(
+            {
+              '_type': 'text',
+              'value': 'x',
+              '_transition': {
+                'type': 'shared_axis',
+                'params': {'distance': distance},
+              },
+            },
+            const {},
+            catalog: catalog,
+            screen: true,
+          ),
+          returnsNormally,
+        );
+      }
+      for (final distance in [-201.0, 201.0]) {
+        expect(
+          () => Compile.build(
+            {
+              '_type': 'text',
+              'value': 'x',
+              '_transition': {
+                'type': 'shared_axis',
+                'params': {'distance': distance},
+              },
+            },
+            const {},
+            catalog: catalog,
+            screen: true,
+          ),
+          throwsA(isA<InvalidTemplateException>()),
+        );
       }
     });
 

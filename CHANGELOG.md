@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.0
+
+**Breaking change:** the page transition type `slide_up` is removed.
+Migrate `_transition: { type: slide_up }` to
+`_transition: { type: slide, params: { y: 0.08 } }`.
+
+- Added page transition type `slide`: params `x` and `y` (fraction of page
+  width/height, inclusive range `-1..1`, default `0`) set the start offset,
+  and `fade` (default `true`) toggles the incoming opacity animation. Same
+  200 / 160 ms push/pop defaults as the removed `slide_up`.
+- `shared_axis`'s `distance` param now accepts `-200..200` (was `0..200`); a
+  negative distance reverses the direction on both the incoming and outgoing
+  pages for `axis: x` and `axis: y`.
+
 ## 0.11.0
 
 **Behavior change:** the SDK applies no safe-area policy of its own. Safe

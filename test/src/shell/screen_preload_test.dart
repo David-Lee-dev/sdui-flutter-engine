@@ -399,7 +399,7 @@ void main() {
     ) async {
       final loader = _Loader({
         'detail': () async =>
-            _screen('detail', transition: {'type': 'slide_up'}),
+            _screen('detail', transition: {'type': 'slide'}),
       });
       await _init(loader, type: type);
       final router = await _pump(tester);
@@ -524,7 +524,7 @@ void main() {
           ? _screen('detail', transition: {'type': 'fade', 'duration': 300})
           : _screen(
               'detail',
-              transition: {'type': 'slide_up', 'duration': 500},
+              transition: {'type': 'slide', 'duration': 500},
             ),
     });
     await _init(loader, preload: ['detail'], type: 'none');
@@ -918,7 +918,7 @@ void main() {
           ? _screen('detail-v1', transition: {'type': 'fade', 'duration': 300})
           : _screen(
               'detail-v2',
-              transition: {'type': 'slide_up', 'duration': 500},
+              transition: {'type': 'slide', 'duration': 500},
             ),
     });
     await _init(loader, preload: ['detail'], type: 'none');

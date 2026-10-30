@@ -50,7 +50,7 @@ of the generic screen route and swaps the loading/error surfaces.
 
 Page transitions are opt-in:
 `SduiPresentation(transitions: PageTransitionStyle(enabled: true))` lets each
-screen template declare a root `_transition` (fade, slide_up, zoom,
+screen template declare a root `_transition` (fade, slide, zoom,
 fade_through, shared_axis, container_transform, card_stack, tap_zoom, none, or
 app-registered effects via `Sdui.initialize(transitions: [...])`).
 `transition_source` marks the part of a card that grows into the page, and

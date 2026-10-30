@@ -29,7 +29,7 @@ void main() {
     () {
       expect(
         PageTransitionFactory.types(),
-        containsAll(['platform', 'none', 'fade', 'slide_up', 'zoom']),
+        containsAll(['platform', 'none', 'fade', 'slide', 'zoom']),
       );
       PageTransitionFactory.register(const _TagTransition('tag'));
       PageTransitionFactory.registerAll([const _TagTransition('other')]);
@@ -94,7 +94,7 @@ void main() {
   });
 
   for (final (type, key, defaultBegin, customBegin) in [
-    ('slide_up', 'distance', 0.08, 0.4),
+    ('slide', 'y', 0.0, 0.4),
     ('zoom', 'begin_scale', 0.94, 0.6),
   ]) {
     test('$type default and overridden durations', () {
@@ -171,7 +171,7 @@ void main() {
               final render = tester.renderObject<RenderBox>(
                 find.byKey(childKey),
               );
-              if (type == 'slide_up') {
+              if (type == 'slide') {
                 // SlideTransition's parent transform includes the fractional offset.
                 final slide = tester.widget<SlideTransition>(
                   find.byType(SlideTransition),
@@ -203,6 +203,70 @@ void main() {
       );
     }
   }
+
+  testWidgets('slide starting offset follows x/y sign and magnitude', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const Directionality(textDirection: TextDirection.ltr, child: Placeholder()),
+    );
+    final effect = PageTransitionFactory.resolve('slide');
+    for (final (params, expected) in <(Map<String, Object?>, Offset)>[
+      ({'y': 0.08}, const Offset(0, 0.08)),
+      ({'y': -0.08}, const Offset(0, -0.08)),
+      ({'x': 1}, const Offset(1, 0)),
+      ({'x': -1}, const Offset(-1, 0)),
+    ]) {
+      final controller = AnimationController(
+        vsync: tester,
+        duration: const Duration(milliseconds: 1),
+      );
+      addTearDown(controller.dispose);
+      final child = effect.build(
+        tester.element(find.byType(Placeholder)),
+        controller,
+        const AlwaysStoppedAnimation(0),
+        const Placeholder(),
+        PageTransitionSpec(type: 'slide', params: params),
+      );
+      final slide = child is FadeTransition
+          ? child.child as SlideTransition
+          : child as SlideTransition;
+      expect(slide.position.value, expected);
+      controller.value = 1;
+      expect(slide.position.value, Offset.zero);
+    }
+  });
+
+  testWidgets('slide with fade:false keeps opacity at 1 throughout', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const Directionality(textDirection: TextDirection.ltr, child: Placeholder()),
+    );
+    final effect = PageTransitionFactory.resolve('slide');
+    final controller = AnimationController(
+      vsync: tester,
+      duration: const Duration(milliseconds: 1),
+    );
+    addTearDown(controller.dispose);
+    final child = effect.build(
+      tester.element(find.byType(Placeholder)),
+      controller,
+      const AlwaysStoppedAnimation(0),
+      const Placeholder(),
+      PageTransitionSpec(type: 'slide', params: const {'y': 0.08, 'fade': false}),
+    );
+    expect(child, isA<SlideTransition>());
+    await tester.pumpWidget(
+      Directionality(textDirection: TextDirection.ltr, child: child),
+    );
+    for (final t in [0.0, 0.5, 1.0]) {
+      controller.value = t;
+      await tester.pump();
+      expect(find.byType(FadeTransition), findsNothing);
+    }
+  });
 
   test('base duration is 200ms and fade reverse is 120ms', () {
     final custom = const _TagTransition('custom');

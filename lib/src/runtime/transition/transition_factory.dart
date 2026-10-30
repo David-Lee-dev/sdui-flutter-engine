@@ -15,7 +15,7 @@ final class PageTransitionFactory {
     'platform': _PlatformPageTransition(),
     'none': _NonePageTransition(),
     'fade': _FadePageTransition(),
-    'slide_up': _SlideUpPageTransition(),
+    'slide': _SlidePageTransition(),
     'zoom': _ZoomPageTransition(),
     'fade_through': _FadeThroughPageTransition(),
     'shared_axis': _SharedAxisPageTransition(),
@@ -122,11 +122,11 @@ final class _FadePageTransition extends PageTransitionEffect {
   ) => FadeTransition(opacity: animation, child: child);
 }
 
-final class _SlideUpPageTransition extends PageTransitionEffect {
-  const _SlideUpPageTransition();
+final class _SlidePageTransition extends PageTransitionEffect {
+  const _SlidePageTransition();
 
   @override
-  String get type => 'slide_up';
+  String get type => 'slide';
 
   @override
   Duration get defaultDuration => const Duration(milliseconds: 200);
@@ -142,14 +142,19 @@ final class _SlideUpPageTransition extends PageTransitionEffect {
     Widget child,
     PageTransitionSpec spec,
   ) {
-    final begin = (spec.params['distance'] as num?)?.toDouble() ?? 0.08;
-    return SlideTransition(
+    final x = (spec.params['x'] as num?)?.toDouble() ?? 0;
+    final y = (spec.params['y'] as num?)?.toDouble() ?? 0;
+    final fade = spec.params['fade'] as bool? ?? true;
+    final position = SlideTransition(
       position: Tween<Offset>(
-        begin: Offset(0, begin),
+        begin: Offset(x, y),
         end: Offset.zero,
       ).animate(animation),
-      child: FadeTransition(opacity: animation, child: child),
+      child: child,
     );
+    return fade
+        ? FadeTransition(opacity: animation, child: position)
+        : position;
   }
 }
 

@@ -104,6 +104,16 @@ final class PageTransitionDecoder {
           );
         }
         final value = entry.value;
+        if (rule.isBool) {
+          if (value is! bool) {
+            throw InvalidTemplateException(
+              'root',
+              '"_transition.params.${entry.key}" for "$type" must be a '
+                  'boolean.',
+            );
+          }
+          continue;
+        }
         final values = rule.values;
         if (values != null) {
           if (value is! String || !values.contains(value)) {

@@ -158,6 +158,67 @@ void main() {
     }
   }
 
+  for (final axis in ['x', 'y']) {
+    testWidgets(
+      'shared_axis $axis negative distance reverses incoming/outgoing offsets',
+      (tester) async {
+        final effect = PageTransitionFactory.resolve('shared_axis');
+        final negative = PageTransitionSpec(
+          type: 'shared_axis',
+          params: {'axis': axis, 'distance': -30},
+        );
+        final controller = AnimationController(
+          vsync: tester,
+          duration: const Duration(milliseconds: 1),
+        );
+        addTearDown(controller.dispose);
+        const incomingKey = ValueKey('incoming');
+        const outgoingKey = ValueKey('outgoing');
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: Center(
+              child: SizedBox(
+                width: 200,
+                height: 100,
+                child: Builder(
+                  builder: (context) => Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      effect.buildOutgoing(
+                        context,
+                        controller,
+                        const SizedBox.expand(key: outgoingKey),
+                        negative,
+                      )!,
+                      effect.build(
+                        context,
+                        controller,
+                        const AlwaysStoppedAnimation(0),
+                        const SizedBox.expand(key: incomingKey),
+                        negative,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        final origin = tester.getTopLeft(find.byType(Stack));
+        controller.value = 0.4;
+        await tester.pump();
+        final enter = tester.getTopLeft(find.byKey(incomingKey)) - origin;
+        final exit = tester.getTopLeft(find.byKey(outgoingKey)) - origin;
+        final positiveOffset = 30.0 * (1 - 0.4);
+        final enterSigned = axis == 'x' ? enter.dx : enter.dy;
+        final exitSigned = axis == 'x' ? exit.dx : exit.dy;
+        expect(enterSigned, closeTo(-positiveOffset, 1e-6));
+        expect(exitSigned, closeTo(30.0 * 0.4, 1e-6));
+      },
+    );
+  }
+
   for (final threshold in [0.0, 1.0]) {
     testWidgets('fade_through threshold endpoint $threshold stays finite', (
       tester,
