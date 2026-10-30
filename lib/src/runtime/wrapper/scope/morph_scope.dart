@@ -13,6 +13,8 @@ import '../../util/engine_spring.dart';
 import 'scope.dart';
 
 /// Exposes an animated numeric value as a reactive environment entry.
+///
+/// Reduced motion (`MediaQuery.disableAnimations`) jumps to every target.
 class MorphScope extends StatefulWidget {
   const MorphScope({super.key, required this.directive, required this.child});
 
@@ -26,6 +28,7 @@ class MorphScope extends StatefulWidget {
 class _MorphScopeState extends State<MorphScope>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  late final Curve _curve;
   late final CurvedAnimation _curved;
 
   /// Both `null` until `_to` or `_from` yields a finite number.
@@ -35,26 +38,37 @@ class _MorphScopeState extends State<MorphScope>
   Listenable? _dep;
   Object? _lastTrigger;
   bool _started = false;
+  bool _reduceMotion = false;
   Timer? _delayTimer;
 
   MorphDirective get d => widget.directive;
 
+  static const _defaultDuration = Duration(milliseconds: 400);
+
   @override
   void initState() {
     super.initState();
+    final ms = d.durationMs;
     _controller = AnimationController(
       vsync: this,
-      duration: Duration(milliseconds: d.durationMs),
+      duration: ms == null
+          ? EngineCurve.settleDuration(d.curve) ?? _defaultDuration
+          : Duration(milliseconds: ms),
     );
-    _curved = CurvedAnimation(
-      parent: _controller,
-      curve: EngineCurve.resolve(d.curve, fallback: Curves.easeOut),
-    );
+    _curve = EngineCurve.resolve(d.curve, fallback: Curves.easeOut);
+    _curved = CurvedAnimation(parent: _controller, curve: _curve);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (reduce && !_reduceMotion && _started) {
+      _delayTimer?.cancel();
+      _controller.stop();
+      _start = _target;
+    }
+    _reduceMotion = reduce;
     _rebind(Scope.envOf(context) ?? MapEnvironment.empty);
     if (!_started) {
       _started = true;
@@ -94,6 +108,27 @@ class _MorphScopeState extends State<MorphScope>
     return start + (target - start) * _curved.value;
   }
 
+  /// The value's rate of change in `_to` units per second: the curve's slope
+  /// times the distance over the duration, negative on a reversing leg.
+  double _velocity() {
+    final start = _start;
+    final target = _target;
+    final seconds = _controller.duration!.inMicroseconds / 1e6;
+    if (!_controller.isAnimating ||
+        start == null ||
+        target == null ||
+        seconds <= 0) {
+      return 0;
+    }
+    const h = 1e-4;
+    final t = _controller.value;
+    final a = (t - h).clamp(0.0, 1.0);
+    final b = (t + h).clamp(0.0, 1.0);
+    final slope = (_curve.transform(b) - _curve.transform(a)) / (b - a);
+    final direction = _controller.status == AnimationStatus.reverse ? -1 : 1;
+    return _clampVelocity(direction * slope * (target - start) / seconds);
+  }
+
   double? _from() => d.from == null ? null : _eval(d.from!);
 
   double? _eval(Expression expression) => _finite(_read(expression));
@@ -103,11 +138,11 @@ class _MorphScopeState extends State<MorphScope>
 
   void _run(double? from, double? to, {bool delayed = false}) {
     _delayTimer?.cancel();
-    _start = from;
+    _start = _reduceMotion ? to : from;
     _target = to;
     _controller.reset();
     void go() {
-      if (!mounted || to == null) return;
+      if (!mounted || to == null || _reduceMotion) return;
       if (d.repeat) {
         _controller.repeat(reverse: d.reverse);
       } else {
@@ -137,8 +172,10 @@ class _MorphScopeState extends State<MorphScope>
     final env = _MorphEnvironment(
       parent: _parent,
       name: d.as,
+      velocityName: d.velocityAs,
       animation: _curved,
       valueOf: _current,
+      velocityOf: _velocity,
     );
     return Scope.provideEnv(env: env, child: widget.child);
   }
@@ -232,6 +269,10 @@ class _SpringMorphScopeState extends State<SpringMorphScope>
     }
   }
 
+  double _velocity() => _controller.isAnimating && !_reduceMotion
+      ? _clampVelocity(_controller.velocity)
+      : 0;
+
   double _handoffVelocity() =>
       d.spring!.carriesVelocity && _controller.isAnimating
       ? _controller.velocity
@@ -291,8 +332,10 @@ class _SpringMorphScopeState extends State<SpringMorphScope>
     final env = _MorphEnvironment(
       parent: _parent,
       name: d.as,
+      velocityName: d.velocityAs,
       animation: _controller,
       valueOf: () => _target == null ? null : _controller.value,
+      velocityOf: _velocity,
     );
     return Scope.provideEnv(env: env, child: widget.child);
   }
@@ -321,30 +364,45 @@ Object? _readSafely(
 
 double? _finite(Object? v) => v is num && v.isFinite ? v.toDouble() : null;
 
+/// Largest velocity magnitude a `_velocity` variable reports.
+const _maxVelocity = 1e4;
+
+double _clampVelocity(double v) =>
+    v.isFinite ? v.clamp(-_maxVelocity, _maxVelocity) : 0;
+
 class _MorphEnvironment extends Environment {
   _MorphEnvironment({
     required this.parent,
     required this.name,
+    required this.velocityName,
     required this.animation,
     required this.valueOf,
+    required this.velocityOf,
   });
 
   @override
   final Environment? parent;
   final String name;
+  final String? velocityName;
   final Animation<double> animation;
   final double? Function() valueOf;
+  final double Function() velocityOf;
 
   @override
-  bool has(String n) => n == name;
+  bool has(String n) => n == name || n == velocityName;
 
   @override
-  Object? read(String n) => n == name ? valueOf() : null;
+  Object? read(String n) {
+    if (n == name) return valueOf();
+    if (n == velocityName) return velocityOf();
+    return null;
+  }
 
   @override
   Listenable? listen(Set<String> keys) {
-    if (!keys.contains(name)) return parent?.listen(keys);
-    final rest = parent?.listen(keys.difference({name}));
+    final own = {name, ?velocityName};
+    if (!keys.any(own.contains)) return parent?.listen(keys);
+    final rest = parent?.listen(keys.difference(own));
     return rest == null ? animation : Listenable.merge([animation, rest]);
   }
 }

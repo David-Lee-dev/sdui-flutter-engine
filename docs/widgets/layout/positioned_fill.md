@@ -45,6 +45,8 @@ _child:
 
 ## Pitfalls & related
 
+- `_motion` and `_on` on this node go around its child, inside the parent-data widget, since 0.9.0 (`_requires: [parent_data_motion_v1]`); older engines fail with "Incorrect use of ParentDataWidget". See [Motion](../../motion.md#parent-data-widgets).
+
 - Use only the documented positional child form; `_slots` are rejected for this specification kind.
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).

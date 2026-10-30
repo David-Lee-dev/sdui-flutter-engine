@@ -15,6 +15,7 @@ final class PlainDirective extends Directive {
     this.timing = const {},
     this.onEvent = const {},
     this.tapFeedback = true,
+    this.pressedAs,
     this.motions = const [],
     this.provides = const {},
     this.slots = const {},
@@ -58,6 +59,11 @@ final class PlainDirective extends Directive {
   /// The template key stays `ripple` for compatibility with shipped screens; what
   /// it switches is the press tint and inset, not an ink ripple.
   final bool tapFeedback;
+
+  /// Name of the bool variable that is true while `tap` is held down
+  /// (`_on: { tap: { do, pressed_as: name } }`), readable by this node's own
+  /// props and its descendants.
+  final String? pressedAs;
 
   /// The ordered `_motion` layers and their compiled parameters.
   ///

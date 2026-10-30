@@ -95,7 +95,9 @@ import 'catalog/primitive/tab_bar_widget.dart';
 import 'catalog/primitive/tab_widget.dart';
 import 'catalog/primitive/sizedbox_widget.dart';
 import 'catalog/custom/collapsing_header_widget.dart';
+import 'catalog/custom/layout_builder_widget.dart';
 import 'catalog/primitive/scaffold_widget.dart';
+import 'catalog/primitive/semantics_widget.dart';
 import 'catalog/primitive/spacer_widget.dart';
 import 'catalog/primitive/stack_widget.dart';
 import 'catalog/custom/swipe_indicator_widget.dart';
@@ -160,6 +162,7 @@ final class WidgetFactory {
     'serpentine': EagerSpec(SerpentineWidget.build),
     'serpentine_row': EagerSpec(SerpentineRowWidget.build),
     'shape': EagerSpec(ShapeWidget.build),
+    'semantics': EagerSpec(SemanticsWidget.build),
     'spin_grid': ActionSpec(SpinGridWidget.build),
     'scratch_card': ActionSpec(ScratchCardWidget.build),
     'chart': EagerSpec(ChartWidget.build),
@@ -261,6 +264,7 @@ final class WidgetFactory {
       CollapsingHeaderWidget.build,
       produces: LayoutProtocol.sliver,
     ),
+    'layout_builder': BuilderSpec(LayoutBuilderWidget.build),
   };
 
   static final Map<String, WidgetSpec> _specs = _buildSpecs();

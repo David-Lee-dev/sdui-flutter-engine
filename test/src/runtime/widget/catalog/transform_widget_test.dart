@@ -35,6 +35,29 @@ void main() {
         expect(t.y, 20);
       });
 
+      testWidgets('offset은 EngineMetrics로 scale되고 translate에 더해진다', (
+        tester,
+      ) async {
+        await _pump(tester, const {
+          'offset': [10, 20],
+        }, scale: 0.5);
+        var t = tester
+            .widget<Transform>(find.byType(Transform))
+            .transform
+            .getTranslation();
+        expect([t.x, t.y], [5, 10]);
+
+        await _pump(tester, const {
+          'offset': [10, 20],
+          'translate': [1, 2],
+        }, scale: 0.5);
+        t = tester
+            .widget<Transform>(find.byType(Transform))
+            .transform
+            .getTranslation();
+        expect([t.x, t.y], [6, 12]);
+      });
+
       testWidgets('scale은 배수라 그대로', (tester) async {
         await _pump(tester, const {'scale': 2});
         final m = tester.widget<Transform>(find.byType(Transform)).transform;

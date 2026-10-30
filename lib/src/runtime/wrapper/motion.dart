@@ -11,6 +11,10 @@ import '../motion/_base.dart';
 /// A throw from the motion's `plan()` or `frame()` turns this layer off for
 /// good: [child] is drawn at rest as if the layer were absent, and the
 /// failure is only debug-logged, never reported.
+///
+/// When the platform asks to reduce motion (`MediaQuery.disableAnimations`)
+/// the layer draws its end state (t = 1) without running. A repeating layer
+/// isolates [child] in a [RepaintBoundary]; a one-shot layer adds nothing.
 class MotionWrapper extends StatefulWidget {
   const MotionWrapper({
     super.key,
@@ -73,13 +77,30 @@ class _MotionWrapperState extends State<MotionWrapper>
   /// Whether a motion failure turned this layer off; it never turns back on.
   bool _off = false;
 
+  /// Whether reduced motion holds this layer at its end state.
+  bool _reduce = false;
+
+  /// Incremented by every run; a repeat leg or pause from an older run stops.
+  int _generation = 0;
+
+  /// The run whose repeat legs are being counted, if any.
+  int? _legRun;
+  int _legIndex = 0;
+  bool _legBackwards = false;
+
+  /// Whether [MotionWrapper.child] sits in a [RepaintBoundary], fixed at
+  /// mount so the child's subtree is never reparented.
+  late final bool _isolate;
+
   static const _restPlan = MotionPlan(duration: Duration.zero);
 
   @override
   void initState() {
     super.initState();
     _plan = _planned() ?? _restPlan;
-    _controller = AnimationController(vsync: this, duration: _plan.duration);
+    _isolate = _plan.repeat;
+    _controller = AnimationController(vsync: this, duration: _plan.duration)
+      ..addStatusListener(_onStatus);
     _curved = CurvedAnimation(parent: _controller, curve: _plan.curve);
   }
 
@@ -115,6 +136,11 @@ class _MotionWrapperState extends State<MotionWrapper>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (_reduce) {
+      _holdEnd();
+      return;
+    }
     if (_gatePassed) return;
     _removeListeners();
     _scrollables = _findAncestorScrollables(context);
@@ -250,15 +276,33 @@ class _MotionWrapperState extends State<MotionWrapper>
     }
   }
 
+  /// Stops any run and shows the end state (reduced motion); the gate no
+  /// longer applies.
+  void _holdEnd() {
+    _gatePassed = true;
+    _started = true;
+    _removeListeners();
+    _delayTimer?.cancel();
+    _generation++;
+    _controller.stop();
+    _controller.value = 1;
+  }
+
   void _run() {
     _delayTimer?.cancel();
-    if (_off) return;
+    final generation = ++_generation;
+    if (_off || _reduce) return;
     void go() {
       if (!mounted) return;
-      if (_plan.repeat) {
-        _controller.repeat(reverse: _plan.reverse);
-      } else {
+      final plan = _plan;
+      if (!plan.repeat) {
         _controller.forward(from: 0);
+      } else if (plan.repeatCount == null &&
+          plan.repeatDelay <= Duration.zero) {
+        _controller.repeat(reverse: plan.reverse);
+      } else {
+        _legRun = generation;
+        _leg(0);
       }
     }
 
@@ -267,6 +311,39 @@ class _MotionWrapperState extends State<MotionWrapper>
     } else {
       go();
     }
+  }
+
+  /// Runs repeat leg [index], backwards on odd legs when reversing.
+  void _leg(int index) {
+    _legIndex = index;
+    _legBackwards = _plan.reverse && index.isOdd;
+    _legBackwards ? _controller.reverse(from: 1) : _controller.forward(from: 0);
+  }
+
+  /// Starts the next repeat leg, after `repeatDelay`, when the current one
+  /// ends, until `repeatCount` legs ran. Restarting from inside the status
+  /// notification keeps the next leg on the same frame.
+  void _onStatus(AnimationStatus status) {
+    final generation = _generation;
+    if (_legRun != generation || _off) return;
+    final ended = _legBackwards
+        ? status == AnimationStatus.dismissed
+        : status == AnimationStatus.completed;
+    if (!ended) return;
+    final next = _legIndex + 1;
+    final count = _plan.repeatCount;
+    if (count != null && next >= count) {
+      _legRun = null;
+      return;
+    }
+    final pause = _plan.repeatDelay;
+    if (pause <= Duration.zero) {
+      _leg(next);
+      return;
+    }
+    _delayTimer = Timer(pause, () {
+      if (mounted && generation == _generation) _leg(next);
+    });
   }
 
   @override
@@ -289,7 +366,11 @@ class _MotionWrapperState extends State<MotionWrapper>
       _passGate();
       _run();
     } else if (!next.repeat && next.reverse != prev.reverse) {
-      next.reverse ? _controller.reverse() : _controller.forward();
+      if (_reduce) {
+        _controller.value = next.reverse ? 0 : 1;
+      } else {
+        next.reverse ? _controller.reverse() : _controller.forward();
+      }
     }
   }
 
@@ -306,7 +387,7 @@ class _MotionWrapperState extends State<MotionWrapper>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _curved!,
-      child: widget.child,
+      child: _isolate ? RepaintBoundary(child: widget.child) : widget.child,
       builder: (context, child) {
         if (_off) return child!;
         try {

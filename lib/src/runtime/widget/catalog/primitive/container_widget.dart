@@ -58,7 +58,10 @@ final class ContainerWidget {
       context,
       props['foreground_decoration'],
     );
-    final transform = PropsResolver.matrix4(props['transform']);
+    final transform = PropsResolver.matrix4(
+      props['transform'],
+      metrics: PropsResolver.scaleOf(context),
+    );
     final transformAlignment = PropsResolver.alignment(
       props['transform_alignment'],
     );

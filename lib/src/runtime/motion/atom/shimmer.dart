@@ -10,13 +10,11 @@ final class ShimmerMotion extends Motion {
   String get type => 'shimmer';
 
   @override
-  MotionPlan plan(MotionParams p) => MotionPlan(
-    duration: p.duration('duration', const Duration(milliseconds: 1200)),
-    curve: p.curve('curve', Curves.linear),
-    delay: p.duration('delay', Duration.zero),
-    repeat: p.flag('repeat', fallback: true),
-    reverse: p.flag('reverse', fallback: false),
-    trigger: p.raw('trigger'),
+  MotionPlan plan(MotionParams p) => MotionPlan.from(
+    p,
+    duration: const Duration(milliseconds: 1200),
+    curve: Curves.linear,
+    repeat: true,
   );
 
   @override

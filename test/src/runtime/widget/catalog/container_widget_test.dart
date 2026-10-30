@@ -165,6 +165,21 @@ void main() {
         expect(container.transform?.entry(1, 1), 1);
         expect(container.transformAlignment, Alignment.centerRight);
       });
+
+      testWidgets('transform.offset은 EngineMetrics로 scale된 이동이다', (
+        tester,
+      ) async {
+        await _pump(tester, const {
+          'transform': {
+            'offset': [8, -4],
+          },
+        }, scale: 2);
+        final t = tester
+            .widget<Container>(find.byType(Container))
+            .transform!
+            .getTranslation();
+        expect([t.x, t.y], [16, -8]);
+      });
     });
   });
 }

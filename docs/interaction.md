@@ -31,7 +31,7 @@ _on:
     event: { source: keyboard }
 ```
 
-The short form is a non-empty action name. The object form allows exactly `do`, `throttle`, `debounce`, `ripple`, and `event`. `do` is required. `throttle` and `debounce` are mutually exclusive positive millisecond numbers (numeric strings are accepted): throttle is leading-edge and drops later events in the window; debounce is trailing-edge and keeps only the last event after a quiet period. Different event names time independently, and pending timers are cancelled when the wrapper disposes.
+The short form is a non-empty action name. The object form allows exactly `do`, `throttle`, `debounce`, `ripple`, `event`, and `pressed_as`. `do` is required. `throttle` and `debounce` are mutually exclusive positive millisecond numbers (numeric strings are accepted): throttle is leading-edge and drops later events in the window; debounce is trailing-edge and keeps only the last event after a quiet period. Different event names time independently, and pending timers are cancelled when the wrapper disposes.
 
 `event` is recursively expression-bindable and is exposed to the action as `$event`. For scroll events, runtime metrics are the emitted payload.
 
@@ -51,5 +51,21 @@ Sdui.initialize(
 ```
 
 `MyTapFeedback` implements `TapFeedback.wrap(context, child, {onTap, onLongPress, onDoubleTap})`, invoking the callbacks and rendering whatever press effect the app wants — the starter kit ships an advanced tint + press-inset implementation as a reference.
+
+## Press state
+
+`tap: { do, pressed_as: <name> }` declares a bool variable that is `true` while the tap is held (since 0.9.0, `_requires: [press_v1]`). The node's own props and its descendants can read it; siblings cannot.
+
+```yaml
+_type: container
+color: '${down ? "#FFE0E0E0" : "#FFFFFFFF"}'
+_on:
+  tap: { do: submit, pressed_as: down }
+_child: { _type: text, value: '${down ? "Release to send" : "Send"}' }
+```
+
+- It turns `true` when the first pointer goes down on the node and `false` on pointer up or cancel, when that pointer moves past the touch slop (a scroll taking the gesture, a drag away), and when the node goes away while held. Further pointers are ignored.
+- It works with `ripple: true` or `false` and does not change when the action fires; the tap still follows `throttle`/`debounce`.
+- An unbindable name is a compile error; a non-string or empty value, or `pressed_as` on another event, is ignored.
 
 Input events are rejected on non-bound widget specifications. Every referenced action must exist in the enclosing lexical action chain. See [actions](actions.md) and [state](state.md).

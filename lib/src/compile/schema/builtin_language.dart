@@ -60,6 +60,7 @@ abstract final class BuiltinLanguage {
   'image': WidgetSchema(kind: WidgetKind.slot, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'image_filtered': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'indexed_stack': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
+  'layout_builder': WidgetSchema(kind: WidgetKind.builder, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'interactive_viewer': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'intrinsic_height': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'intrinsic_width': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
@@ -91,6 +92,7 @@ abstract final class BuiltinLanguage {
   'serpentine': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'serpentine_row': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'shader_mask': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
+  'semantics': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'shape': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'single_child_scroll_view': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'sized_overflow_box': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
@@ -235,6 +237,38 @@ abstract final class BuiltinLanguage {
     'mass': (min: 0.1, max: 10, values: null),
   };
 
+  /// Keys a literal `shape` `shapes` item may carry; any other key is a typo.
+  static const Set<String> shapeItemKeys = {
+    'kind',
+    'op',
+    'smooth',
+    'at',
+    'align',
+    'offset',
+    'inset',
+    'width',
+    'height',
+    'radius',
+  };
+
+  /// Literal values a `shape` item's `op` may take.
+  static const Set<String> shapeOps = {'union', 'subtract', 'intersect'};
+
+  /// Keys a literal `shape` `shadow` map may carry.
+  static const Set<String> shapeShadowKeys = {'color', 'blur', 'offset'};
+
+  /// Keys a literal `shape` `backdrop` map may carry.
+  static const Set<String> shapeBackdropKeys = {'blur'};
+
+  /// Inclusive clamps of the `shape` widget's numbers; the runtime clamps
+  /// to these.
+  static const Map<String, ({double min, double max})> shapeRanges = {
+    'smooth': (min: 0, max: 64),
+    'rim.width': (min: 0, max: 16),
+    'shadow.blur': (min: 0, max: 40),
+    'backdrop.blur': (min: 0, max: 40),
+  };
+
   /// Registered expression function names accepted in `${...}` calls.
   static const Set<String> functions = {
   'abs',
@@ -277,7 +311,9 @@ abstract final class BuiltinLanguage {
   'reversed',
   'round',
   'set_path',
+  'sign',
   'sin',
+  'smoothstep',
   'sorted',
   'split',
   'starts_with',

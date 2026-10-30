@@ -500,5 +500,56 @@ void main() {
         );
       });
     });
+
+    group('빌트인 — 0.9.0 수학', () {
+      test('smoothstep은 e0..e1 사이를 3t²-2t³로 잇고 바깥은 0·1로 고정한다', () {
+        expect(call('smoothstep', [0, 1, 0.5]), closeTo(0.5, 1e-12));
+        expect(call('smoothstep', [0, 1, 0.25]), closeTo(0.15625, 1e-12));
+        expect(call('smoothstep', [10, 20, 5]), 0);
+        expect(call('smoothstep', [10, 20, 25]), 1);
+        // 뒤집힌 경계도 같은 식(GLSL과 같다).
+        expect(call('smoothstep', [1, 0, 0.25]), closeTo(0.84375, 1e-12));
+      });
+
+      test('smoothstep 경계가 같으면 x < e0에서 0, 아니면 1', () {
+        expect(call('smoothstep', [2, 2, 1]), 0);
+        expect(call('smoothstep', [2, 2, 2]), 1);
+        expect(call('smoothstep', [2, 2, 3]), 1);
+      });
+
+      test('smoothstep은 정확히 유한수 셋이 아니면 null', () {
+        for (final args in <List<Object?>>[
+          [],
+          [0, 1],
+          [0, 1, 0.5, 2],
+          [0, 1, 'x'],
+          [0, 1, null],
+          [double.nan, 1, 0.5],
+          [0, double.infinity, 0.5],
+          [0, 1, double.negativeInfinity],
+        ]) {
+          expect(call('smoothstep', args), isNull, reason: '$args');
+        }
+      });
+
+      test('sign은 -1·0·1을 낸다', () {
+        expect(call('sign', [-3.5]), -1);
+        expect(call('sign', [0]), 0);
+        expect(call('sign', [7]), 1);
+      });
+
+      test('sign은 정확히 유한수 하나가 아니면 null', () {
+        for (final args in <List<Object?>>[
+          [],
+          [1, 2],
+          ['1'],
+          [null],
+          [double.nan],
+          [double.infinity],
+        ]) {
+          expect(call('sign', args), isNull, reason: '$args');
+        }
+      });
+    });
   });
 }

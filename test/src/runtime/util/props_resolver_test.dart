@@ -542,6 +542,29 @@ void main() {
       test('맵이 아니면 null', () {
         expect(PropsResolver.matrix4('bad'), isNull);
       });
+
+      test('offset은 scale을 곱한 이동이고 translate는 그대로다', () {
+        final result = PropsResolver.matrix4({
+          'offset': [3, 4],
+          'translate': [1, 1],
+        }, metrics: 2);
+        expect(result?.entry(0, 3), 7);
+        expect(result?.entry(1, 3), 9);
+      });
+
+      test('잘못된 offset은 무시한다', () {
+        for (final bad in <Object?>[
+          [1],
+          [1, 'x'],
+          [double.nan, 0],
+          [double.infinity, 0],
+          'x',
+          3,
+        ]) {
+          final result = PropsResolver.matrix4({'offset': bad}, metrics: 2);
+          expect(result, Matrix4.identity(), reason: '$bad');
+        }
+      });
     });
 
     group('text_style', () {

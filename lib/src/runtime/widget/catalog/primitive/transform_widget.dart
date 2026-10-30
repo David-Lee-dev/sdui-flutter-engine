@@ -11,6 +11,10 @@ import '../../../util/props_resolver.dart';
 /// ```
 ///
 /// Props:
+/// - `translate` (`[x, y]`, default `null`) — unscaled translation.
+/// - `offset` (`[x, y]`, default `null`) — translation scaled by EngineMetrics.
+/// - `rotate` (`number`, default `null`) — Z rotation in radians.
+/// - `scale` (`number | [sx, sy]`, default `null`) — scale factor.
 /// - `alignment` (`alignment`, default `center`) — positions the child or children within the available space. Values: top_left | top_center | top_right | center_left | center | center_right | bottom_left | bottom_center | bottom_right.
 ///
 /// Child: `_child`.
@@ -23,7 +27,12 @@ final class TransformWidget {
     List<Widget> children,
   ) {
     return Transform(
-      transform: PropsResolver.matrix4(props) ?? Matrix4.identity(),
+      transform:
+          PropsResolver.matrix4(
+            props,
+            metrics: PropsResolver.scaleOf(context),
+          ) ??
+          Matrix4.identity(),
       alignment:
           PropsResolver.alignment(props['alignment']) ?? Alignment.center,
       child: children.isEmpty ? null : children.first,

@@ -47,16 +47,18 @@ with the failing node's template path (`nodePath`), then replaced in place:
 out of this error path entirely, in debug and release alike:
 
 - **Typos are compile errors**, reported as any compile failure: an
-  unregistered `_motion` name, an unknown `_morph` key, an unbindable `_as`
-  name, an unknown `_spring` preset or `_spring` map key, and expression
-  syntax errors.
+  unregistered `_motion` name, an unknown `_morph` key, an unbindable `_as`,
+  `_velocity` or `_on.tap.pressed_as` name, an unknown `_spring` preset or
+  `_spring` map key, and expression syntax errors.
 - **Everything else is silently swallowed** and behaves as if the animation
   were not there. A malformed `_motion` entry is dropped; a layer whose
   parameters, `plan()` or `frame()` throw (including app-registered atoms)
   is off for the node's lifetime while other layers keep running. A
   malformed `_morph` value gives a morph without animation whose variable
   takes `_to` at once; a `_to`/`_from`/`_trigger` that throws at runtime
-  keeps the last good value (then a valid `_from`, then `null`).
+  keeps the last good value (then a valid `_from`, then `null`). Bad curves,
+  `repeat` counts and `repeat_delay` values fall back to their defaults, and a
+  non-string `_velocity` or `pressed_as` drops only that variable.
 
 These failures are never reported to `SduiErrorObserver` and never trigger
 `NodeGuard`, so the widget itself is never replaced. A debug build logs one

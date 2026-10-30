@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.9.0
+
+Motion, morph, interaction and expression additions. Templates that use any
+of them should declare the matching `_requires` feature (see
+[Concepts](docs/concepts.md#reserved-keys)); old templates render as before,
+except for the reduced-motion and numeric-`repeat` notes below.
+
+- `_morph._velocity: <name>` exposes the value's velocity (`_to` units per
+  second; spring velocity or curve slope for tweens), `0` at rest and under
+  reduced motion, clamped to ±10,000 (`spring_v2`).
+- `curve` / `_curve` accept `[x1, y1, x2, y2]` cubic beziers, Material 3
+  names (`emphasized`, `emphasized_decelerate`, `emphasized_accelerate`,
+  `standard`, `standard_decelerate`, `standard_accelerate`) and spring curves
+  (`spatial_fast`, `spatial_default`, `spatial_slow`, `effect_default`) whose
+  settle time is the default duration (`curve_v2`). Page transitions accept
+  the new names too. Unknown names keep their old fallback.
+- `_motion` `repeat` takes a leg count 1–1000 and `repeat_delay` pauses
+  between legs (`motion_repeat_v1`). A numeric `repeat` used to mean "no
+  repeat"; `1`–`1000` now repeat that many legs. `MotionPlan` gains
+  `repeatCount`, and `MotionPlan.from` a `repeat` default.
+- Reduced motion (`MediaQuery.disableAnimations`): `_motion` layers draw
+  their end state without running, and tween `_morph` jumps to its target
+  (spring morphs already did). **Behavior change** for devices with that
+  setting on.
+- `_motion` and `_on` work on `positioned`, `positioned_fill`, `expanded`,
+  `flexible` and `spacer`: the layers go inside the parent-data widget
+  (`parent_data_motion_v1`). Other nodes keep their wrapper order.
+- `_on.tap.pressed_as: <name>` gives the node and its descendants a bool that
+  is true while the tap is held (`press_v1`).
+- Expression functions `smoothstep(e0, e1, x)` and `sign(x)` (`math_v2`).
+- `transform` / container `transform` take `offset: [x, y]`, scaled by
+  `EngineMetrics` (`transform_offset_v1`); `translate` is unchanged.
+- Repeating `_motion` layers, and the direct widget of spring or repeating
+  `_morph`s, sit in a `RepaintBoundary`. One-shot motions and morphs add
+  nothing to the tree.
+- `shape` items take `op` (`union` | `subtract` | `intersect`, folded left
+  in list order), their own `smooth`, and `at: [fx, fy]` (center as box
+  fractions, wins over `align`). `fill` and `rim.gradient` take gradient
+  maps; `shadow: { color, blur, offset }` and `backdrop: { blur }` paint
+  under the shape. Stages paint shadow → backdrop → fill → rim and fail
+  independently. The backdrop blur is clipped by the hard outline (about
+  8 px outside a `smooth: 24` dip, 20 px at `smooth: 64`). Without the
+  shader, subtract and intersect use hard `Path` operations (`shape_v2`).
+  A literal unknown `op`, or an unknown key in a literal `shapes` item,
+  `shadow` or `backdrop`, now fails compilation; **old templates with a
+  typo key inside a `shapes` item no longer compile**.
+- `shape` now always sits in its own `RepaintBoundary`.
+- New `semantics` widget: `label`, `button`, `selected`, `hidden`
+  (`semantics_v1`).
+- New `layout_builder` builder widget: its child reads `max_width` and
+  `max_height` in template units (`null` when unbounded) via `_provides`.
+  Inside `intrinsic_width`/`intrinsic_height` it fails compilation; under an
+  app-side intrinsic parent it answers 0 and logs once
+  (`layout_builder_v1`).
+- `ShapeGeometry.unionDistance`/`unionPath` are now `combineDistance`/
+  `hardPath` (internal API).
+
 ## 0.8.0
 
 **Behavior change:** screens now draw under the bottom system inset (home

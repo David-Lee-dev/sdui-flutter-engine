@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:sdui_engine/src/ir/model/event_timing.dart';
@@ -14,6 +15,8 @@ import '../engine_presentation.dart';
 ///
 /// Each gesture's action dispatch runs through the per-event [timing]
 /// (throttle / debounce), so e.g. a `tap` can drop rapid double-fires.
+/// [onPressed] hears the first pointer go down (true) and up, cancel or move
+/// past the touch slop, as when a scroll takes the gesture (false).
 class InteractionWrapper extends StatefulWidget {
   const InteractionWrapper({
     super.key,
@@ -22,6 +25,7 @@ class InteractionWrapper extends StatefulWidget {
     this.timing = const {},
     this.payloads = const {},
     this.feedback = true,
+    this.onPressed,
     required this.child,
   });
 
@@ -41,6 +45,9 @@ class InteractionWrapper extends StatefulWidget {
   /// Whether a tap plays the press feedback. When false, taps still fire, silently.
   final bool feedback;
 
+  /// Receives the `pressed_as` state, if the node declares one.
+  final ValueChanged<bool>? onPressed;
+
   final Widget child;
 
   @override
@@ -51,8 +58,17 @@ class _InteractionWrapperState extends State<InteractionWrapper> {
   final EventTimingController _timing = EventTimingController();
   final Map<String, _AttemptWindow> _attempts = {};
 
+  /// The pointer holding the press, and where it went down.
+  int? _pointer;
+  Offset _origin = Offset.zero;
+
   @override
   void dispose() {
+    if (_pointer != null) {
+      // The tree is locked while disposing; release the press right after.
+      final onPressed = widget.onPressed;
+      scheduleMicrotask(() => onPressed?.call(false));
+    }
     for (final window in _attempts.values) {
       window.timer.cancel();
       _recordRejected(window);
@@ -147,8 +163,45 @@ class _InteractionWrapperState extends State<InteractionWrapper> {
     if (widget.node.position.isNotEmpty) 'position': widget.node.position,
   };
 
+  void _down(PointerDownEvent event) {
+    if (_pointer != null) return;
+    _pointer = event.pointer;
+    _origin = event.position;
+    widget.onPressed?.call(true);
+  }
+
+  void _move(PointerMoveEvent event) {
+    if (event.pointer != _pointer) return;
+    final slop = computeHitSlop(
+      event.kind,
+      MediaQuery.maybeGestureSettingsOf(context),
+    );
+    if ((event.position - _origin).distance > slop) _release();
+  }
+
+  void _end(PointerEvent event) {
+    if (event.pointer == _pointer) _release();
+  }
+
+  void _release() {
+    _pointer = null;
+    widget.onPressed?.call(false);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final gestures = _gestures(context);
+    if (widget.onPressed == null) return gestures;
+    return Listener(
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: _end,
+      onPointerCancel: _end,
+      child: gestures,
+    );
+  }
+
+  Widget _gestures(BuildContext context) {
     final onTap = _handler('tap');
     final onDoubleTap = _handler('double_tap');
     final onLongPress = _handler('long_press');

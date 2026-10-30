@@ -69,7 +69,26 @@ opacity: '${alpha}'
 _child: { _type: text, value: Ready }
 ```
 
-The morph variable is readable only by its child and is not writable state. Curve names use the same resolver documented in [Motion](motion.md).
+The morph variable is readable only by its child and is not writable state. `_curve` uses the same resolver as `_motion` (names, Material 3 easings, `[x1, y1, x2, y2]` beziers and spring curves; see [Motion](motion.md#curves)). A spring curve name without `_duration` runs for the spring's settle time instead of 400 ms. When the platform asks to reduce motion (`MediaQuery.disableAnimations`) the variable jumps to every target, including with `_repeat` (since 0.9.0).
+
+### `_velocity`
+
+`_velocity: <name>` adds a second variable holding the value's current rate of change, in `_to` units per second (since 0.9.0, `_requires: [spring_v2]`). Like `_as` it is readable only by the child.
+
+```yaml
+_type: transform
+_morph:
+  _to: '${offset}'
+  _as: x
+  _velocity: vx
+  _spring: spatial_default
+rotate: '${clamp(vx / 4000, -0.2, 0.2)}'
+_child: { _type: text, value: Drag }
+```
+
+- With `_spring` it is the simulation's velocity; for a tween, the curve's slope times `(_to - _from)` over the duration, negative on a reversing `_repeat` leg.
+- It is `0` when the value is at rest, before the first run, under reduced motion and in a morph without animation. Non-finite results read as `0`; the magnitude is clamped to 10,000.
+- An unbindable name (`'v-x'`) is a compile error like `_as`; a non-string or empty value drops only this variable (a child that reads it then fails as an undeclared binding).
 
 ### When a morph is misused or fails
 
@@ -77,7 +96,7 @@ A morph never fails the template or stops the app, in debug and release alike (s
 
 - **Compile error (typo):** an unknown `_morph` key, an `_as` name that cannot be referenced as a binding (e.g. `line-item`), an unknown `_spring` preset name or `_spring` map key, and expression syntax errors.
 - **No morph:** a `_morph` value that is not a map, or a missing, empty or non-string `_as`. The child renders without the morph (a child that still reads the name then fails as any undeclared binding does).
-- **Morph without animation:** any other malformed value — a missing `_to`, a `_to`/`_from`/`_trigger` that is neither an expression nor a scalar, `_duration`/`_delay` that are not non-negative integers, a non-string `_curve`, non-bool `_repeat`/`_reverse`, `_repeat` with `_duration: 0`, and every `_spring` misuse listed [below](#_spring). The `_as` variable is still provided and equals the evaluated `_to` immediately, following every `_to` change at once. An unknown curve *name* still falls back to `ease_out`.
+- **Morph without animation:** any other malformed value — a missing `_to`, a `_to`/`_from`/`_trigger` that is neither an expression nor a scalar, `_duration`/`_delay` that are not non-negative integers, a `_curve` that is neither a string nor a list, non-bool `_repeat`/`_reverse`, `_repeat` with `_duration: 0`, and every `_spring` misuse listed [below](#_spring). The `_as` variable is still provided and equals the evaluated `_to` immediately, following every `_to` change at once. An unknown curve *name* or a malformed bezier list still falls back to `ease_out`.
 - **Runtime:** when evaluating `_to`, `_from` or `_trigger` throws or yields something that is not a finite number, the variable keeps its last good value; before any good value it uses a valid `_from`, and otherwise it is `null`.
 
 None of this reaches `SduiErrorObserver` or `NodeGuard`; a debug build logs one `animation off (...)` line per node and reason. See [Error handling](errors.md#motion-and-morph-never-fail).
@@ -110,6 +129,7 @@ A literal map gives `stiffness` (1–5000, required), `damping_ratio` (0.2–2, 
 - `_from`, `_delay` and `_trigger` work as for the tween; a trigger restarts from `_from` at rest.
 - A target equal to the current target is ignored. A target that is not a finite number, or whose expression fails to evaluate, keeps the previous target; with no good target yet the value is a valid `_from`, else `null`.
 - A simulation that has not settled after 5 seconds snaps to its target. When the platform asks to reduce motion (`MediaQuery.disableAnimations`), the value jumps to the target.
+- The morph's direct widget (a plain node) is drawn in its own `RepaintBoundary`, inside a parent-data widget such as `expanded`; so is the direct widget of a tween with `_repeat`. One-shot tweens add nothing (since 0.9.0).
 
 Older engines reject `_spring` as an unknown morph key; declare `_requires: [spring_v1]` at the template root (see [Concepts](concepts.md#reserved-keys)).
 

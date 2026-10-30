@@ -35,12 +35,36 @@ Nothing in these cases reaches `SduiErrorObserver` or `NodeGuard`; a debug build
 
 | Name | Type | Default | Description |
 | --- | --- | --- | --- |
-| `duration` | milliseconds, 0–1,000,000 | `300` (`shimmer`: `1200`) | One animation leg. |
-| `curve` | name | `ease_out` (`shimmer`: `linear`) | `linear`, `ease`, `ease_in`, `ease_out`, `ease_in_out`, `fast_out_slow_in`, `bounce_out`, `elastic_out`, `decelerate`. Unknown names use the atom fallback. |
+| `duration` | milliseconds, 0–1,000,000 | `300` (`shimmer`: `1200`); a spring curve's settle time | One animation leg. |
+| `curve` | name or `[x1, y1, x2, y2]` | `ease_out` (`shimmer`: `linear`) | See [Curves](#curves). Unknown names and malformed lists use the atom fallback. |
 | `delay` | milliseconds, 0–1,000,000 | `0` | Initial delay, measured from when the start gate opens (see below). |
-| `repeat` | bool | `false` (`shimmer`: `true`) | Repeats until disposal/change. |
+| `repeat` | `true` or a leg count 1–1000 | `false` (`shimmer`: `true`) | `true` repeats until disposal/change; a count runs that many legs and stops at the end of the last one. Since 0.9.0 for counts. |
+| `repeat_delay` | milliseconds, 0–1,000,000 | `0` | Pause between two repeated legs, holding the end of the leg just run. Since 0.9.0. |
 | `reverse` | bool | `false` | Alternates direction when repeating. |
-| `trigger` | any | `null` | Runtime restart identity. |
+| `trigger` | any | `null` | Runtime restart identity; also restarts a leg count. |
+
+A `repeat` value that is neither a bool nor a whole number in 1–1000 (`0`, `2.5`, `1001`, `'x'`) falls back to the atom default, and an invalid `repeat_delay` to `0`. With `reverse`, odd legs run backwards, so `repeat: 2, reverse: true` goes there and back and stops at the start. A counted or pausing repeat detects each leg's end on the frame after it is due, so the next leg may start up to one frame late. Declare `_requires: [motion_repeat_v1]` for counts and `repeat_delay`.
+
+### Curves
+
+`curve` (and `_morph._curve`) accepts, since 0.9.0 (`_requires: [curve_v2]`):
+
+- The names `linear`, `ease`, `ease_in`, `ease_out`, `ease_in_out`, `fast_out_slow_in`, `bounce_out`, `elastic_out`, `decelerate`.
+- Material 3 easings: `emphasized`, `emphasized_decelerate` (0.05, 0.7, 0.1, 1), `emphasized_accelerate` (0.3, 0, 0.8, 0.15), `standard` (0.2, 0, 0, 1), `standard_decelerate` (0, 0, 0, 1), `standard_accelerate` (0.3, 0, 1, 1).
+- A cubic bezier `[x1, y1, x2, y2]` of four finite numbers. `x1`/`x2` are clamped to 0–1; a `y` beyond ±10, a non-number or a wrong length uses the fallback.
+- Spring curves `spatial_fast`, `spatial_default`, `spatial_slow`, `effect_default`: the matching [`_spring` preset](control-flow.md#_spring) run from 0 to 1 at rest, stretched so its settle time maps to the end. Without an explicit `duration` the motion runs for that settle time; with one, the spring is squeezed into it. It overshoots like the spring does.
+
+### Reduced motion
+
+When the platform asks to reduce motion (`MediaQuery.disableAnimations`), every `_motion` layer draws its end state at once (t = 1) and runs nothing: delays, repeats and `shimmer` stop there, and a `trigger` change keeps the end state. A one-shot layer whose `reverse` flips shows the start state instead. Turning reduced motion on mid-run jumps to the end. Since 0.9.0.
+
+### Repaint isolation
+
+A repeating layer wraps its child in a `RepaintBoundary`, so the animation repaints only the moving subtree. The decision is made when the layer mounts. A one-shot layer adds nothing to the tree. Since 0.9.0.
+
+### Parent-data widgets
+
+`_motion` and `_on` work on `positioned`, `positioned_fill`, `expanded`, `flexible` and `spacer` since 0.9.0: their layers go around the node's child, inside the parent-data widget, so the parent still sees it directly. Older engines fail with "Incorrect use of ParentDataWidget"; declare `_requires: [parent_data_motion_v1]`.
 
 `_motion` atoms are time-based tweens. For a value that follows changing state with spring physics (velocity carried across retargets), use `_morph` with `_spring`; see [Control flow](control-flow.md#_spring).
 

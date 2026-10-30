@@ -39,6 +39,8 @@ final class FunctionRegistry {
     'cos': _Builtins.cos,
     'pow': _Builtins.pow,
     'remap': _Builtins.remap,
+    'smoothstep': _Builtins.smoothstep,
+    'sign': _Builtins.sign,
     'mix': _ar(3, _Builtins.mix),
     'comma': _ar(1, _Builtins.comma),
     'format': _ar(2, _Builtins.format),
@@ -261,6 +263,18 @@ final class _Builtins {
     if (a0 == a1) return null;
     return b0 + (v - a0) / (a1 - a0) * (b1 - b0);
   });
+
+  /// Hermite step from `e0` to `e1`: `0` below, `1` above, `3t² - 2t³`
+  /// between. Exactly 3 finite numbers; equal edges step at `e0`.
+  static Object? smoothstep(List<Object?> a) => _finiteOf(a, 3, (x) {
+    final [e0, e1, v] = x;
+    if (e0 == e1) return v < e0 ? 0 : 1;
+    final t = ((v - e0) / (e1 - e0)).clamp(0, 1);
+    return t * t * (3 - 2 * t);
+  });
+
+  /// `-1`, `0` or `1` for exactly one finite number, else `null`.
+  static Object? sign(List<Object?> a) => _finiteOf(a, 1, (x) => x[0].sign);
 
   /// Runs [fn] on exactly [arity] finite numbers and keeps a finite result.
   static Object? _finiteOf(

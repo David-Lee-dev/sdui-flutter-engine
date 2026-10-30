@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/shimmer.dart';
+import 'package:sdui_engine/src/runtime/util/engine_curve.dart';
 
 void main() {
   group('MotionParams (관대 디코더)', () {
@@ -212,6 +213,88 @@ void main() {
         );
         expect(plan.duration, const Duration(milliseconds: 600));
         expect(plan.curve, Curves.linear);
+      });
+    });
+
+    group('0.9.0', () {
+      test('기본 plan은 횟수 제한·반복 사이 쉼이 없다', () {
+        final plan = MotionPlan.from(const MotionParams({}));
+        expect(plan.repeatCount, isNull);
+        expect(plan.repeatDelay, Duration.zero);
+      });
+
+      test('스프링 곡선에 duration이 없으면 정착 시간이 길이가 된다', () {
+        final plan = MotionPlan.from(
+          const MotionParams({'curve': 'spatial_slow'}),
+        );
+        expect(plan.duration, EngineCurve.settleDuration('spatial_slow'));
+        expect(plan.curve, EngineCurve.resolve('spatial_slow'));
+      });
+
+      test('명시한 duration이 스프링 정착 시간보다 우선한다', () {
+        final plan = MotionPlan.from(
+          const MotionParams({'curve': 'spatial_slow', 'duration': 120}),
+        );
+        expect(plan.duration, const Duration(milliseconds: 120));
+      });
+
+      test('곡선 목록은 큐빅 베지어로 해석한다', () {
+        final plan = MotionPlan.from(
+          const MotionParams({
+            'curve': [0.2, 0, 0, 1],
+          }),
+        );
+        expect(plan.curve, isA<Cubic>());
+      });
+
+      test('repeat: 정수 1..1000은 그 횟수만큼 반복한다', () {
+        for (final n in [1, 3, 1000, 4.0]) {
+          final plan = MotionPlan.from(MotionParams({'repeat': n}));
+          expect(plan.repeat, isTrue, reason: '$n');
+          expect(plan.repeatCount, n.toInt(), reason: '$n');
+        }
+        final forever = MotionPlan.from(const MotionParams({'repeat': true}));
+        expect(forever.repeat, isTrue);
+        expect(forever.repeatCount, isNull);
+      });
+
+      test('범위 밖·정수가 아닌 repeat은 기본값(반복 없음)', () {
+        for (final bad in <Object?>[0, -1, 1001, 2.5, 'x', double.nan, null]) {
+          final plan = MotionPlan.from(MotionParams({'repeat': bad}));
+          expect(plan.repeat, isFalse, reason: '$bad');
+          expect(plan.repeatCount, isNull, reason: '$bad');
+        }
+      });
+
+      test('repeat_delay는 반복 사이 쉼(ms), 잘못되면 0', () {
+        expect(
+          MotionPlan.from(
+            const MotionParams({'repeat_delay': 250}),
+          ).repeatDelay,
+          const Duration(milliseconds: 250),
+        );
+        for (final bad in <Object?>[-1, 'x', 1e7, double.infinity]) {
+          expect(
+            MotionPlan.from(MotionParams({'repeat_delay': bad})).repeatDelay,
+            Duration.zero,
+            reason: '$bad',
+          );
+        }
+      });
+
+      test('shimmer도 repeat 횟수·repeat_delay·스프링 곡선 길이를 따른다', () {
+        const atom = ShimmerMotion();
+        final plan = atom.plan(
+          const MotionParams({'repeat': 2, 'repeat_delay': 40}),
+        );
+        expect(plan.repeat, isTrue);
+        expect(plan.repeatCount, 2);
+        expect(plan.repeatDelay, const Duration(milliseconds: 40));
+        expect(atom.plan(const MotionParams({})).repeat, isTrue);
+        expect(
+          atom.plan(const MotionParams({'curve': 'spatial_fast'})).duration,
+          EngineCurve.settleDuration('spatial_fast'),
+        );
       });
     });
   });

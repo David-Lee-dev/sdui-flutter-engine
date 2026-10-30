@@ -1,5 +1,6 @@
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
+import 'package:sdui_engine/src/ir/model/engine_curve.dart';
 import 'package:sdui_engine/src/ir/model/engine_spring.dart';
 import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/model/lifecycle_hook.dart';
@@ -50,10 +51,32 @@ final class TemplateCompiler {
   /// so a template that needs a feature fails to compile on an engine
   /// without it instead of rendering partially.
   static const knownFeatures = {
+    // 0.7.0
     'spring_v1',
     'shape_v1',
     'math_v1',
     'align_xy_v1',
+    // 0.9.0: `_morph._velocity`.
+    'spring_v2',
+    // 0.9.0: cubic-bezier lists, Material 3 and spring curve names.
+    'curve_v2',
+    // 0.9.0: `_motion` `repeat: <count>` and `repeat_delay`.
+    'motion_repeat_v1',
+    // 0.9.0: `_on.tap.pressed_as`.
+    'press_v1',
+    // 0.9.0: `transform: { offset: [x, y] }`.
+    'transform_offset_v1',
+    // 0.9.0: `smoothstep`, `sign`.
+    'math_v2',
+    // 0.9.0: `_motion` / `_on` on positioned, expanded and flexible nodes.
+    'parent_data_motion_v1',
+    // 0.9.0: `shape` op, per-item smooth, `at`, gradient fill/rim, shadow,
+    // backdrop.
+    'shape_v2',
+    // 0.9.0: the `semantics` widget.
+    'semantics_v1',
+    // 0.9.0: the `layout_builder` widget.
+    'layout_builder_v1',
   };
 
   /// Builds the directive tree for a template root.
@@ -124,6 +147,7 @@ final class TemplateCompiler {
         timing: onSpec.timing,
         onEvent: onSpec.payloads,
         tapFeedback: onSpec.tapFeedback,
+        pressedAs: onSpec.pressedAs,
         motions: motions,
         provides: _parseProvides(node),
         roots: {
@@ -368,6 +392,7 @@ final class TemplateCompiler {
     '_repeat',
     '_reverse',
     '_spring',
+    '_velocity',
   };
 
   /// `_morph` keys that configure the tween and so conflict with `_spring`.
@@ -375,11 +400,12 @@ final class TemplateCompiler {
 
   /// Builds the `_morph` directive around [child].
   ///
-  /// Only typos fail compilation: an unknown key, an unbindable `_as` name,
-  /// an unknown spring preset or spring key. Other misuse degrades: without a
-  /// map or an `_as` name the morph is dropped, and a malformed value or a
-  /// conflicting or out-of-range `_spring` yields a morph without animation,
-  /// whose variable takes `_to` at once.
+  /// Only typos fail compilation: an unknown key, an unbindable `_as` or
+  /// `_velocity` name, an unknown spring preset or spring key. Other misuse
+  /// degrades: without a map or an `_as` name the morph is dropped, a
+  /// non-string or empty `_velocity` drops that variable, and a malformed
+  /// value or a conflicting or out-of-range `_spring` yields a morph without
+  /// animation, whose variable takes `_to` at once.
   static Directive _wrapMorph(UiNode node, Directive child) {
     if (!node.reserved.containsKey('_morph')) return child;
     final raw = node.reserved['_morph'];
@@ -396,6 +422,13 @@ final class TemplateCompiler {
     final as = raw['_as'];
     if (as is! String || as.isEmpty) return child;
     _requireBindableName(as, 'morph "_as" name', node.path);
+    final velocity = raw['_velocity'];
+    final velocityAs = velocity is String && velocity.isNotEmpty
+        ? velocity
+        : null;
+    if (velocityAs != null) {
+      _requireBindableName(velocityAs, 'morph "_velocity" name', node.path);
+    }
 
     var malformed = false;
     Expression? expression(String key) {
@@ -416,8 +449,12 @@ final class TemplateCompiler {
     final to = expression('_to');
     final from = expression('_from');
     final trigger = expression('_trigger');
-    final duration = raw['_duration'] ?? 400;
     final curve = raw['_curve'] ?? 'ease_out';
+    // A spring curve without `_duration` runs for its settle time, which the
+    // runtime derives (null).
+    final duration =
+        raw['_duration'] ??
+        (EngineCurveNames.spring.contains(curve) ? null : 400);
     final delay = raw['_delay'] ?? 0;
     final repeat = raw['_repeat'] ?? false;
     final reverse = raw['_reverse'] ?? false;
@@ -430,9 +467,8 @@ final class TemplateCompiler {
     if (malformed ||
         to == null ||
         springMisused ||
-        duration is! int ||
-        duration < 0 ||
-        curve is! String ||
+        (duration != null && (duration is! int || duration < 0)) ||
+        (curve is! String && curve is! List) ||
         delay is! int ||
         delay < 0 ||
         repeat is! bool ||
@@ -445,6 +481,7 @@ final class TemplateCompiler {
         durationMs: 0,
         curve: 'linear',
         trigger: trigger,
+        velocityAs: velocityAs,
         child: child,
         path: node.path,
       );
@@ -453,13 +490,14 @@ final class TemplateCompiler {
       to: target,
       from: from,
       as: as,
-      durationMs: duration,
+      durationMs: duration as int?,
       curve: curve,
       delayMs: delay,
       repeat: repeat,
       reverse: reverse,
       trigger: trigger,
       spring: spring,
+      velocityAs: velocityAs,
       child: child,
       path: node.path,
     );
@@ -685,6 +723,7 @@ final class TemplateCompiler {
     'debounce',
     'ripple',
     'event',
+    'pressed_as',
   };
 
   /// Parses `_on` into event→action bindings and their optional dispatch timing.
@@ -697,6 +736,7 @@ final class TemplateCompiler {
     Map<String, EventTiming> timing,
     Map<String, Object?> payloads,
     bool tapFeedback,
+    String? pressedAs,
   })
   _parseOn(UiNode node) {
     if (!node.reserved.containsKey('_on')) {
@@ -705,6 +745,7 @@ final class TemplateCompiler {
         timing: const {},
         payloads: const {},
         tapFeedback: true,
+        pressedAs: null,
       );
     }
     final raw = node.reserved['_on'];
@@ -718,6 +759,7 @@ final class TemplateCompiler {
     final timing = <String, EventTiming>{};
     final payloads = <String, Object?>{};
     var tapFeedback = true;
+    String? pressedAs;
     for (final entry in raw.entries) {
       final event = '${entry.key}';
       if (!_knownEvents.contains(event)) {
@@ -747,6 +789,7 @@ final class TemplateCompiler {
           );
         }
         if (_parseNoFeedback(node, event, value)) tapFeedback = false;
+        if (event == 'tap') pressedAs = _parsePressedAs(node, value);
       } else {
         throw InvalidTemplateException(
           node.path,
@@ -760,7 +803,17 @@ final class TemplateCompiler {
       timing: timing,
       payloads: payloads,
       tapFeedback: tapFeedback,
+      pressedAs: pressedAs,
     );
+  }
+
+  /// Reads the optional `tap.pressed_as` name. An unbindable name is a typo
+  /// and throws; a non-string or empty value drops the variable.
+  static String? _parsePressedAs(UiNode node, Map value) {
+    final name = value['pressed_as'];
+    if (name is! String || name.isEmpty) return null;
+    _requireBindableName(name, 'tap "pressed_as" name', node.path);
+    return name;
   }
 
   /// Reads the optional `ripple` flag; only `tap` carries press feedback, so it is

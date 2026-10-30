@@ -15,7 +15,7 @@ Builds Flutter's [Container] from resolved box props. This primitive mirrors the
 | `constraints` | `constraints` | — | `null` | Yes | minimum and maximum dimensions imposed on the child. |
 | `color` | `color` | — | `null` | Yes | color or tint. |
 | `foreground_decoration` | `boxDecoration` | — | `null` | Yes | paints a decoration in front of the child. |
-| `transform` | `matrix4` | — | `null` | Yes | matrix applied before painting the container. |
+| `transform` | `matrix4` | — | `null` | Yes | matrix applied before painting the container: a map of `translate` `[x, y]` (unscaled), `offset` `[x, y]` (scaled by `EngineMetrics`, since 0.9.0), `rotate` radians and `scale`. |
 | `transform_alignment` | `alignment` | top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right | `null` | Yes | origin alignment for the container transform. Values: top_left \| top_center \| top_right \| center_left \| center \| center_right \| bottom_left \| bottom_center \| bottom_right. |
 | `clip_behavior` | `clip` | none, hard_edge, anti_alias, anti_alias_with_save_layer | `none` | Yes | edge clipping behavior. Values: none \| hard_edge \| anti_alias \| anti_alias_with_save_layer. |
 | `_child` | widget node | — | `null` | No | The single positional child; cannot be combined with `_children` or `_slots`. |

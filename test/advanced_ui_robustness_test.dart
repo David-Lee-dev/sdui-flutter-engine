@@ -75,7 +75,7 @@ void main() {
 
   test('함수와 정렬 해석은 어떤 입력에도 던지지 않고 유한수나 null만 낸다', () {
     for (var i = 0; i < _rounds; i++) {
-      for (final name in ['sin', 'cos', 'pow', 'remap']) {
+      for (final name in ['sin', 'cos', 'pow', 'remap', 'smoothstep', 'sign']) {
         final args = [
           for (var n = random.nextInt(7); n > 0; n--) pick(_hostile),
         ];
@@ -297,6 +297,316 @@ void main() {
 
     for (var i = 0; i < _rounds; i++) {
       data.value = round();
+      await tester.pump(Duration(milliseconds: random.nextInt(40)));
+      expect(tester.takeException(), isNull, reason: 'round $i ${data.value}');
+    }
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+    expect(errors, isEmpty);
+  });
+
+  testWidgets('0.9.0 인자(곡선·repeat·_velocity·offset·pressed_as·새 함수)에 '
+      '적대적 값을 1000번 넣어도 예외·보고가 없다', (tester) async {
+    final errors = <SduiError>[];
+    EngineErrors.observer = _Capture(errors);
+    addTearDown(EngineErrors.reset);
+
+    final curves = <Object?>[
+      ..._jsonHostile,
+      'emphasized',
+      'standard_accelerate',
+      'spatial_fast',
+      'effect_default',
+      'bogus',
+    ];
+    Object? curve() => random.nextInt(3) == 0
+        ? [for (var i = 0; i < 4; i++) pick(_hostileNumbers)]
+        : pick(curves);
+    final repeats = <Object?>[..._jsonHostile, 1, 2, 1000, 1001, 2.5];
+
+    final data = ValueNotifier<Map<String, Object?>>(const {});
+    final reduce = ValueNotifier<bool>(false);
+    addTearDown(data.dispose);
+    addTearDown(reduce.dispose);
+    Map<String, Object?> round() => {
+      'k': random.nextInt(4),
+      'a': pick(_hostileNumbers),
+      'b': pick(_hostileNumbers),
+      'cv': curve(),
+      'rp': pick(repeats),
+      'rd': pick(_jsonHostile),
+      'd': pick(_jsonHostile),
+      'rv': pick(_jsonHostile),
+      'o': pick(_jsonHostile),
+      'x': pick(_jsonHostile),
+      'y': pick(_jsonHostile),
+      'z': pick(_jsonHostile),
+    };
+    Map<String, Object?> layer(String type) => {
+      'type': type,
+      'curve': r'${cv}',
+      'repeat': r'${rp}',
+      'repeat_delay': r'${rd}',
+      'duration': r'${d}',
+      'reverse': r'${rv}',
+    };
+    // k picks ±Infinity (a·b overflow), NaN (∞ - ∞) or a plain number.
+    const target = r'${k == 0 ? a * b : (k == 1 ? a * b - a * b : a)}';
+    data.value = round();
+
+    await tester.pumpWidget(
+      ValueListenableBuilder<bool>(
+        valueListenable: reduce,
+        builder: (context, reduced, _) => MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: reduced),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: ValueListenableBuilder<Map<String, Object?>>(
+              valueListenable: data,
+              builder: (context, root, _) => EngineRunner(
+                rootData: root,
+                template: {
+                  '_type': 'column',
+                  '_scope': {
+                    '_state': {'n': 0},
+                    '_action': {
+                      'inc': {'_type': 'set', 'n': r'${n + 1}'},
+                    },
+                  },
+                  '_children': [
+                    {
+                      '_type': 'sizedbox',
+                      'width': 200,
+                      'height': 120,
+                      '_child': {
+                        '_type': 'stack',
+                        '_children': [
+                          {
+                            '_type': 'positioned',
+                            'left': 0,
+                            'top': 0,
+                            '_motion': [
+                              for (final t in [
+                                'fade',
+                                'move',
+                                'shimmer',
+                                'pulse',
+                              ])
+                                layer(t),
+                            ],
+                            '_on': {
+                              'tap': {'do': 'inc', 'pressed_as': 'down'},
+                            },
+                            '_morph': {
+                              '_to': target,
+                              '_as': 'm',
+                              '_velocity': 'mv',
+                              '_spring': 'spatial_fast',
+                            },
+                            '_child': {
+                              '_type': 'container',
+                              'width': 100,
+                              'height': 60,
+                              'transform': {'offset': r'${o}'},
+                              'color': r'${down ? "#FF000000" : "#FFFFFFFF"}',
+                              '_child': {
+                                '_type': 'text',
+                                'value':
+                                    r'${m}|${mv}|${smoothstep(x, y, z)}'
+                                    r'|${sign(x)}|${sign(a * b)}',
+                              },
+                            },
+                          },
+                        ],
+                      },
+                    },
+                    {
+                      '_type': 'row',
+                      '_children': [
+                        {
+                          '_type': 'expanded',
+                          '_motion': layer('fade'),
+                          '_morph': {
+                            '_to': target,
+                            '_as': 't',
+                            '_velocity': 'tv',
+                            '_curve': 'spatial_default',
+                            '_repeat': true,
+                            '_reverse': true,
+                          },
+                          '_child': {
+                            '_type': 'transform',
+                            'offset': r'${[t, tv]}',
+                            '_child': {'_type': 'text', 'value': r'${tv}'},
+                          },
+                        },
+                        {'_type': 'spacer', '_motion': layer('scale')},
+                      ],
+                    },
+                  ],
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final button = tester.getCenter(find.byType(Positioned).first);
+    for (var i = 0; i < _rounds; i++) {
+      data.value = round();
+      if (random.nextInt(10) == 0) reduce.value = !reduce.value;
+      if (random.nextInt(8) == 0) {
+        final gesture = await tester.startGesture(button);
+        await tester.pump(Duration(milliseconds: random.nextInt(40)));
+        await (random.nextBool() ? gesture.up() : gesture.cancel());
+      }
+      await tester.pump(Duration(milliseconds: random.nextInt(40)));
+      expect(tester.takeException(), isNull, reason: 'round $i ${data.value}');
+    }
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+    expect(errors, isEmpty);
+  });
+
+  testWidgets('0.9.0 shape v2·semantics·layout_builder 인자에 적대적 값을 '
+      '1000번 넣어도 예외·보고가 없다', (tester) async {
+    final errors = <SduiError>[];
+    EngineErrors.observer = _Capture(errors);
+    addTearDown(EngineErrors.reset);
+
+    final ops = <Object?>['union', 'subtract', 'intersect', 'bogus', null, 3];
+    final colors = <Object?>[..._jsonHostile, '#FFFFFFFF', '#00000000'];
+    Object? gradient() => pick(<Object?>[
+      ..._jsonHostile,
+      {
+        'colors': [pick(colors), pick(colors), pick(colors)],
+        'stops': [pick(_jsonHostile), pick(_jsonHostile)],
+        'type': pick(<Object?>['linear', 'radial', 'sweep', 'x', null]),
+      },
+    ]);
+    final data = ValueNotifier<Map<String, Object?>>(const {});
+    final width = ValueNotifier<double>(240);
+    addTearDown(data.dispose);
+    addTearDown(width.dispose);
+    Map<String, Object?> round() => {
+      'op': pick(ops),
+      'at': pick(_jsonHostile),
+      'ism': pick(_jsonHostile),
+      'sm': pick(_jsonHostile),
+      'fill': random.nextBool() ? gradient() : pick(colors),
+      'rg': gradient(),
+      'rw': pick(_jsonHostile),
+      'sh': pick(<Object?>[
+        ..._jsonHostile,
+        {
+          'color': pick(colors),
+          'blur': pick(_jsonHostile),
+          'offset': pick(_jsonHostile),
+        },
+      ]),
+      'bd': pick(_jsonHostile),
+      'label': pick(<Object?>[..._jsonHostile, 'Home']),
+      'button': pick(_jsonHostile),
+      'selected': pick(_jsonHostile),
+      'hidden': pick(_jsonHostile),
+      'a': pick(_hostileNumbers),
+    };
+    data.value = round();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ValueListenableBuilder<double>(
+            valueListenable: width,
+            builder: (context, w, _) => Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: w,
+                child: ValueListenableBuilder<Map<String, Object?>>(
+                  valueListenable: data,
+                  builder: (context, root, _) => EngineRunner(
+                    rootData: root,
+                    template: const {
+                      '_type': 'column',
+                      '_children': [
+                        {
+                          '_type': 'sizedbox',
+                          'height': 100,
+                          '_child': {
+                            '_type': 'shape',
+                            'shapes': [
+                              {
+                                'kind': 'capsule',
+                                'inset': [0, 30],
+                              },
+                              {
+                                'kind': 'circle',
+                                'op': r'${op}',
+                                'at': r'${at}',
+                                'smooth': r'${ism}',
+                                'radius': 20,
+                              },
+                              {
+                                'kind': 'circle',
+                                'at': [0.2, 0.5],
+                                'radius': 10,
+                                'op': 'intersect',
+                              },
+                            ],
+                            'smooth': r'${sm}',
+                            'fill': r'${fill}',
+                            'rim': {'gradient': r'${rg}', 'width': r'${rw}'},
+                            'shadow': r'${sh}',
+                            'backdrop': {'blur': r'${bd}'},
+                          },
+                        },
+                        {
+                          '_type': 'semantics',
+                          'label': r'${label}',
+                          'button': r'${button}',
+                          'selected': r'${selected}',
+                          'hidden': r'${hidden}',
+                          '_child': {'_type': 'text', 'value': 'tab'},
+                        },
+                        {
+                          '_type': 'sizedbox',
+                          'height': 40,
+                          '_child': {
+                            '_type': 'layout_builder',
+                            '_provides': ['max_width', 'max_height'],
+                            '_child': {
+                              '_type': 'sizedbox',
+                              'width':
+                                  r'${max_width == null ? 1 : max_width / 2}',
+                              '_child': {
+                                '_type': 'text',
+                                'value': r'${max_width}|${max_height}|${a}',
+                              },
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // First half paints the Path fallback, second half the shader.
+    for (var i = 0; i < _rounds; i++) {
+      if (i == _rounds ~/ 2) {
+        await tester.runAsync(ShaderRegistry.warmUp);
+        expect(ShaderRegistry.available, isTrue);
+      }
+      data.value = round();
+      if (random.nextInt(10) == 0) width.value = 120.0 + random.nextInt(300);
       await tester.pump(Duration(milliseconds: random.nextInt(40)));
       expect(tester.takeException(), isNull, reason: 'round $i ${data.value}');
     }

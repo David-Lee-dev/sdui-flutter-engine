@@ -308,16 +308,20 @@ final class PropsResolver {
   }
 
   /// Applies translation, rotation, then scale from a transform property map.
-  static Matrix4? matrix4(Object? raw) {
+  ///
+  /// `offset: [x, y]` translates by sizes multiplied by [metrics] (the
+  /// [EngineMetrics] scale); `translate` stays unscaled.
+  static Matrix4? matrix4(Object? raw, {double metrics = 1}) {
     if (raw is! Map) return null;
     final matrix = Matrix4.identity();
 
-    final translate = raw['translate'];
-    if (translate is List && translate.length == 2) {
-      final dx = number(translate[0]);
-      final dy = number(translate[1]);
+    for (final (key, factor) in [('translate', 1.0), ('offset', metrics)]) {
+      final pair = raw[key];
+      if (pair is! List || pair.length != 2) continue;
+      final dx = number(pair[0]);
+      final dy = number(pair[1]);
       if (dx != null && dy != null) {
-        matrix.translateByDouble(dx, dy, 0, 1);
+        matrix.translateByDouble(dx * factor, dy * factor, 0, 1);
       }
     }
 

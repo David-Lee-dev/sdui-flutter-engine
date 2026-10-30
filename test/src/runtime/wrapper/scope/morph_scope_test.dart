@@ -5,6 +5,7 @@ import 'package:sdui_engine/src/contract/error_observer.dart';
 import 'package:sdui_engine/src/engine_runner.dart';
 import 'package:sdui_engine/src/runtime/engine_errors.dart';
 import 'package:sdui_engine/src/runtime/util/function_registry.dart';
+import 'package:sdui_engine/src/runtime/wrapper/scope/morph_scope.dart';
 
 void main() {
   group('MorphScope', () {
@@ -867,6 +868,304 @@ void main() {
         expect(errors, isEmpty);
       });
     }
+  });
+
+  group('MorphScope 0.9.0 _velocity', () {
+    /// `[value, velocity]` shown by the template text.
+    List<double> shown(WidgetTester tester) => tester
+        .widget<Text>(find.byType(Text))
+        .data!
+        .split('|')
+        .map(double.parse)
+        .toList();
+
+    Widget mount(Map<String, Object?> morph, {bool reduceMotion = false}) =>
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(disableAnimations: reduceMotion),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: EngineRunner(
+              template: {
+                '_type': 'text',
+                '_morph': {'_as': 'n', '_velocity': 'v', ...morph},
+                'value': r'${n}|${v}',
+              },
+            ),
+          ),
+        );
+
+    testWidgets('linear tween은 (to-from)/duration 단위/초, 끝나면 0', (tester) async {
+      await tester.pumpWidget(
+        mount({'_from': 0, '_to': 100, '_duration': 200, '_curve': 'linear'}),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(shown(tester)[1], closeTo(500, 1e-6));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(shown(tester)[1], closeTo(500, 1e-6));
+      await tester.pumpAndSettle();
+      expect(shown(tester), [100, 0]);
+    });
+
+    testWidgets('곡선 tween은 곡선 기울기 × (to-from)/duration', (tester) async {
+      await tester.pumpWidget(
+        mount({'_from': 0, '_to': 100, '_duration': 200, '_curve': 'ease_out'}),
+      );
+      await tester.pump(const Duration(milliseconds: 60));
+      const t = 0.3, h = 1e-4;
+      final slope =
+          (Curves.easeOut.transform(t + h) - Curves.easeOut.transform(t - h)) /
+          (2 * h);
+      expect(shown(tester)[1], closeTo(slope * 100 / 0.2, 1));
+      await tester.pumpAndSettle();
+      expect(shown(tester)[1], 0);
+    });
+
+    testWidgets('repeat + reverse의 되돌아오는 다리는 음의 속도', (tester) async {
+      await tester.pumpWidget(
+        mount({
+          '_from': 0,
+          '_to': 10,
+          '_duration': 100,
+          '_curve': 'linear',
+          '_repeat': true,
+          '_reverse': true,
+        }),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(shown(tester)[1], closeTo(100, 1e-6));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(shown(tester)[1], closeTo(-100, 1e-6));
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('spring은 시뮬레이션 속도를 따르고 멈추면 0', (tester) async {
+      final sim = SpringSimulation(
+        SpringDescription.withDampingRatio(mass: 1, stiffness: 100, ratio: 0.5),
+        0,
+        100,
+        0,
+      );
+      await tester.pumpWidget(
+        mount({
+          '_from': 0,
+          '_to': 100,
+          '_spring': {'stiffness': 100, 'damping_ratio': 0.5},
+        }),
+      );
+      for (var ms = 50; ms <= 300; ms += 50) {
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(
+          shown(tester)[1],
+          closeTo(sim.dx(ms / 1000), 1e-6),
+          reason: '$ms',
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(shown(tester), [100, 0]);
+    });
+
+    testWidgets('reduced motion에서는 값이 목표이고 속도는 0', (tester) async {
+      for (final morph in <Map<String, Object?>>[
+        {'_from': 0, '_to': 100, '_spring': 'spatial_default'},
+        {'_from': 0, '_to': 100, '_duration': 300},
+      ]) {
+        await tester.pumpWidget(mount(morph, reduceMotion: true));
+        await tester.pump(const Duration(milliseconds: 20));
+        expect(shown(tester), [100, 0], reason: '$morph');
+        await tester.pumpWidget(const SizedBox());
+      }
+    });
+
+    testWidgets('속도는 ±1e4로 자르고 비유한이면 0', (tester) async {
+      Future<double> midway(num from, num to) async {
+        await tester.pumpWidget(
+          mount({
+            '_from': from,
+            '_to': to,
+            '_duration': 100,
+            '_curve': 'linear',
+          }),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+        final v = shown(tester)[1];
+        await tester.pumpWidget(const SizedBox());
+        return v;
+      }
+
+      expect(await midway(0, 1e9), 1e4);
+      expect(await midway(0, -1e9), -1e4);
+      expect(await midway(-1.7e308, 1.7e308), 0);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('애니메이션 없는 morph(잘못된 _duration)의 속도는 0', (tester) async {
+      await tester.pumpWidget(mount({'_from': 0, '_to': 5, '_duration': -1}));
+      expect(shown(tester), [5, 0]);
+    });
+
+    testWidgets('속도만 읽는 자식도 매 틱 다시 그린다', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: EngineRunner(
+              template: {
+                '_type': 'text',
+                '_morph': {
+                  '_as': 'n',
+                  '_velocity': 'v',
+                  '_from': 0,
+                  '_to': 10,
+                  '_spring': 'spatial_slow',
+                },
+                'value': r'${round(v)}',
+              },
+            ),
+          ),
+        ),
+      );
+      final seen = <String>{};
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 30));
+        seen.add(tester.widget<Text>(find.byType(Text)).data!);
+      }
+      expect(seen.length, greaterThan(3));
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('MorphScope 0.9.0 tween reduced motion', () {
+    double value(WidgetTester tester) =>
+        double.parse(tester.widget<Text>(find.byType(Text)).data!);
+
+    Widget mount(ValueNotifier<int> score, Map<String, Object?> morph) =>
+        ValueListenableBuilder<int>(
+          valueListenable: score,
+          builder: (context, v, _) => MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: EngineRunner(
+                template: {
+                  '_type': 'text',
+                  '_morph': {'_to': r'${score}', '_as': 'n', ...morph},
+                  'value': r'${n}',
+                },
+                rootData: {'score': v},
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('첫 프레임부터 목표이고 재목표도 즉시 이동한다', (tester) async {
+      final score = ValueNotifier<int>(100);
+      addTearDown(score.dispose);
+      await tester.pumpWidget(
+        mount(score, {'_from': 0, '_duration': 300, '_delay': 100}),
+      );
+      expect(value(tester), 100);
+      expect(tester.hasRunningAnimations, isFalse);
+      score.value = 30;
+      await tester.pump();
+      expect(value(tester), 30);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('_repeat도 목표에 머문다', (tester) async {
+      final score = ValueNotifier<int>(10);
+      addTearDown(score.dispose);
+      await tester.pumpWidget(
+        mount(score, {
+          '_from': 0,
+          '_duration': 100,
+          '_repeat': true,
+          '_reverse': true,
+        }),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(value(tester), 10);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
+
+  group('MorphScope 0.9.0 RepaintBoundary', () {
+    Finder boundaryAbove(Type scope) => find.ancestor(
+      of: find.byType(Text),
+      matching: find.descendant(
+        of: find.byType(scope),
+        matching: find.byType(RepaintBoundary),
+      ),
+    );
+
+    Widget mount(Map<String, Object?> template) => MaterialApp(
+      home: Scaffold(body: EngineRunner(template: template)),
+    );
+
+    testWidgets('spring morph는 바로 아래 위젯을 RepaintBoundary로 감싼다', (tester) async {
+      await tester.pumpWidget(
+        mount({
+          '_type': 'text',
+          '_morph': {'_to': 1, '_as': 'n', '_spring': 'spatial_fast'},
+          'value': r'${n}',
+        }),
+      );
+      expect(boundaryAbove(SpringMorphScope), findsOneWidget);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('반복 tween morph도 감싼다', (tester) async {
+      await tester.pumpWidget(
+        mount({
+          '_type': 'text',
+          '_morph': {'_to': 1, '_as': 'n', '_duration': 100, '_repeat': true},
+          'value': r'${n}',
+        }),
+      );
+      expect(boundaryAbove(MorphScope), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('one-shot tween morph의 트리는 그대로다', (tester) async {
+      await tester.pumpWidget(
+        mount({
+          '_type': 'text',
+          '_morph': {'_from': 0, '_to': 1, '_as': 'n', '_duration': 100},
+          'value': r'${n}',
+        }),
+      );
+      expect(boundaryAbove(MorphScope), findsNothing);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('expanded 노드의 spring morph도 parent data를 지킨다', (tester) async {
+      await tester.pumpWidget(
+        mount({
+          '_type': 'row',
+          '_children': [
+            {
+              '_type': 'expanded',
+              '_morph': {'_to': 1, '_as': 'n', '_spring': 'spatial_fast'},
+              '_child': {'_type': 'text', 'value': r'${n}'},
+            },
+          ],
+        }),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(boundaryAbove(SpringMorphScope), findsOneWidget);
+      expect(
+        find.ancestor(
+          of: boundaryAbove(SpringMorphScope),
+          matching: find.byType(Expanded),
+        ),
+        findsOneWidget,
+      );
+    });
   });
 }
 

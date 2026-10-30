@@ -31,9 +31,10 @@ class MotionParams {
         : fallback;
   }
 
-  /// Resolves a named curve, using [fallback] for unsupported input.
+  /// Resolves a curve name or `[x1, y1, x2, y2]` bezier, using [fallback]
+  /// for unsupported input.
   Curve curve(String key, Curve fallback) =>
-      EngineCurve.resolve(text(key), fallback: fallback);
+      EngineCurve.resolve(_raw[key], fallback: fallback);
 
   /// Returns a boolean option or [fallback].
   bool flag(String key, {required bool fallback}) {
@@ -75,6 +76,7 @@ class MotionPlan {
     this.curve = Curves.linear,
     this.delay = Duration.zero,
     this.repeat = false,
+    this.repeatCount,
     this.reverse = false,
     this.repeatDelay = Duration.zero,
     this.trigger,
@@ -88,25 +90,57 @@ class MotionPlan {
 
   final bool repeat;
 
+  /// How many legs a [repeat] runs before stopping at its end; `null`
+  /// repeats until disposal.
+  final int? repeatCount;
+
   final bool reverse;
 
+  /// Pause between two repeated legs.
   final Duration repeatDelay;
 
   final Object? trigger;
 
   /// Builds the common one-shot or repeating plan options from [p].
+  ///
+  /// A spring curve name without a `duration` runs for its settle time.
+  /// `repeat` is `true` (forever) or a leg count in 1..1000; anything else
+  /// takes [repeat].
   factory MotionPlan.from(
     MotionParams p, {
     Duration duration = const Duration(milliseconds: 300),
     Curve curve = Curves.easeOut,
-  }) => MotionPlan(
-    duration: p.duration('duration', duration),
-    curve: p.curve('curve', curve),
-    delay: p.duration('delay', Duration.zero),
-    repeat: p.flag('repeat', fallback: false),
-    reverse: p.flag('reverse', fallback: false),
-    trigger: p.raw('trigger'),
-  );
+    bool repeat = false,
+  }) {
+    final (:repeats, :count) = _repeatOf(p.raw('repeat'), repeat);
+    return MotionPlan(
+      duration: p.duration(
+        'duration',
+        EngineCurve.settleDuration(p.raw('curve')) ?? duration,
+      ),
+      curve: p.curve('curve', curve),
+      delay: p.duration('delay', Duration.zero),
+      repeat: repeats,
+      repeatCount: count,
+      reverse: p.flag('reverse', fallback: false),
+      repeatDelay: p.duration('repeat_delay', Duration.zero),
+      trigger: p.raw('trigger'),
+    );
+  }
+
+  static const _maxRepeatCount = 1000;
+
+  static ({bool repeats, int? count}) _repeatOf(Object? raw, bool fallback) =>
+      switch (raw) {
+        final bool flag => (repeats: flag, count: null),
+        final num n
+            when n.isFinite &&
+                n == n.roundToDouble() &&
+                n >= 1 &&
+                n <= _maxRepeatCount =>
+          (repeats: true, count: n.toInt()),
+        _ => (repeats: fallback, count: null),
+      };
 }
 
 /// Defines a stateless visual transform driven by normalized animation progress.

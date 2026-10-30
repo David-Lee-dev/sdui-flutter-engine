@@ -17,6 +17,7 @@ import '../../wrapper/scroll_event_wrapper.dart';
 import '../../wrapper/motion.dart';
 import '../../wrapper/scope/bound_builder.dart';
 import '../../wrapper/scope/morph_scope.dart';
+import '../../wrapper/scope/press_scope.dart';
 import '../../wrapper/scope/scope.dart';
 import 'observer/loop_observer.dart';
 import 'observer/condition_observer.dart';
@@ -37,16 +38,16 @@ final class NodeBuilder {
   /// Builds the observer or scope boundary represented by [directive].
   static Widget build(Directive directive) {
     return switch (directive) {
-      PlainDirective node => PlainObserver(directive: node),
+      PlainDirective node => _plain(node),
       ConditionDirective cond => ConditionObserver(directive: cond),
       LoopDirective loop => LoopObserver(directive: loop),
       MorphDirective morph when morph.spring != null => SpringMorphScope(
         directive: morph,
-        child: build(morph.child),
+        child: _continuous(morph.child),
       ),
       MorphDirective morph => MorphScope(
         directive: morph,
-        child: build(morph.child),
+        child: morph.repeat ? _continuous(morph.child) : build(morph.child),
       ),
       SwitchDirective sw => SwitchObserver(directive: sw),
       ScopeDirective scope => Scope(
@@ -59,15 +60,34 @@ final class NodeBuilder {
     };
   }
 
+  /// Builds [directive] as the direct widget of a continuously animating
+  /// morph: a plain node gets its own repaint boundary.
+  static Widget _continuous(Directive directive) => directive is PlainDirective
+      ? _plain(directive, isolate: true)
+      : build(directive);
+
+  /// A plain node's observer, under its press scope when it declares
+  /// `pressed_as`.
+  static Widget _plain(PlainDirective node, {bool isolate = false}) {
+    final observer = PlainObserver(directive: node, isolate: isolate);
+    final pressed = node.pressedAs;
+    return pressed == null
+        ? observer
+        : PressScope(name: pressed, child: observer);
+  }
+
   /// Resolves and assembles one [PlainDirective] against [env].
   ///
   /// Child delivery follows the widget specification, then motion, interaction,
-  /// scroll events, and identity wrappers are applied in that order.
+  /// scroll events, the repaint boundary ([isolate]) and identity wrappers are
+  /// applied in that order. For a parent-data widget (`positioned`,
+  /// `expanded`, ...) all but the identity wrapper go around its child.
   static Widget assemble(
     BuildContext context,
     PlainDirective directive,
-    Environment env,
-  ) {
+    Environment env, {
+    bool isolate = false,
+  }) {
     final resolved = ExpressionEvaluator.resolveMap(directive.props, env);
     Map<String, Object?> props = resolved;
     _PropAudit? audit;
@@ -118,6 +138,76 @@ final class NodeBuilder {
       audit?.warnUnread(directive.type, directive.path);
       return true;
     }());
+    final interactive = directive.on.keys.any(
+      InteractionWrapper.events.contains,
+    );
+    final scrolls = directive.on.keys.any(ScrollEventWrapper.events.contains);
+    if (directive.motions.isNotEmpty || interactive || scrolls || isolate) {
+      widget = _inside(
+        widget,
+        (child) => _decorate(
+          context,
+          directive,
+          env,
+          props,
+          child,
+          interactive: interactive,
+          scrolls: scrolls,
+          isolate: isolate,
+        ),
+      );
+    }
+    final key = directive.key;
+    return key == null
+        ? widget
+        : KeyedSubtree(key: ValueKey(key), child: widget);
+  }
+
+  /// Applies [decorate] to the child of a parent-data widget, which must stay
+  /// the direct widget of its parent, or to [widget] itself otherwise.
+  static Widget _inside(Widget widget, Widget Function(Widget) decorate) =>
+      switch (widget) {
+        Positioned p => Positioned(
+          key: p.key,
+          left: p.left,
+          top: p.top,
+          right: p.right,
+          bottom: p.bottom,
+          width: p.width,
+          height: p.height,
+          child: decorate(p.child),
+        ),
+        Expanded e => Expanded(
+          key: e.key,
+          flex: e.flex,
+          child: decorate(e.child),
+        ),
+        Flexible f => Flexible(
+          key: f.key,
+          flex: f.flex,
+          fit: f.fit,
+          child: decorate(f.child),
+        ),
+        Spacer s => Expanded(
+          key: s.key,
+          flex: s.flex,
+          child: decorate(const SizedBox.shrink()),
+        ),
+        _ => decorate(widget),
+      };
+
+  /// Wraps a node's [widget] in its motion, interaction, scroll-event and
+  /// repaint-boundary layers.
+  static Widget _decorate(
+    BuildContext context,
+    PlainDirective directive,
+    Environment env,
+    Map<String, Object?> props,
+    Widget widget, {
+    required bool interactive,
+    required bool scrolls,
+    required bool isolate,
+  }) {
     final off = _offMotions[context];
     for (final (index, motion) in directive.motions.indexed) {
       if (off != null && off.contains(index)) continue;
@@ -146,7 +236,7 @@ final class NodeBuilder {
         );
       }
     }
-    if (directive.on.keys.any(InteractionWrapper.events.contains)) {
+    if (interactive) {
       final node =
           LoopTelemetryScope.maybeOf(
             context,
@@ -160,10 +250,11 @@ final class NodeBuilder {
         // means nothing in the scope that declares the action.
         payloads: ExpressionEvaluator.resolveMap(directive.onEvent, env),
         feedback: directive.tapFeedback,
+        onPressed: directive.pressedAs == null ? null : PressScope.of(context),
         child: widget,
       );
     }
-    if (directive.on.keys.any(ScrollEventWrapper.events.contains)) {
+    if (scrolls) {
       widget = ScrollEventWrapper(
         on: directive.on,
         timing: directive.timing,
@@ -172,10 +263,7 @@ final class NodeBuilder {
         child: widget,
       );
     }
-    final key = directive.key;
-    return key == null
-        ? widget
-        : KeyedSubtree(key: ValueKey(key), child: widget);
+    return isolate ? RepaintBoundary(child: widget) : widget;
   }
 }
 

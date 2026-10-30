@@ -1853,5 +1853,121 @@ void main() {
         );
       });
     });
+
+    group('0.9.0 _morph', () {
+      MorphDirective morph(Map<String, Object?> raw) =>
+          TemplateCompiler.buildDirectiveTree(
+                uiNode(type: 'text', attrs: {'_morph': raw}),
+              )
+              as MorphDirective;
+
+      test('_velocity 이름을 velocityAs로 싣는다', () {
+        final m = morph({'_to': 1, '_as': 'p', '_velocity': 'pv'});
+        expect(m.velocityAs, 'pv');
+        expect(m.durationMs, 400);
+        expect(m.roots, isEmpty);
+      });
+
+      test('_velocity가 없으면 velocityAs는 null', () {
+        expect(morph({'_to': 1, '_as': 'p'}).velocityAs, isNull);
+      });
+
+      test('바인딩할 수 없는 _velocity 이름은 컴파일 에러', () {
+        expect(
+          () => morph({'_to': 1, '_as': 'p', '_velocity': 'p-v'}),
+          throwsInvalidTemplate,
+        );
+      });
+
+      test('문자열이 아니거나 빈 _velocity는 그 변수만 버린다', () {
+        for (final bad in <Object?>[3, true, null, '', <Object?>[]]) {
+          final m = morph({
+            '_to': 1,
+            '_as': 'p',
+            '_velocity': bad,
+            '_duration': 200,
+          });
+          expect(m.velocityAs, isNull, reason: '$bad');
+          expect(m.durationMs, 200, reason: '$bad');
+        }
+      });
+
+      test('_curve 큐빅 베지어 목록은 애니메이션을 유지한다', () {
+        final m = morph({
+          '_to': 1,
+          '_as': 'p',
+          '_curve': [0.2, 0, 0, 1],
+        });
+        expect(m.curve, [0.2, 0, 0, 1]);
+        expect(m.durationMs, 400);
+      });
+
+      test('스프링 곡선 이름에 _duration이 없으면 길이를 런타임에 맡긴다(null)', () {
+        expect(
+          morph({'_to': 1, '_as': 'p', '_curve': 'spatial_default'}).durationMs,
+          isNull,
+        );
+        expect(
+          morph({
+            '_to': 1,
+            '_as': 'p',
+            '_curve': 'spatial_default',
+            '_duration': 250,
+          }).durationMs,
+          250,
+        );
+        expect(
+          morph({'_to': 1, '_as': 'p', '_curve': 'emphasized'}).durationMs,
+          400,
+        );
+      });
+    });
+
+    group('0.9.0 _on.tap.pressed_as', () {
+      PlainDirective compile(Map<String, Object?> on) =>
+          TemplateCompiler.buildDirectiveTree(
+                uiNode(type: 'text', attrs: {'_on': on}),
+              )
+              as PlainDirective;
+
+      test('tap의 pressed_as 이름을 pressedAs로 싣는다', () {
+        final node = compile({
+          'tap': {'do': 'go', 'pressed_as': 'down'},
+        });
+        expect(node.pressedAs, 'down');
+        expect(node.on, {'tap': 'go'});
+      });
+
+      test('pressed_as가 없으면 pressedAs는 null', () {
+        expect(compile({'tap': 'go'}).pressedAs, isNull);
+      });
+
+      test('바인딩할 수 없는 이름은 컴파일 에러', () {
+        expect(
+          () => compile({
+            'tap': {'do': 'go', 'pressed_as': '_down'},
+          }),
+          throwsInvalidTemplate,
+        );
+      });
+
+      test('문자열이 아니거나 빈 값, tap이 아닌 이벤트의 pressed_as는 버린다', () {
+        for (final bad in <Object?>[1, true, null, '', <Object?>[]]) {
+          expect(
+            compile({
+              'tap': {'do': 'go', 'pressed_as': bad},
+            }).pressedAs,
+            isNull,
+            reason: '$bad',
+          );
+        }
+        expect(
+          compile({
+            'long_press': {'do': 'go', 'pressed_as': 'down'},
+          }).pressedAs,
+          isNull,
+        );
+      });
+    });
   });
 }

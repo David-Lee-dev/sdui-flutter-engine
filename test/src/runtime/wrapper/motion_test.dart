@@ -12,6 +12,7 @@ import 'package:sdui_engine/src/runtime/motion/_base.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/fade.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/move.dart';
 import 'package:sdui_engine/src/runtime/motion/atom/reveal.dart';
+import 'package:sdui_engine/src/runtime/motion/atom/shimmer.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/swipe_pane_widget.dart';
 import 'package:sdui_engine/src/runtime/widget/swipe/swipe_controller.dart';
@@ -60,7 +61,191 @@ Widget _host(Motion m, [Map<String, Object?> params = const {}]) =>
       ),
     );
 
+Widget _fade(
+  Map<String, Object?> params, {
+  bool reduce = false,
+  Motion motion = const FadeMotion(),
+}) => MediaQuery(
+  data: MediaQueryData(disableAnimations: reduce),
+  child: Directionality(
+    textDirection: TextDirection.ltr,
+    child: MotionWrapper(
+      motion: motion,
+      params: MotionParams({'curve': 'linear', 'duration': 100, ...params}),
+      child: const SizedBox(width: 10, height: 10),
+    ),
+  ),
+);
+
+/// Advances [ms] in 10 ms frames, as a device would.
+///
+/// A controller reports a leg done on the first frame after it is due
+/// (`isDone` is strict), so a following leg may start one frame late.
+Future<void> _advance(WidgetTester tester, int ms) async {
+  for (var left = ms; left > 0; left -= 10) {
+    await tester.pump(Duration(milliseconds: left < 10 ? left : 10));
+  }
+}
+
+/// One 10 ms frame of a 100 ms linear leg, the tolerance of a leg start.
+const _frame = 0.11;
+
+Finder get _boundaryInside => find.descendant(
+  of: find.byType(MotionWrapper),
+  matching: find.byType(RepaintBoundary),
+);
+
 void main() {
+  group('MotionWrapper 0.9.0 repeat 횟수·repeat_delay', () {
+    testWidgets('repeat: 2는 두 번 돌고 끝 상태에 멈춘다', (tester) async {
+      await tester.pumpWidget(_fade({'repeat': 2}));
+      await _advance(tester, 50);
+      expect(_opacity(tester), closeTo(0.5, _frame));
+      await _advance(tester, 100);
+      expect(_opacity(tester), closeTo(0.5, _frame));
+      await _advance(tester, 100);
+      expect(_opacity(tester), 1.0);
+      await _advance(tester, 300);
+      expect(_opacity(tester), 1.0);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('repeat: 2 + reverse는 갔다가 돌아와 시작 상태에서 멈춘다', (tester) async {
+      await tester.pumpWidget(_fade({'repeat': 2, 'reverse': true}));
+      await _advance(tester, 100);
+      await _advance(tester, 25);
+      expect(_opacity(tester), closeTo(0.75, _frame));
+      await _advance(tester, 100);
+      expect(_opacity(tester), 0.0);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('repeat_delay는 다리 사이에 끝 상태로 쉰 뒤 다음 다리를 탄다', (tester) async {
+      await tester.pumpWidget(_fade({'repeat': true, 'repeat_delay': 50}));
+      await _advance(tester, 100);
+      expect(_opacity(tester), 1.0);
+      await _advance(tester, 40);
+      expect(_opacity(tester), 1.0);
+      await _advance(tester, 10);
+      await _advance(tester, 30);
+      expect(_opacity(tester), closeTo(0.3, _frame));
+      await tester.pumpWidget(const SizedBox());
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('repeat_delay + reverse는 양 끝에서 쉬며 왕복한다', (tester) async {
+      await tester.pumpWidget(
+        _fade({'repeat': 3, 'reverse': true, 'repeat_delay': 20}),
+      );
+      await _advance(tester, 110);
+      expect(_opacity(tester), 1.0);
+      await _advance(tester, 20);
+      expect(_opacity(tester), 1.0);
+      await _advance(tester, 60);
+      expect(_opacity(tester), closeTo(0.4, _frame));
+      await _advance(tester, 60);
+      expect(_opacity(tester), 0.0);
+      await _advance(tester, 120);
+      expect(_opacity(tester), 1.0);
+      await _advance(tester, 200);
+      expect(_opacity(tester), 1.0);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('trigger 변경은 횟수를 처음부터 다시 센다', (tester) async {
+      await tester.pumpWidget(_fade({'repeat': 2, 'trigger': 1}));
+      await _advance(tester, 250);
+      expect(_opacity(tester), 1.0);
+      await tester.pumpWidget(_fade({'repeat': 2, 'trigger': 2}));
+      await _advance(tester, 150);
+      expect(_opacity(tester), closeTo(0.5, _frame));
+      await _advance(tester, 100);
+      expect(_opacity(tester), 1.0);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('쉬는 중 dispose해도 남는 timer·예외가 없다', (tester) async {
+      await tester.pumpWidget(_fade({'repeat': true, 'repeat_delay': 500}));
+      await _advance(tester, 150);
+      await tester.pumpWidget(const SizedBox());
+      await _advance(tester, 1000);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('MotionWrapper 0.9.0 reduced motion', () {
+    testWidgets('one-shot은 첫 프레임부터 끝 상태이고 애니메이션이 없다', (tester) async {
+      await tester.pumpWidget(_fade({'delay': 300}, reduce: true));
+      expect(_opacity(tester), 1.0);
+      expect(tester.hasRunningAnimations, isFalse);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(_opacity(tester), 1.0);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('반복 모션도 끝 상태에 멈춘다', (tester) async {
+      await tester.pumpWidget(
+        _fade({'repeat': true, 'reverse': true}, reduce: true),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(_opacity(tester), 1.0);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('shimmer는 정지한 끝 상태로 그린다', (tester) async {
+      await tester.pumpWidget(
+        _fade(const {}, reduce: true, motion: const ShimmerMotion()),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(ShaderMask), findsOneWidget);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('trigger가 바뀌어도 끝 상태에 머문다', (tester) async {
+      await tester.pumpWidget(_fade({'trigger': 1}, reduce: true));
+      await tester.pumpWidget(_fade({'trigger': 2}, reduce: true));
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(_opacity(tester), 1.0);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+
+    testWidgets('도중에 reduced motion이 켜지면 끝 상태로 건너뛴다', (tester) async {
+      await tester.pumpWidget(_fade({'repeat': true}));
+      await tester.pump(const Duration(milliseconds: 30));
+      expect(_opacity(tester), lessThan(1.0));
+      await tester.pumpWidget(_fade({'repeat': true}, reduce: true));
+      expect(_opacity(tester), 1.0);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(_opacity(tester), 1.0);
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
+
+  group('MotionWrapper 0.9.0 RepaintBoundary', () {
+    testWidgets('반복 모션은 자식을 RepaintBoundary로 감싼다', (tester) async {
+      await tester.pumpWidget(_fade({'repeat': true}));
+      expect(_boundaryInside, findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('one-shot 모션의 트리는 그대로다(RepaintBoundary 없음)', (tester) async {
+      await tester.pumpWidget(_fade(const {}));
+      expect(_boundaryInside, findsNothing);
+      final opacity = find.byType(Opacity);
+      expect(
+        find.descendant(of: opacity, matching: find.byType(SizedBox)),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .element(find.byType(SizedBox))
+            .findAncestorWidgetOfExactType<Opacity>(),
+        isNotNull,
+      );
+      await tester.pumpAndSettle();
+    });
+  });
+
   group('MotionWrapper', () {
     testWidgets('one-shot: t가 0→1로 전진하고 끝에 머문다', (tester) async {
       await tester.pumpWidget(_host(const _ProbeMotion()));

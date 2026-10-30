@@ -134,6 +134,7 @@ Clipping, filtering, transforms, visibility, and pointer effects.
 | `offstage` | Builds Flutter's [Offstage] for an `offstage` node. | box | No | [Open](effects/offstage.md) |
 | `opacity` | Builds Flutter's [Opacity] with a value clamped to Flutter's valid range. | box | No | [Open](effects/opacity.md) |
 | `physical_model` | Clips and elevates its child as a physical shape. | box | No | [Open](effects/physical_model.md) |
+| `semantics` | Describes its child to assistive technology (label, button, selected, hidden). | box | No | [Open](effects/semantics.md) |
 | `rotated_box` | Builds Flutter's [RotatedBox] for a `rotatedBox` node. | box | No | [Open](effects/rotated_box.md) |
 | `shader_mask` | Paints a gradient over its child, tinting the child's painted pixels with it (`blend_mode: src_in`) — the way to render gradient text or icons. | box | No | [Open](effects/shader_mask.md) |
 | `transform` | Builds Flutter's [Transform] from a resolved matrix and alignment. | box | No | [Open](effects/transform.md) |
@@ -152,10 +153,11 @@ Engine-specific widgets; includes the explicitly unregistered internal helper fo
 | `auto_scroll` | A seamless, infinitely repeating scrolling marquee. | box | Yes | [Open](custom/auto_scroll.md) |
 | `chart` | A data-driven line, area, or bar chart. | box | No | [Open](custom/chart.md) |
 | `collapsing_header` | Builds a [SliverPersistentHeader] whose child receives scroll-state variables. | sliver | No | [Open](custom/collapsing_header.md) |
+| `layout_builder` | Builds its child with the parent's maximum width and height. | box | No | [Open](custom/layout_builder.md) |
 | `scratch_card` | Reveals its first child as the user rubs the second away. | box | No | [Open](custom/scratch_card.md) |
 | `serpentine` | Measures rows, draws their serpentine track, then paints cells. | box | Yes | [Open](custom/serpentine.md) |
 | `serpentine_row` | Lays out one measured row of serpentine board cells. | box | Yes | [Open](custom/serpentine_row.md) |
-| `shape` | Paints a smooth union of circles, capsules and rounded rects. | box | No | [Open](custom/shape.md) |
+| `shape` | Paints circles, capsules and rounded rects folded by smooth union, subtract and intersect. | box | No | [Open](custom/shape.md) |
 | `skeleton` | One loading-placeholder bone (a rounded box) for a `_skeleton` outline. | box | No | [Open](custom/skeleton.md) |
 | `speech_balloon` | Paints a rounded balloon with an integrated bezier nip. | box | No | [Open](custom/speech_balloon.md) |
 | `spin_grid` | Lays out children in a grid and cycles one highlighted cell. | box | Yes | [Open](custom/spin_grid.md) |

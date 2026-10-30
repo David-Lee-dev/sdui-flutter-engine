@@ -4,9 +4,11 @@ import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
+import 'schema/builtin_language.dart';
 import 'schema/language_catalog.dart';
 import 'schema/widget_schema.dart';
 import 'package:sdui_engine/src/ir/compiled_value.dart';
+import 'package:sdui_engine/src/ir/expression.dart';
 import 'invalid_template_exception.dart';
 
 /// Validates template declarations and structural contracts before mounting.
@@ -16,7 +18,6 @@ import 'invalid_template_exception.dart';
 /// properties remain nullable at runtime. Validation covers inactive branches so
 /// template defects cannot remain hidden until a branch is selected.
 final class TemplateValidator {
-
   /// The recognized `_loop._wrap` strategies.
   static const Set<String> _knownWraps = {
     'column',
@@ -57,9 +58,16 @@ final class TemplateValidator {
   /// references, unknown catalog entries, or incompatible structural contracts.
   /// One validation run's catalog — an instance per [validate] call, so
   /// there is no mutable static and no reentrancy assumption.
-  const TemplateValidator._(this._catalog);
+  TemplateValidator._(this._catalog);
 
   final LanguageCatalog _catalog;
+
+  /// Widgets that measure their subtree by intrinsic size, which a
+  /// `layout_builder` below them cannot answer.
+  static const _intrinsicTypes = {'intrinsic_width', 'intrinsic_height'};
+
+  /// How many [_intrinsicTypes] nodes enclose the node being walked.
+  int _intrinsicDepth = 0;
 
   static void validate(
     Directive root,
@@ -101,22 +109,37 @@ final class TemplateValidator {
         // Bound inputs write directly, so their keys must be validated before a
         // user interaction can throw outside node isolation.
         if (schema.kind == WidgetKind.bound) _checkBind(node, writable);
+        if (node.type == 'shape') _checkShape(node);
+        if (node.type == 'layout_builder' && _intrinsicDepth > 0) {
+          throw InvalidTemplateException(
+            node.path,
+            '"layout_builder" inside intrinsic_width/intrinsic_height — it '
+            'cannot report an intrinsic size; move it out of the intrinsic '
+            'widget.',
+          );
+        }
         _checkMotions(node);
-        _check(node.roots, declared, node.path);
+        // A press variable is readable by the node's own props and below.
+        final pressed = node.pressedAs;
+        final ownDeclared = pressed == null ? declared : {...declared, pressed};
+        _check(node.roots, ownDeclared, node.path);
         _checkCalls(CompiledValue.callsOf(node.props), node.path);
         _checkInteractions(node.on, actions, node.path, schema);
         // Builder-provided variables are declarations only for descendants.
         final childDeclared = node.provides.isEmpty
-            ? declared
-            : {...declared, ...node.provides};
+            ? ownDeclared
+            : {...ownDeclared, ...node.provides};
         // A null child protocol permits widgets with mixed child protocols.
         final childExpected = schema.childProtocol;
+        final intrinsic = _intrinsicTypes.contains(node.type);
+        if (intrinsic) _intrinsicDepth++;
         for (final child in node.children) {
           _walk(child, childDeclared, writable, actions, childExpected);
         }
         for (final slot in node.slots.values) {
           _walk(slot, childDeclared, writable, actions, childExpected);
         }
+        if (intrinsic) _intrinsicDepth--;
       case ConditionDirective cond:
         // Transparent directives pass the parent's protocol requirement to each
         // possible rendered branch.
@@ -168,7 +191,7 @@ final class TemplateValidator {
         // A morph variable is readable by its child but is not mutable state.
         _walk(
           morph.child,
-          {...declared, morph.as},
+          {...declared, morph.as, ?morph.velocityAs},
           writable,
           actions,
           expected,
@@ -328,6 +351,47 @@ final class TemplateValidator {
         _checkCommand(command, declared, writable, path);
       }
     }
+  }
+
+  /// Rejects typos in a literal `shape`: an unknown key in a `shapes` item,
+  /// `shadow` or `backdrop`, and an unknown literal `op`.
+  ///
+  /// Bound values are not checked here; a bad bound value degrades at
+  /// runtime.
+  void _checkShape(PlainDirective node) {
+    void checkKeys(Object? raw, Set<String> known, String what) {
+      if (raw is! Map) return;
+      for (final key in raw.keys) {
+        if (!known.contains(key)) {
+          throw InvalidTemplateException(
+            node.path,
+            'unknown $what key "$key" (supported: ${known.join(", ")}; typo?).',
+          );
+        }
+      }
+    }
+
+    final shapes = node.props['shapes'];
+    if (shapes is List) {
+      for (final item in shapes) {
+        checkKeys(item, BuiltinLanguage.shapeItemKeys, 'shape item');
+        final op = item is Map ? item['op'] : null;
+        final literal = op != null && op is! Expression && op is! Interpolation;
+        if (literal && !BuiltinLanguage.shapeOps.contains(op)) {
+          throw InvalidTemplateException(
+            node.path,
+            'unknown shape op "$op" '
+            '(supported: ${BuiltinLanguage.shapeOps.join(", ")}; typo?).',
+          );
+        }
+      }
+    }
+    checkKeys(node.props['shadow'], BuiltinLanguage.shapeShadowKeys, 'shadow');
+    checkKeys(
+      node.props['backdrop'],
+      BuiltinLanguage.shapeBackdropKeys,
+      'backdrop',
+    );
   }
 
   /// Rejects `_motion` names absent from the catalog (when it enumerates them).

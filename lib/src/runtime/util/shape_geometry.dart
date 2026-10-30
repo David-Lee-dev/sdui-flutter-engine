@@ -2,15 +2,33 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
-/// Primitive kinds a `shape` node can union.
+/// Primitive kinds a `shape` node can combine.
 enum ShapeKind { circle, capsule, rrect }
+
+/// How a primitive combines with everything listed before it.
+///
+/// [code] is the primitive's `uOp` value in `shaders/sdf_shapes.frag`.
+enum ShapeOp {
+  union(0),
+  subtract(1),
+  intersect(2);
+
+  const ShapeOp(this.code);
+
+  final int code;
+}
 
 /// One `shape` primitive as declared, in scaled logical units and independent
 /// of the box it is painted into.
 ///
 /// [inset] (horizontal, vertical) deflates the box and wins over [size];
 /// a circle may give only [radius]. Without either the primitive fills the
-/// box.
+/// box. [at] (fractions of the box) places the primitive's center and wins
+/// over [alignment]; [inset] wins over both.
+///
+/// [op] combines the primitive with those listed before it (ignored on the
+/// first) and [smooth] is its own blend width, `null` for the shape's
+/// common one.
 final class ShapePrimitive {
   const ShapePrimitive({
     required this.kind,
@@ -19,6 +37,9 @@ final class ShapePrimitive {
     this.inset,
     this.size,
     this.radius,
+    this.at,
+    this.op = ShapeOp.union,
+    this.smooth,
   });
 
   final ShapeKind kind;
@@ -27,6 +48,9 @@ final class ShapePrimitive {
   final Size? inset;
   final Size? size;
   final double? radius;
+  final Offset? at;
+  final ShapeOp op;
+  final double? smooth;
 
   @override
   bool operator ==(Object other) =>
@@ -36,24 +60,33 @@ final class ShapePrimitive {
       other.offset == offset &&
       other.inset == inset &&
       other.size == size &&
-      other.radius == radius;
+      other.radius == radius &&
+      other.at == at &&
+      other.op == op &&
+      other.smooth == smooth;
 
   @override
-  int get hashCode => Object.hash(kind, alignment, offset, inset, size, radius);
+  int get hashCode =>
+      Object.hash(kind, alignment, offset, inset, size, radius, at, op, smooth);
 }
 
 /// A primitive resolved into box-local coordinates: a rounded box around
-/// [center] with half extents [half] and corner [radius].
+/// [center] with half extents [half] and corner [radius], combined by [op]
+/// with blend width [smooth] (`null` for the shape's common one).
 final class ShapeBox {
   const ShapeBox({
     required this.center,
     required this.half,
     required this.radius,
+    this.op = ShapeOp.union,
+    this.smooth,
   });
 
   final Offset center;
   final Size half;
   final double radius;
+  final ShapeOp op;
+  final double? smooth;
 
   Rect get rect => Rect.fromCenter(
     center: center,
@@ -66,14 +99,16 @@ final class ShapeBox {
       other is ShapeBox &&
       other.center == center &&
       other.half == half &&
-      other.radius == radius;
+      other.radius == radius &&
+      other.op == op &&
+      other.smooth == smooth;
 
   @override
-  int get hashCode => Object.hash(center, half, radius);
+  int get hashCode => Object.hash(center, half, radius, op, smooth);
 }
 
 /// Geometry of the `shape` widget: placement, signed distances, and the hard
-/// union fallback.
+/// outline fallback.
 ///
 /// The distance functions use the same formulas and constants as
 /// `shaders/sdf_shapes.frag`, so the Dart side describes exactly what the
@@ -104,9 +139,18 @@ final class ShapeGeometry {
           (primitive.kind == ShapeKind.circle && r != null
               ? Size(r * 2, r * 2)
               : null);
-      frame = size == null
-          ? Offset.zero & box
-          : primitive.alignment.inscribe(size, Offset.zero & box);
+      if (primitive.at case final at?) {
+        final extent = size ?? box;
+        frame = Rect.fromCenter(
+          center: Offset(at.dx * box.width, at.dy * box.height),
+          width: extent.width,
+          height: extent.height,
+        );
+      } else {
+        frame = size == null
+            ? Offset.zero & box
+            : primitive.alignment.inscribe(size, Offset.zero & box);
+      }
     }
     final rect = frame.shift(primitive.offset);
     final short = math.min(rect.width, rect.height);
@@ -122,6 +166,8 @@ final class ShapeGeometry {
       center: Offset(_coordinate(rect.center.dx), _coordinate(rect.center.dy)),
       half: Size(_extent(half.width), _extent(half.height)),
       radius: _extent(radius),
+      op: primitive.op,
+      smooth: primitive.smooth,
     );
   }
 
@@ -148,28 +194,55 @@ final class ShapeGeometry {
     return math.min(a, b) - h * h * k * 0.25;
   }
 
-  /// Smooth union of [shapes] at [p]; infinity when [shapes] is empty.
-  static double unionDistance(Offset p, List<ShapeBox> shapes, double k) {
+  /// Polynomial smooth maximum, `-smoothMin(-a, -b, k)`.
+  static double smoothMax(double a, double b, double k) =>
+      -smoothMin(-a, -b, k);
+
+  /// Signed distance of [shapes] folded left in list order at [p]; infinity
+  /// when [shapes] is empty.
+  ///
+  /// Each later shape joins by its op — union `smoothMin(d, b)`, subtract
+  /// `smoothMax(d, -b)`, intersect `smoothMax(d, b)` — with its own smooth,
+  /// or [k] when it has none. The first shape's op is ignored.
+  static double combineDistance(Offset p, List<ShapeBox> shapes, double k) {
     if (shapes.isEmpty) return double.infinity;
     var d = roundBoxDistance(p, shapes.first);
     for (final shape in shapes.skip(1)) {
-      d = smoothMin(d, roundBoxDistance(p, shape), k);
+      final b = roundBoxDistance(p, shape);
+      final blend = shape.smooth ?? k;
+      d = switch (shape.op) {
+        ShapeOp.union => smoothMin(d, b, blend),
+        ShapeOp.subtract => smoothMax(d, -b, blend),
+        ShapeOp.intersect => smoothMax(d, b, blend),
+      };
     }
     return d;
   }
 
-  /// The hard union outline of [shapes].
-  static Path unionPath(List<ShapeBox> shapes) {
-    Path? union;
+  /// The hard outline of [shapes], combined in list order by each op (smooth
+  /// ignored); `null` when a path operation fails.
+  static Path? hardPath(List<ShapeBox> shapes) {
+    Path? outline;
     for (final shape in shapes) {
       final path = Path()
         ..addRRect(
           RRect.fromRectAndRadius(shape.rect, Radius.circular(shape.radius)),
         );
-      union = union == null
-          ? path
-          : Path.combine(PathOperation.union, union, path);
+      if (outline == null) {
+        outline = path;
+        continue;
+      }
+      final operation = switch (shape.op) {
+        ShapeOp.union => PathOperation.union,
+        ShapeOp.subtract => PathOperation.difference,
+        ShapeOp.intersect => PathOperation.intersect,
+      };
+      try {
+        outline = Path.combine(operation, outline, path);
+      } catch (_) {
+        return null;
+      }
     }
-    return union ?? Path();
+    return outline ?? Path();
   }
 }

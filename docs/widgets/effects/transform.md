@@ -7,6 +7,10 @@ Builds Flutter's [Transform] from a resolved matrix and alignment. This primitiv
 | Name | Type | Allowed values | Default | Bindable (`${}`) | Description |
 | --- | --- | --- | --- | --- | --- |
 | `alignment` | `alignment` | top_left, top_center, top_right, center_left, center, center_right, bottom_left, bottom_center, bottom_right | `center` | Yes | positions the child or children within the available space. Values: top_left \| top_center \| top_right \| center_left \| center \| center_right \| bottom_left \| bottom_center \| bottom_right. |
+| `translate` | `[x, y]` | — | `null` | Yes | Translation in logical pixels, not scaled by `EngineMetrics`. |
+| `offset` | `[x, y]` | — | `null` | Yes | Translation scaled by `EngineMetrics` like other sizes; added to `translate`. Malformed values are ignored. Since 0.9.0 (`_requires: [transform_offset_v1]`). |
+| `rotate` | number | — | `null` | Yes | Z rotation in radians, after the translation. |
+| `scale` | number or `[sx, sy]` | — | `null` | Yes | Scale factor, after the rotation. |
 | `_child` | widget node | — | `null` | No | The single positional child; cannot be combined with `_children` or `_slots`. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 
