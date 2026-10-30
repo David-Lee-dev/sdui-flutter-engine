@@ -22,7 +22,7 @@ import '../../../util/scroll_inset.dart';
 /// - `physics` (`scrollPhysics`, default `null`) — scroll physics. Values: never | bouncing | clamping | always.
 /// - `keyboard_dismiss_behavior` (`keyboardDismissBehavior`, default `null`) — chooses whether dragging dismisses the keyboard. Values: manual | on_drag.
 /// - `clip_behavior` (`clip`, default `hard_edge`) — edge clipping behavior. Values: none | hard_edge | anti_alias | anti_alias_with_save_layer.
-/// - `inset_end` (`flag`, default `null`) — adds the bottom system inset after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never.
+/// - `inset_end` (`flag`, default `null`) — adds the `MediaQuery` bottom padding the host passes in after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never.
 ///
 /// Child: `_child`.
 final class SingleChildScrollViewWidget {

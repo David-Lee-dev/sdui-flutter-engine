@@ -42,8 +42,8 @@ final class ScrollInset {
   ///
   /// A vertical view never gets `null`: a list or grid without padding would
   /// otherwise take the top and bottom padding from [MediaQuery] by itself,
-  /// adding the inset again or ignoring `inset_end: false`. The scaffold body
-  /// already clears the top, left and right edges.
+  /// adding the inset again or ignoring `inset_end: false`. The top, left and
+  /// right edges are left to the host app and `safe_area`.
   static EdgeInsets? endPadding(EdgeInsets? base, Axis axis, double extent) {
     if (axis != Axis.vertical) return base;
     return (base ?? EdgeInsets.zero) + EdgeInsets.only(bottom: extent);

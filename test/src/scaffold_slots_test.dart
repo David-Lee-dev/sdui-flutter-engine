@@ -165,13 +165,38 @@ void main() {
       expect(scrollPadding(tester), const EdgeInsets.all(16));
     });
 
-    testWidgets('inset_bottom: true면 body 하단을 깎고 스크롤은 inset을 더하지 않는다', (
-      tester,
-    ) async {
-      await mount(tester, screen(filled, props: {'inset_bottom': true}));
+    testWidgets('inset_bottom·cover_bottom_inset은 효과도 경고도 없다', (tester) async {
+      final logs = <String>[];
+      final original = debugPrint;
+      debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+      try {
+        await mount(
+          tester,
+          screen(
+            filled,
+            props: {'inset_bottom': true, 'cover_bottom_inset': true},
+          ),
+        );
+      } finally {
+        debugPrint = original;
+      }
 
-      expect(tester.getRect(find.byType(SingleChildScrollView)).bottom, 566);
-      expect(scrollPadding(tester), const EdgeInsets.all(16));
+      expect(tester.getRect(find.byType(SingleChildScrollView)).bottom, 600);
+      expect(scrollPadding(tester), const EdgeInsets.fromLTRB(16, 16, 16, 50));
+      expect(logs.where((l) => l.contains('ignored prop')), isEmpty);
+    });
+
+    testWidgets('알 수 없는 scaffold prop은 여전히 경고한다', (tester) async {
+      final logs = <String>[];
+      final original = debugPrint;
+      debugPrint = (message, {wrapWidth}) => logs.add(message ?? '');
+      try {
+        await mount(tester, screen(filled, props: {'zzz_typo': true}));
+      } finally {
+        debugPrint = original;
+      }
+
+      expect(logs.any((l) => l.contains('ignored prop(s): zzz_typo')), isTrue);
     });
 
     testWidgets('inset_end: false면 템플릿 padding만 쓴다', (tester) async {
@@ -226,7 +251,7 @@ void main() {
     });
 
     testWidgets(
-      'Android: 띠는 실제 inset만 덮고 스크롤 끝 여백은 셸 padding을 그대로 더한다',
+      'Android: 띠 없이 스크롤 끝 여백은 셸 padding을 그대로 더한다',
       (tester) async {
         tester.view.padding = const FakeViewPadding(bottom: 48 * 3);
         addTearDown(tester.view.reset);
@@ -237,13 +262,13 @@ void main() {
           scrollPadding(tester),
           const EdgeInsets.fromLTRB(16, 16, 16, 144),
         );
-        final strip = find.descendant(
-          of: find.byWidgetPredicate(
+        expect(tester.getRect(find.byType(SingleChildScrollView)).bottom, 600);
+        expect(
+          find.byWidgetPredicate(
             (w) => w is IgnorePointer && w.child is ColoredBox,
           ),
-          matching: find.byType(ColoredBox),
+          findsNothing,
         );
-        expect(tester.getRect(strip), const Rect.fromLTRB(0, 552, 800, 600));
       },
       variant: TargetPlatformVariant.only(TargetPlatform.android),
     );

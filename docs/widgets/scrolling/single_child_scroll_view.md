@@ -13,7 +13,7 @@ Builds Flutter's [SingleChildScrollView] for the node's first child. This primit
 | `physics` | `scrollPhysics` | never, bouncing, clamping, always | `null` | Yes | scroll physics. Values: never \| bouncing \| clamping \| always. |
 | `keyboard_dismiss_behavior` | `keyboardDismissBehavior` | manual, on_drag | `null` | Yes | chooses whether dragging dismisses the keyboard. Values: manual \| on_drag. |
 | `clip_behavior` | `clip` | none, hard_edge, anti_alias, anti_alias_with_save_layer | `hard_edge` | Yes | edge clipping behavior. Values: none \| hard_edge \| anti_alias \| anti_alias_with_save_layer. |
-| `inset_end` | `flag` | — | `null` | Yes | adds the bottom system inset after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never. |
+| `inset_end` | `flag` | — | `null` | Yes | adds the `MediaQuery` bottom padding the host passes in after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never. |
 | `_child` | widget node | — | `null` | No | The single positional child; cannot be combined with `_children` or `_slots`. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 
@@ -50,7 +50,7 @@ _child:
 ## Pitfalls & related
 
 - Use only the documented positional child form; `_slots` are rejected for this specification kind.
-- A vertical view scrolls under the home indicator, system bar or floating tab bar and adds the bottom inset after its content. Its child sees no bottom padding, so an inner `safe_area` or scroll view does not add the inset again. Horizontal views are unchanged. By default it does this only while its bottom edge reaches the bottom inset of the screen, so a view above a fixed CTA, inside a centered dialog or above a bottom bar adds nothing; `inset_end: true` forces it on and `inset_end: false` off. See [Bottom inset](../../concepts.md#bottom-inset).
+- A vertical view scrolls under the home indicator, system bar or floating tab bar and adds the host's `MediaQuery` bottom padding after its content. Its child sees no bottom padding, so an inner `safe_area` or scroll view does not add the inset again. Horizontal views are unchanged. By default it does this only while its bottom edge reaches the bottom inset of the screen, so a view above a fixed CTA, inside a centered dialog or above a bottom bar adds nothing; `inset_end: true` forces it on and `inset_end: false` off. See [Insets](../../concepts.md#insets).
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
 - Return to the [widget catalog](../README.md).

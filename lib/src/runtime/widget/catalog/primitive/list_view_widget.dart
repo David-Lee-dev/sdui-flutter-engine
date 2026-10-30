@@ -26,7 +26,7 @@ import '../../../util/scroll_inset.dart';
 /// - `shrink_wrap` (`flag`, default `false`) — sizes the scroll view to its content along the scroll axis.
 /// - `item_extent` (`size` (scaled by EngineMetrics), default `null`) — forces every list item to the same main-axis extent.
 /// - `clip_behavior` (`clip`, default `hard_edge`) — edge clipping behavior. Values: none | hard_edge | anti_alias | anti_alias_with_save_layer.
-/// - `inset_end` (`flag`, default `null`) — adds the bottom system inset after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never.
+/// - `inset_end` (`flag`, default `null`) — adds the `MediaQuery` bottom padding the host passes in after the content of a vertical view: by default only when the view reaches the bottom inset of the screen; `true` always, `false` never.
 ///
 /// Child: `_children`.
 final class ListViewWidget {

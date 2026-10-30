@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.11.0
+
+**Behavior change:** the SDK applies no safe-area policy of its own. Safe
+area is the host app's job (top, bottom, platform differences); a template
+adds more only by wrapping its content in `safe_area`, which pads only the
+edges the host has not consumed. See [Insets](docs/concepts.md#insets).
+
+- The `scaffold` body is no longer wrapped in a `SafeArea`. Without an
+  `app_bar` the body now starts at the very top, under the status bar, and
+  spans the full width in landscape (under side cut-outs); the whole
+  `MediaQuery` padding is left to its content. Templates that relied on the
+  scaffold clearing the status bar wrap their top in a `safe_area` with
+  `bottom: false`.
+- With an `app_bar` nothing changes vertically: the bar is still
+  `app_bar_height` tall below the status-bar inset and the body starts under
+  it. The body no longer clears left/right cut-outs in landscape.
+- The Android bottom strip from 0.10.0 is removed: content scrolled under the
+  system bar shows through it again, unless the host covers or consumes the
+  inset.
+- `inset_bottom` and `cover_bottom_inset` are no-ops. They are still accepted
+  without an `ignored prop(s)` warning. For the old `inset_bottom: true`
+  layout wrap the body in a `safe_area` with `top: false`.
+- Unchanged: vertical scroll views add the `MediaQuery` bottom padding the
+  host passes in after their content (`inset_end`, default only when the view
+  reaches the screen bottom); `extend_body` and `extend_body_behind_app_bar`
+  keep their Flutter meaning; `safe_area` is unchanged.
+
 ## 0.10.1
 
 ### Fixed
