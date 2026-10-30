@@ -372,6 +372,40 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  for (final popEarly in [false, true]) {
+    testWidgets(
+      'C5: the background refresh waits for the transition popEarly=$popEarly',
+      (tester) async {
+        final loader = _Loader({
+          'detail': () async =>
+              _screen('detail', transition: {'type': 'fade', 'duration': 300}),
+        });
+        await _init(loader, preload: ['detail'], type: 'none');
+        final router = await _pump(tester);
+        int refreshes() =>
+            loader.calls.where((id) => id == 'detail').length - 1;
+        router.push('/screens/detail');
+        await tester.pump();
+        await tester.pump();
+        for (var i = 0; i < 4; i++) {
+          await tester.pump(const Duration(milliseconds: 50));
+          expect(refreshes(), 0, reason: 'push frame $i');
+        }
+        if (popEarly) {
+          router.pop();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 50));
+          expect(refreshes(), 0);
+        }
+        await tester.pumpAndSettle();
+        expect(refreshes(), 1);
+        router.refresh();
+        await tester.pumpAndSettle();
+        expect(refreshes(), 1);
+      },
+    );
+  }
+
   for (final app in [false, true]) {
     testWidgets('C6: a cached _transition drives the engine page app=$app', (
       tester,

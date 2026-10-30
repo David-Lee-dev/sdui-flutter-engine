@@ -65,6 +65,9 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
   /// The current visit's `screen_view_id` — issued per successful load.
   String? _screenViewId;
 
+  /// Revalidates a cache hit for the next open; `null` after a load.
+  VoidCallback? _refresh;
+
   @override
   void initState() {
     super.initState();
@@ -81,9 +84,7 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     _loaded = cached.screen;
     _screenViewId = ScreenVisit.begin(widget.screenId).id;
     final cache = SduiState.cache;
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => cache.refresh(widget.screenId, widget.loader),
-    );
+    _refresh = () => cache.refresh(widget.screenId, widget.loader);
   }
 
   void _load() {
@@ -160,23 +161,89 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     final loaded = _loaded;
     if (loaded == null) return _loading(context);
 
-    return Listener(
-      onPointerDown: (event) {
-        final navigator = Navigator.maybeOf(context);
-        if (navigator != null) {
-          TransitionOrigins.of(navigator).pointerDown(event);
-        }
-      },
-      child: EngineRunner(
-        screenId: widget.screenId,
-        screenViewId: _screenViewId,
-        rootData: widget.params,
-        template: loaded.template,
-        modalTemplates: loaded.modals,
-        navigate: goRouterNavigateHandle(GoRouter.of(context)),
-        toast: _toastHandle(),
-        errorBuilder: (context, error) => _errorView(context, error),
+    return _AfterTransition(
+      onSettled: _refresh,
+      child: Listener(
+        onPointerDown: (event) {
+          final navigator = Navigator.maybeOf(context);
+          if (navigator != null) {
+            TransitionOrigins.of(navigator).pointerDown(event);
+          }
+        },
+        child: EngineRunner(
+          screenId: widget.screenId,
+          screenViewId: _screenViewId,
+          rootData: widget.params,
+          template: loaded.template,
+          modalTemplates: loaded.modals,
+          navigate: goRouterNavigateHandle(GoRouter.of(context)),
+          toast: _toastHandle(),
+          errorBuilder: (context, error) => _errorView(context, error),
+        ),
       ),
     );
   }
+}
+
+/// Calls [onSettled] once, when the enclosing route's entrance transition has
+/// completed, so its work (the cache refresh decodes on this isolate) never
+/// lands inside the transition. Without a route animation, or with one that
+/// already completed, it runs after the first frame. A page that leaves
+/// before its transition completes (popped mid-push) runs it on dispose, so
+/// every open still revalidates once.
+///
+/// The route lookup lives in this element, not the page, so route status
+/// changes rebuild only this pass-through.
+class _AfterTransition extends StatefulWidget {
+  const _AfterTransition({required this.onSettled, required this.child});
+
+  final VoidCallback? onSettled;
+  final Widget child;
+
+  @override
+  State<_AfterTransition> createState() => _AfterTransitionState();
+}
+
+class _AfterTransitionState extends State<_AfterTransition> {
+  Animation<double>? _animation;
+  bool _settled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_settled || widget.onSettled == null) return;
+    final animation = ModalRoute.of(context)?.animation;
+    if (identical(animation, _animation)) return;
+    _animation?.removeStatusListener(_onStatus);
+    _animation = animation;
+    animation?.addStatusListener(_onStatus);
+    // A pushed route's animation proxy only follows its controller after the
+    // first frame, so the status is read then.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final current = _animation;
+      if (current == null || current.status == AnimationStatus.completed) {
+        _settle();
+      }
+    });
+  }
+
+  void _onStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) _settle();
+  }
+
+  void _settle() {
+    if (_settled) return;
+    _settled = true;
+    _animation?.removeStatusListener(_onStatus);
+    widget.onSettled?.call();
+  }
+
+  @override
+  void dispose() {
+    _settle();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
