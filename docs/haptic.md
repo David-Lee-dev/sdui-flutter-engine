@@ -27,6 +27,21 @@ When `continuous` is unsupported, the driver continues to `pattern`, then `varia
 
 Android never falls back to waveform, amplitude, or one-shot vibration. A device without the relevant capability stays silent for that custom pattern or preset. On a Samsung Galaxy Z Flip6 (SM-F741N) running Android 16, taps work but `dumpsys` reports `mMaxEnvelopeEffectSize = 0`; continuous haptics are therefore silent on that device and likely unavailable on most current Android devices.
 
+### Android tap intensity tiers
+
+Since 0.14.0, a tap's `intensity` picks which Android primitive plays, approximating iOS's soft-to-strong range instead of always scaling `PRIMITIVE_CLICK` (which still feels weak even at 1.0).
+
+The tiers are derived from the AOSP haptics HAL targets ([Implement constants and primitives](https://source.android.com/docs/core/interaction/haptics/haptics-constants-primitives)), not fitted to one device: `PRIMITIVE_TICK` targets a 1 G peak (half a CLICK), `PRIMITIVE_CLICK` a 2 G peak, and `EFFECT_HEAVY_CLICK` is heavier than CLICK ([UX design](https://source.android.com/docs/core/interaction/haptics/haptics-ux-design), no published number). Vendors tune their actuators to these targets. `intensity` maps linearly to a target peak, `target G = intensity × 2 / 0.75`, so a full CLICK is reached at `0.75`; each primitive's scale is the target divided by its own peak (assuming scale is linear in amplitude). The result is one straight line from 0 to 2 G with no jump between tiers. `PRIMITIVE_THUD` is not used: it targets only 0.25 G over 300 ms, a low knock rather than a strong tap.
+
+| `intensity` | Target peak | Plays | Scale |
+| --- | --- | --- | --- |
+| `<= 0` | — | nothing | — |
+| `0 – 0.375` (exclusive) | 0 – 1 G | `PRIMITIVE_TICK` | `target / 1 G` |
+| `0.375 – 0.75` (exclusive) | 1 – 2 G | `PRIMITIVE_CLICK` | `target / 2 G` (0.5 – 1.0) |
+| `>= 0.75` | > 2 G | the predefined `EFFECT_HEAVY_CLICK` | not scalable |
+
+Sharpness has no Android counterpart for taps and stays ignored, as before. Per-device fallbacks (capability queried once and cached): a device without `PRIMITIVE_TICK` plays `PRIMITIVE_CLICK` at the same target (`target / 2 G`) instead; a device without the predefined `EFFECT_HEAVY_CLICK` plays `PRIMITIVE_CLICK` at full scale instead. A device without `PRIMITIVE_CLICK` itself stays silent for every tap, exactly as before.
+
 ## Authoring guidance
 
 Android's custom haptic effects guidance recommends gaps of at least 50 ms for separate taps to be perceived clearly and intensity steps at least 1.4× apart. Presets that differ only in sharpness feel identical on Android because the tap primitive path scales intensity and does not vary sharpness. Taps with intensity 0 are skipped but retain their delay. These limits make `variant` fallbacks especially useful when authoring custom patterns.

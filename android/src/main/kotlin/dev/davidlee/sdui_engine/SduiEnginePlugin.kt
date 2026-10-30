@@ -13,8 +13,9 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 
 /**
- * Native haptics for `sys_haptic`: click-primitive taps whose timing stays on
- * the Dart side, and continuous presets played as one basic envelope.
+ * Native haptics for `sys_haptic`: intensity-tiered primitive taps (`TICK`,
+ * `CLICK`, or the predefined `HEAVY_CLICK`) whose timing stays on the Dart
+ * side, and continuous presets played as one basic envelope.
  *
  * There is deliberately no waveform, amplitude, one-shot or timing fallback:
  * a device without envelope effects plays no continuous preset.
@@ -24,6 +25,9 @@ class SduiEnginePlugin :
     MethodCallHandler {
     private lateinit var channel: MethodChannel
     private var vibrator: Vibrator? = null
+
+    /** Queried once per attached vibrator and cached; see [capabilitiesFor]. */
+    private var tapCapabilities: TapCapabilities? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         vibrator = defaultVibrator(binding.applicationContext)
@@ -69,6 +73,7 @@ class SduiEnginePlugin :
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
         vibrator = null
+        tapCapabilities = null
     }
 
     /** The vibrator when it can play the click primitive (API 30+), else null. */
@@ -80,13 +85,32 @@ class SduiEnginePlugin :
         return if (canClick) v else null
     }
 
+    /** `TICK` and the predefined `HEAVY_CLICK` support, queried once and cached. */
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun tap(vibrator: Vibrator, scale: Float) {
-        val effect = VibrationEffect.startComposition()
-            .addPrimitive(VibrationEffect.Composition.PRIMITIVE_CLICK, scale.coerceIn(0f, 1f))
-            .compose()
+    private fun capabilitiesFor(vibrator: Vibrator): TapCapabilities =
+        tapCapabilities ?: TapCapabilities(
+            tickSupported = vibrator.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_TICK),
+            heavyClickSupported = vibrator.areAllEffectsSupported(VibrationEffect.EFFECT_HEAVY_CLICK) ==
+                Vibrator.VIBRATION_EFFECT_SUPPORT_YES,
+        ).also { tapCapabilities = it }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun tap(vibrator: Vibrator, intensity: Float) {
+        val effect = when (val plan = tapPlan(intensity, capabilitiesFor(vibrator))) {
+            is TapPlan.Primitive -> VibrationEffect.startComposition()
+                .addPrimitive(plan.id.toCompositionId(), plan.scale.coerceIn(0f, 1f))
+                .compose()
+            TapPlan.PredefinedHeavyClick -> VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK)
+            TapPlan.Silent -> return
+        }
         vibrator.vibrate(effect)
     }
+
+    private fun TapPrimitiveId.toCompositionId(): Int =
+        when (this) {
+            TapPrimitiveId.TICK -> VibrationEffect.Composition.PRIMITIVE_TICK
+            TapPrimitiveId.CLICK -> VibrationEffect.Composition.PRIMITIVE_CLICK
+        }
 
     /** The vibrator when it can play envelope effects (API 36+), else null. */
     private fun envelopeVibrator(): Vibrator? {

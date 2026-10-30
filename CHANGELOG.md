@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.14.0
+
+**Behavior change (Android only):** a `sys_haptic` tap now picks its native
+primitive by `intensity` instead of always scaling `PRIMITIVE_CLICK`. Tiers are
+derived from the AOSP HAL targets (TICK 1 G, CLICK 2 G): `target G = intensity ×
+2 / 0.75`; below 1 G (`intensity < 0.375`) plays `PRIMITIVE_TICK`, 1–2 G a
+scaled `PRIMITIVE_CLICK`, and `intensity >= 0.75` the predefined
+`EFFECT_HEAVY_CLICK` (the strongest crisp tap). This brings Android taps closer
+to iOS's soft-to-strong range. Falls back to `PRIMITIVE_CLICK` on devices
+missing `TICK` or `HEAVY_CLICK` support; a device without `PRIMITIVE_CLICK`
+stays silent as before. iOS, continuous haptics and tap timing are unchanged.
+See docs/haptic.md "Android tap intensity tiers".
+
 ## 0.13.0
 
 - Added `_motion` scheduling param `start` (`'visible'` default, or `'mount'`):

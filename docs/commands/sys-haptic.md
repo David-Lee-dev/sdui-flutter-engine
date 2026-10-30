@@ -15,7 +15,7 @@ Each item is one short transient tap (never a continuous buzz):
 
 | Key | Type | Range | Default | Description |
 | --- | --- | --- | --- | --- |
-| `intensity` | number | 0–1 | `1.0` | Tap strength. `0` (including negatives clamped to 0) skips the tap but keeps its `delay`. |
+| `intensity` | number | 0–1 | `1.0` | Tap strength. `0` (including negatives clamped to 0) skips the tap but keeps its `delay`. Since 0.14.0, Android picks `PRIMITIVE_TICK`, a scaled `PRIMITIVE_CLICK`, or the predefined `EFFECT_HEAVY_CLICK` by this value; see [Haptics](../haptic.md#android-tap-intensity-tiers). |
 | `sharpness` | number | 0–1 | `0.5` | Tap crispness. iOS only; ignored on Android. |
 | `delay` | number (ms) | ≥ 0 | `0` | Wait after the previous tap; on the first tap, the wait before it. |
 
