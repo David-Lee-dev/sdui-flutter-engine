@@ -11,7 +11,7 @@ enum LogLevel { trace, debug, info, warn, error }
 final class EngineLog {
   const EngineLog._();
 
-  static LogLevel _minLevel = LogLevel.debug;
+  static LogLevel _minLevel = LogLevel.info;
   static bool _colors = true;
   static Set<String>? _tags;
   // `null` = the ambient [debugPrint], read at call time — tests (and
@@ -46,9 +46,9 @@ final class EngineLog {
   ///
   /// The suppression rides a [Zone] value, so it follows the body across
   /// `await`s and scheduled continuations without threading a flag through every
-  /// layer. Used for high-frequency, low-signal work — chiefly interval-driven
-  /// lifecycle ticks, whose per-tick action/state logs would otherwise flood the
-  /// debug console.
+  /// layer. Used for high-frequency, low-signal work — interval-driven
+  /// lifecycle ticks and per-frame `scroll` events, whose action/state logs
+  /// would otherwise flood the debug console.
   static T runSilently<T>(T Function() body) =>
       runZoned(body, zoneValues: const {_silentZoneKey: true});
 

@@ -5,6 +5,7 @@ import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
+import 'package:sdui_engine/src/runtime/log/engine_log.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scroll_event_wrapper.dart';
 
@@ -121,5 +122,32 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, 300));
     await tester.pumpAndSettle();
     expect(calls.where((call) => call['action'] == 'first'), hasLength(1));
+  });
+
+  testWidgets('scroll 액션은 로그 없이 실행되고 edge 이벤트는 그대로 남긴다', (tester) async {
+    final lines = <String>[];
+    EngineLog.configure(
+      minLevel: LogLevel.debug,
+      colors: false,
+      output: lines.add,
+    );
+    addTearDown(
+      () => EngineLog.configure(
+        minLevel: LogLevel.info,
+        colors: true,
+        output: (line) => debugPrint(line),
+      ),
+    );
+    final calls = <Map<String, Object?>>[];
+    await tester.pumpWidget(
+      _subject(on: {'scroll': 'track', 'end_reached': 'more'}, calls: calls),
+    );
+
+    await tester.drag(find.byType(ListView), const Offset(0, -2000));
+    await tester.pumpAndSettle();
+    expect(calls.where((call) => call['action'] == 'track'), isNotEmpty);
+    expect(calls.where((call) => call['action'] == 'more'), hasLength(1));
+    expect(lines.where((line) => line.contains('track')), isEmpty);
+    expect(lines.where((line) => line.contains('more')), isNotEmpty);
   });
 }

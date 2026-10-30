@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
+import '../log/engine_log.dart';
 import 'event_timing_controller.dart';
 import 'scope/scope.dart';
 
@@ -62,10 +63,18 @@ class _ScrollEventWrapperState extends State<ScrollEventWrapper> {
         : 0.0,
   };
 
+  /// `scroll` fires every frame, so like interval ticks its action runs with
+  /// engine logging suppressed; the edge-gated events still log.
   void _emit(String event, String action, Map<String, Object?> payload) {
     _timing.run(event, widget.timing[event], () {
       if (!mounted) return;
-      Scope.actionHost(context)?.handle(action, event: payload);
+      final host = Scope.actionHost(context);
+      if (host == null) return;
+      if (event == 'scroll') {
+        EngineLog.runSilently(() => host.handle(action, event: payload));
+      } else {
+        host.handle(action, event: payload);
+      }
     });
   }
 
