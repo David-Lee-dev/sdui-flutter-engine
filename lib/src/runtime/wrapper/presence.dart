@@ -883,7 +883,9 @@ class _RenderPresence extends RenderBox
   }
 
   /// The axis [_spaceAxis] resolved at the last layout or recheck, `null`
-  /// for both: measuring, intrinsic sizes, positioning and clipping read it.
+  /// for both: layout, positioning and clipping read it. Intrinsic and dry
+  /// sizes resolve afresh, since a parent may query them before this lays
+  /// out under a changed flow.
   late Axis? _resolvedAxis = _spaceAxis();
 
   /// Resolves the space axis again and lays out if it changed.
@@ -972,8 +974,11 @@ class _RenderPresence extends RenderBox
     return Axis.vertical;
   }
 
-  Size _measure(Size Function(RenderBox) sizeOf, BoxConstraints constraints) {
-    final axis = _resolvedAxis;
+  Size _measure(
+    Size Function(RenderBox) sizeOf,
+    BoxConstraints constraints,
+    Axis? axis,
+  ) {
     var width = 0.0;
     var height = 0.0;
     var child = firstChild;
@@ -994,16 +999,23 @@ class _RenderPresence extends RenderBox
   }
 
   @override
-  Size computeDryLayout(covariant BoxConstraints constraints) =>
-      _measure((child) => child.getDryLayout(constraints), constraints);
+  Size computeDryLayout(covariant BoxConstraints constraints) => _measure(
+    (child) => child.getDryLayout(constraints),
+    constraints,
+    _spaceAxis(),
+  );
 
   @override
   void performLayout() {
     _resolvedAxis = _spaceAxis();
-    size = _measure((child) {
-      child.layout(constraints, parentUsesSize: true);
-      return child.size;
-    }, constraints);
+    size = _measure(
+      (child) {
+        child.layout(constraints, parentUsesSize: true);
+        return child.size;
+      },
+      constraints,
+      _resolvedAxis,
+    );
     final rtl = _textDirection == TextDirection.rtl;
     final axis = _resolvedAxis;
     var child = firstChild;
@@ -1032,8 +1044,8 @@ class _RenderPresence extends RenderBox
     return result;
   }
 
-  bool get _sumsWidth => _resolvedAxis != Axis.vertical;
-  bool get _sumsHeight => _resolvedAxis != Axis.horizontal;
+  bool get _sumsWidth => _spaceAxis() != Axis.vertical;
+  bool get _sumsHeight => _spaceAxis() != Axis.horizontal;
 
   @override
   double computeMinIntrinsicWidth(double height) =>

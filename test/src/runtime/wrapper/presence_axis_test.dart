@@ -462,6 +462,32 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  // The same slot widget keeps its render object untouched by the flip, so
+  // only the intrinsic query decides the size IntrinsicHeight imposes.
+  testWidgets('a flex flip refreshes the axis of intrinsic sizes', (
+    tester,
+  ) async {
+    final hidden = _single(false);
+    Widget scene(Axis direction, Widget slot) => _host(
+      UnconstrainedBox(
+        child: Flex(
+          direction: direction,
+          mainAxisSize: MainAxisSize.min,
+          children: [IntrinsicHeight(child: slot)],
+        ),
+      ),
+    );
+    await tester.pumpWidget(scene(Axis.vertical, _single(true)));
+    await tester.pumpWidget(scene(Axis.vertical, hidden));
+    await tester.pump(const Duration(milliseconds: 250));
+    final slot = _slot(tester);
+    expect(slot.size, const Size(120, 60));
+
+    await tester.pumpWidget(scene(Axis.horizontal, hidden));
+    expect(slot.size, const Size(90, 80));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('a slot moved from a column to a row folds horizontally', (
     tester,
   ) async {
