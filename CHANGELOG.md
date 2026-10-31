@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a binding inside a `_scope` under a presence slot no longer stops
+  updating after the content that watched it was removed and shown again
+  (the slot's relay was disposed while the scope still cached it).
+
 ## 0.16.0
 
 **Behavior change:** structural changes animate by default. `_if`, `cond` and

@@ -766,6 +766,49 @@ void main() {
       expect(_top(tester, 'below'), 50);
     });
 
+    testWidgets('a slot binding can be watched again after its last watcher '
+        'left', (tester) async {
+      // The `_scope` caches its subscription to `label`, which passes through
+      // the slot's view — the second mount must be able to subscribe again.
+      await tester.pumpWidget(
+        _host(
+          {'show': true, 'inner': true, 'label': 'a'},
+          _content({
+            '_type': 'column',
+            '_children': [
+              {
+                '_type': 'column',
+                '_if': r'${show}',
+                '_scope': {
+                  '_state': {'local': 0},
+                },
+                '_children': [
+                  {
+                    '_type': 'text',
+                    'value': r'${label}',
+                    '_if': r'${inner}',
+                    '_presence': false,
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+      expect(find.text('a'), findsOneWidget);
+
+      _scope(tester).set('inner', false);
+      await tester.pump();
+      expect(find.text('a'), findsNothing);
+
+      _scope(tester).set('inner', true);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      _scope(tester).set('label', 'b');
+      await tester.pump();
+      expect(find.text('b'), findsOneWidget);
+    });
+
     testWidgets(
       'leaving content takes no input, semantics or action host and pauses '
       'its lifecycle',

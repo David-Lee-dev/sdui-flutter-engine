@@ -650,10 +650,12 @@ final class _PresenceEnv extends Environment {
 }
 
 /// Relays a chain notification unless its view is frozen; joins its view
-/// with its first listener and is disposed with its last.
+/// with its first listener and leaves it with its last.
 ///
 /// A gate made while the view is frozen starts held: it may replace one that
-/// held a notification.
+/// held a notification. It is never disposed: callers cache what `listen`
+/// returns (a scope's subscription, an outer gate's source) and may listen
+/// again after the last listener left.
 final class _Gate extends ChangeNotifier {
   _Gate(this._env, this._source) : _held = _env._frozen;
 
@@ -677,7 +679,6 @@ final class _Gate extends ChangeNotifier {
     if (--_listeners > 0) return;
     _source.removeListener(_relay);
     _env._gates.remove(this);
-    dispose();
   }
 
   void _relay() {
