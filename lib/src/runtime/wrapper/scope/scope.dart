@@ -213,6 +213,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
       return;
     }
     _acceptedSeed = JsonValue.normalizeObject(newSeed);
+    PresenceGroup.settleFrame(context);
     _env.syncState(newSeed);
   }
 

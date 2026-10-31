@@ -15,8 +15,8 @@ reload stay instant. Turn it off per node with `_presence: false`.
   on any node tunes the transitions of its structural directives.
 - `_motion` entries take `on: enter|exit|both` (default `enter`). An exit entry
   plays its motion backwards when the directive removes the content.
-- Leaving content keeps its last values, takes no input or semantics, sees no
-  action host and pauses its `_scope` lifecycle hooks.
+- Leaving content keeps its last values, takes no input, keyboard focus or
+  semantics, sees no action host and pauses its `_scope` lifecycle hooks.
 - `SduiPresentation.presence` (`PresenceStyle`) sets the app-wide durations and
   curves. `Motion.affectsLayout` (default `false`, `reveal` true) lets a
   custom motion own the space.
@@ -24,7 +24,7 @@ reload stay instant. Turn it off per node with `_presence: false`.
   `reorderable`, `dismissible` (wrap and body), loop reorders and sliver
   bodies of `cond`/`switch` stay instant. Parent-data bodies (`expanded`,
   `flexible`, `positioned*`, `spacer`) play exits in place without a size
-  animation and still take input while leaving.
+  animation and still take taps (not focus) while leaving.
 - Declare `_requires: [presence_v1]` for `_presence` and `on:`. Older engines
   play `on: exit` entries as entrances; gate by app version on the server.
 

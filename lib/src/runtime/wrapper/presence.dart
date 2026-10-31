@@ -74,6 +74,11 @@ class PresenceScope extends InheritedWidget {
               as PresenceScope?)
           ?.handle;
 
+  /// How many relays the view of the nearest slot holds.
+  @visibleForTesting
+  static int gatesOf(BuildContext context) =>
+      (handleOf(context) as _Entry?)?._view?._gates.length ?? 0;
+
   /// Whether the subtree at [context] is leaving; rebuilds when it changes.
   static bool exitingOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PresenceScope>()?.exiting ??
@@ -129,6 +134,17 @@ class PresenceGroup extends StatefulWidget {
 
   final PresenceMode mode;
 
+  /// Keeps every group under [context] instant for the rest of this frame:
+  /// a scope reseed replaces values, it does not transition them.
+  static void settleFrame(BuildContext context) {
+    if (_settling.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _settling.clear());
+    }
+    _settling.add(context as Element);
+  }
+
+  static final Set<Element> _settling = {};
+
   @override
   State<PresenceGroup> createState() => _PresenceGroupState();
 }
@@ -150,7 +166,16 @@ class _PresenceGroupState extends State<PresenceGroup>
   bool get _animates =>
       widget.config.enabled &&
       !_reduce &&
-      TickerMode.getNotifier(context).value;
+      TickerMode.getNotifier(context).value &&
+      !_settlesThisFrame;
+
+  bool get _settlesThisFrame {
+    final settling = PresenceGroup._settling;
+    if (settling.isEmpty) return false;
+    var found = false;
+    context.visitAncestorElements((e) => !(found = settling.contains(e)));
+    return found;
+  }
 
   @override
   void didChangeDependencies() {
@@ -399,7 +424,7 @@ class _PresenceGroupState extends State<PresenceGroup>
       key: ValueKey(e.key),
       handle: e,
       exiting: !e.present || around,
-      child: e.child,
+      child: ExcludeFocus(excluding: !e.present, child: e.child),
     );
 
     final builder = widget.builder;
@@ -541,13 +566,14 @@ final class _PresenceEnv extends Environment {
   }
 
   void _release() {
-    for (final gate in _gates.values) {
+    for (final gate in [..._gates.values]) {
       gate._release();
     }
   }
 }
 
-/// Relays a chain notification unless its view is frozen.
+/// Relays a chain notification unless its view is frozen; leaves its view
+/// when its last listener goes.
 final class _Gate extends ChangeNotifier {
   _Gate(this._env, this._source);
 
@@ -558,14 +584,19 @@ final class _Gate extends ChangeNotifier {
 
   @override
   void addListener(VoidCallback listener) {
-    if (_listeners++ == 0) _source.addListener(_relay);
+    if (_listeners++ == 0) {
+      _source.addListener(_relay);
+      _env._gates.putIfAbsent(_source, () => this);
+    }
     super.addListener(listener);
   }
 
   @override
   void removeListener(VoidCallback listener) {
     super.removeListener(listener);
-    if (--_listeners == 0) _source.removeListener(_relay);
+    if (--_listeners > 0) return;
+    _source.removeListener(_relay);
+    if (identical(_env._gates[_source], this)) _env._gates.remove(_source);
   }
 
   void _relay() {
