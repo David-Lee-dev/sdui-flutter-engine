@@ -288,9 +288,9 @@ class _LoadingLayer extends InheritedWidget {
 /// [LoadingScope] loads.
 ///
 /// The slot decides at its first build. Without a loading scope, or after
-/// the load, it shows [child] for good. A [child] that is not a box (a
-/// parent-data, sliver or app-registered widget) cannot sit in the slot, so
-/// it is shown directly with a warning.
+/// the load, it shows [child] for good. A [child] that is not a box (parent
+/// data or a sliver) cannot sit in the slot, so it is shown directly with a
+/// warning.
 class SkeletonSlot extends StatefulWidget {
   const SkeletonSlot({
     super.key,
@@ -338,7 +338,7 @@ class _SkeletonSlotState extends State<SkeletonSlot> {
     if (widget.boxed) return true;
     EngineLog.warn(
       '"_skeleton" at ${widget.path} is skipped: the node is not a box '
-      '(parent data, sliver or an app widget); showing the content',
+      '(parent data or sliver); showing the content',
       tag: 'scope',
     );
     return false;

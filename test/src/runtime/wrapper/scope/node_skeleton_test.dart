@@ -596,7 +596,10 @@ void main() {
       addTearDown(() => EngineLog.configure(output: debugPrint));
       WidgetFactory.register(
         'app_probe',
-        EagerSpec((context, props, children) => const Text('app')),
+        EagerSpec(
+          (context, props, children) => const Text('app'),
+          parentData: true,
+        ),
       );
       addTearDown(WidgetFactory.reset);
 

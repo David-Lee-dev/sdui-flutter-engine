@@ -70,7 +70,7 @@ final class NodeBuilder {
       ),
       SkeletonDirective skeleton => SkeletonSlot(
         bones: build(skeleton.bones),
-        boxed: presenceMode(skeleton.child) == PresenceMode.box,
+        boxed: _holdsInBox(skeleton.child),
         path: skeleton.path,
         presence: skeleton.presence,
         child: build(skeleton.child),
@@ -79,25 +79,25 @@ final class NodeBuilder {
   }
 
   /// The bones of [scope]'s `_skeleton`, which a slot holds in a box: none,
-  /// with a warning, when the scope's child builds parent data there. An
-  /// app widget builds a box unless it declares parent data, which fails
-  /// to compile here.
+  /// with a warning, when the scope's child is not a box there.
   static Widget? _scopeBones(ScopeDirective scope) {
     final bones = scope.skeleton;
     if (bones == null) return null;
-    final child = scope.child;
-    final app = child is PlainDirective && !WidgetFactory.isBuiltin(child.type);
-    if (app || presenceMode(child) != PresenceMode.inPlace) {
-      return build(bones);
-    }
+    if (_holdsInBox(scope.child)) return build(bones);
     EngineLog.warn(
-      '"_skeleton" at ${scope.path} is skipped: the node builds parent '
-      'data, which a skeleton box would move out of its parent; showing the '
-      'content',
+      '"_skeleton" at ${scope.path} is skipped: the node is not a box '
+      '(parent data or sliver), which a skeleton box would move out of its '
+      'parent; showing the content',
       tag: 'scope',
     );
     return null;
   }
+
+  /// Whether a skeleton slot can hold what [directive] builds: a box that
+  /// is not parent data, by the registered declarations.
+  static bool _holdsInBox(Directive directive) =>
+      _parentDataOf(directive) == ParentDataOutput.none &&
+      produces(directive) == LayoutProtocol.box;
 
   /// How a presence slot can hold what [directive] builds: in a box, in
   /// place (a parent-data widget), or not at all (`null`: a sliver, or a
