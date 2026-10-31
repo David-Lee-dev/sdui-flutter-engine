@@ -216,6 +216,114 @@ void main() {
       expect(await opened, 'picked');
     });
 
+    for (final first in <Object?>[7, null]) {
+      testWidgets('첫 프레임 전에 온 close도 모달을 닫고 첫 요청이 이긴다 ($first)', (
+        tester,
+      ) async {
+        await _mountOverlay(
+          tester,
+          modalTemplates: _templates,
+          screenId: 'home',
+        );
+        final sink = _FakeSink();
+        Telemetry.install(sink);
+        addTearDown(Telemetry.reset);
+        var settled = false;
+        Object? result;
+        const ModalDriver().run(_ctx(_open)).then((value) {
+          settled = true;
+          result = value;
+        });
+        const ModalDriver()
+            .run(_ctx({'method': 'close', 'return': first}))
+            .ignore();
+        const ModalDriver()
+            .run(_ctx({'method': 'close', 'return': 'second'}))
+            .ignore();
+        await tester.pumpAndSettle();
+
+        expect(_host!.modalStack, isEmpty);
+        expect(find.text('모달내용'), findsNothing);
+        expect(settled, isTrue);
+        expect(result, first);
+        expect(sink.recorded.map((e) => e.event), [
+          'screen_view',
+          'screen_leave',
+        ]);
+        expect(sink.recorded.last.properties['exit_reason'], 'closed');
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('첫 프레임 전에 닫힌 모달은 앞 화면의 포커스를 돌려준다', (tester) async {
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: TextField(focusNode: focus)),
+        ),
+      );
+      focus.requestFocus();
+      await tester.pump();
+      expect(focus.hasFocus, isTrue);
+      final overlay = tester.firstState<OverlayState>(find.byType(Overlay));
+      _host = EngineHost(
+        overlay: OverlayHandle(overlay),
+        modalTemplates: const {
+          'input': {'_type': 'text_field', 'autofocus': true},
+        },
+      );
+
+      var settled = false;
+      const ModalDriver()
+          .run(_ctx({'modal': 'input'}))
+          .then((_) => settled = true);
+      const ModalDriver().run(_ctx({'method': 'close'})).ignore();
+      await tester.pumpAndSettle();
+
+      expect(settled, isTrue);
+      expect(focus.hasFocus, isTrue);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('템플릿이 _background로 열고 바로 닫으면 모달이 남지 않는다', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: EngineRunner(
+              template: {
+                '_type': 'text',
+                'value': 'quick',
+                '_on': {'tap': 'quick'},
+                '_scope': {
+                  '_action': {
+                    'quick': [
+                      {
+                        '_type': 'modal',
+                        'modal': 'sample',
+                        '_background': true,
+                      },
+                      {'_type': 'modal', 'method': 'close', 'return': 7},
+                    ],
+                  },
+                },
+              },
+              modalTemplates: _templates,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('quick'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('모달내용'), findsNothing);
+      final host = EngineHostScope.of(tester.element(find.text('quick')))!;
+      expect(host.modalStack, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('backdrop 탭 dismiss → DriverError(DISMISSED)', (tester) async {
       await _mountOverlay(tester, modalTemplates: _templates);
 

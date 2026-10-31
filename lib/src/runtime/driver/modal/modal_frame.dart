@@ -20,10 +20,26 @@ import '../../wrapper/motion.dart';
 enum ModalVariant { dialog, bottomSheet }
 
 /// Allows a modal stack entry to request an animated close.
+///
+/// A request that arrives before the frame attaches (the modal opened and
+/// closed before its first build) is held and delivered on attach. The first
+/// request wins, like a second close during the exit.
 class ModalCloseController {
   void Function(Object? result)? _onClose;
+  ({Object? result})? _pending;
 
-  void requestClose([Object? result]) => _onClose?.call(result);
+  void requestClose([Object? result]) {
+    final onClose = _onClose;
+    if (onClose != null) return onClose(result);
+    _pending ??= (result: result);
+  }
+
+  void _attach(void Function(Object? result) onClose) {
+    _onClose = onClose;
+    final pending = _pending;
+    _pending = null;
+    if (pending != null) onClose(pending.result);
+  }
 }
 
 /// Renders modal content in an isolated engine root with backdrop and exit handling.
@@ -119,9 +135,9 @@ class _ModalFrameState extends State<ModalFrame>
   @override
   void initState() {
     super.initState();
-    widget.controller._onClose = (result) => _exit(result, false);
     _presence.forward();
     if (_observable) _openSurface();
+    widget.controller._attach((result) => _exit(result, false));
   }
 
   void _openSurface() {
