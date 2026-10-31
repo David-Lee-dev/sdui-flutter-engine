@@ -46,12 +46,6 @@ final class TemplateValidator {
   @visibleForTesting
   static const Set<String> knownWraps = _knownWraps;
 
-  /// Returns the render protocol produced by [wrap].
-  static LayoutProtocol _wrapProduces(String wrap) =>
-      (wrap == 'sliver_list' || wrap == 'sliver_grid')
-      ? LayoutProtocol.sliver
-      : LayoutProtocol.box;
-
   /// Validates [root] using [declared] as the outermost binding declarations.
   ///
   /// Throws [InvalidTemplateException] for undeclared references, invalid action
@@ -118,6 +112,15 @@ final class TemplateValidator {
             'widget.',
           );
         }
+        if ((node.motions.isNotEmpty || node.on.isNotEmpty) &&
+            _hidesParentData(node)) {
+          throw InvalidTemplateException(
+            node.path,
+            '"_motion"/"_on" here would wrap a parent-data widget the engine '
+            'cannot see into, moving it out of its parent; put it on a node '
+            'inside the parent data.',
+          );
+        }
         _checkMotions(node);
         // A press variable is readable by the node's own props and below.
         final pressed = node.pressedAs;
@@ -174,7 +177,7 @@ final class TemplateValidator {
         _checkProtocol(
           loop.path,
           '_loop._wrap "${loop.wrap}"',
-          _wrapProduces(loop.wrap),
+          loopWrapProduces(loop.wrap),
           expected,
         );
         _check(loop.roots, declared, loop.path);
@@ -197,6 +200,21 @@ final class TemplateValidator {
           expected,
         );
       case ScopeDirective scope:
+        final bones = scope.skeleton;
+        if (bones != null) {
+          _checkSkeletonPlacement(scope.path, scope.child, bones, expected);
+          // Legacy bones are not walked, so their bindings stay unchecked;
+          // only the protocol they build is.
+          _checkProtocol(
+            scope.path,
+            '"_skeleton" bones',
+            producesOf(
+              bones,
+              (type) => _catalog.widgets[type]?.produces ?? LayoutProtocol.box,
+            ),
+            LayoutProtocol.box,
+          );
+        }
         // Scope state and actions extend the child's lexical environment.
         final stateKeys = scope.config.state.keys.toSet();
         final scopeDeclared = {...declared, ...stateKeys};
@@ -211,19 +229,10 @@ final class TemplateValidator {
           expected, // A scope is transparent to the parent's layout protocol.
         );
       case SkeletonDirective skeleton:
-        // The slot holds the bones or the node in a box, so a parent-data
-        // or sliver node cannot sit in it.
-        if (_parentData(skeleton.child)) {
-          throw InvalidTemplateException(
-            skeleton.path,
-            '"_skeleton" on a parent-data node (${parentDataTypes.join(", ")}) '
-            'would move it out of its parent; put "_skeleton" on its child.',
-          );
-        }
-        _checkProtocol(
+        _checkSkeletonPlacement(
           skeleton.path,
-          '"_skeleton"',
-          LayoutProtocol.box,
+          skeleton.child,
+          skeleton.bones,
           expected,
         );
         _walk(skeleton.bones, declared, writable, actions, LayoutProtocol.box);
@@ -231,9 +240,38 @@ final class TemplateValidator {
     }
   }
 
+  /// Verifies a skeleton slot at [path]: it holds [child] or [bones] in a
+  /// box, so neither may build parent data and the slot must sit where a
+  /// box can.
+  void _checkSkeletonPlacement(
+    String path,
+    Directive child,
+    Directive bones,
+    LayoutProtocol? expected,
+  ) {
+    if (_parentData(child) || _parentData(bones)) {
+      throw InvalidTemplateException(
+        path,
+        '"_skeleton" on or with a parent-data node would move it out of its '
+        'parent; put "_skeleton" on its child.',
+      );
+    }
+    _checkProtocol(path, '"_skeleton"', LayoutProtocol.box, expected);
+  }
+
+  /// Whether [node] builds parent data the engine cannot see into, so a
+  /// wrapper on it lands outside the parent data: an app widget declared as
+  /// parent data, or a bare `container` around parent data.
+  bool _hidesParentData(PlainDirective node) => switch (node) {
+    PlainDirective(type: 'container', children: [final child]) => _parentData(
+      child,
+    ),
+    _ => _parentData(node) && !BuiltinLanguage.widgets.containsKey(node.type),
+  };
+
   /// Whether [directive] can build a parent-data widget.
-  static bool _parentData(Directive directive) => switch (directive) {
-    PlainDirective node => parentDataTypes.contains(node.type),
+  bool _parentData(Directive directive) => switch (directive) {
+    PlainDirective node => _catalog.widgets[node.type]?.parentData ?? false,
     ConditionDirective cond =>
       cond.branches.any((branch) => _parentData(branch.body)) ||
           (cond.fallback != null && _parentData(cond.fallback!)),

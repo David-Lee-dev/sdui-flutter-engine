@@ -61,7 +61,7 @@ final class NodeBuilder {
         config: scope.config,
         actions: scope.actions,
         lifecycle: scope.lifecycle,
-        skeleton: scope.skeleton == null ? null : build(scope.skeleton!),
+        skeleton: _scopeBones(scope),
         tracksLoading: scope.tracksLoading,
         presence: scope.presence,
         child: scope.lifecycle.isEmpty
@@ -78,6 +78,27 @@ final class NodeBuilder {
     };
   }
 
+  /// The bones of [scope]'s `_skeleton`, which a slot holds in a box: none,
+  /// with a warning, when the scope's child builds parent data there. An
+  /// app widget builds a box unless it declares parent data, which fails
+  /// to compile here.
+  static Widget? _scopeBones(ScopeDirective scope) {
+    final bones = scope.skeleton;
+    if (bones == null) return null;
+    final child = scope.child;
+    final app = child is PlainDirective && !WidgetFactory.isBuiltin(child.type);
+    if (app || presenceMode(child) != PresenceMode.inPlace) {
+      return build(bones);
+    }
+    EngineLog.warn(
+      '"_skeleton" at ${scope.path} is skipped: the node builds parent '
+      'data, which a skeleton box would move out of its parent; showing the '
+      'content',
+      tag: 'scope',
+    );
+    return null;
+  }
+
   /// How a presence slot can hold what [directive] builds: in a box, in
   /// place (a parent-data widget), or not at all (`null`: a sliver, or a
   /// `dismissible`, which plays its own removal and must leave the tree as
@@ -87,8 +108,7 @@ final class NodeBuilder {
   /// builds no render object and hands its child to its parent.
   static PresenceMode? presenceMode(Directive directive) => switch (directive) {
     PlainDirective node
-        when parentDataTypes.contains(node.type) ||
-            !WidgetFactory.isBuiltin(node.type) =>
+        when _parentData(node.type) || !WidgetFactory.isBuiltin(node.type) =>
       _sliver(node.type) ? null : PresenceMode.inPlace,
     PlainDirective(type: 'container', children: [final child])
         when presenceMode(child) == PresenceMode.inPlace =>
@@ -105,15 +125,38 @@ final class NodeBuilder {
       for (final branch in sw.cases) branch.branch,
       ?sw.fallback,
     ]),
-    LoopDirective loop => _sliver(loop.wrap) ? null : PresenceMode.box,
+    LoopDirective loop =>
+      loopWrapProduces(loop.wrap) == LayoutProtocol.sliver
+          ? null
+          : PresenceMode.box,
     MorphDirective morph => presenceMode(morph.child),
     ScopeDirective scope => presenceMode(scope.child),
     SkeletonDirective skeleton => presenceMode(skeleton.child),
   };
 
-  /// Whether the widget type (or loop wrap of the same name) is a sliver.
+  /// The layout protocol [directive] builds, which its empty or failed
+  /// output keeps.
+  static LayoutProtocol produces(Directive directive) => producesOf(
+    directive,
+    (type) => WidgetFactory.specFor(type)?.produces ?? LayoutProtocol.box,
+  );
+
+  /// Whether the widget type is a sliver.
   static bool _sliver(String type) =>
       WidgetFactory.specFor(type)?.produces == LayoutProtocol.sliver;
+
+  /// Whether the widget type's output is parent data.
+  static bool _parentData(String type) =>
+      WidgetFactory.specFor(type)?.parentData ?? false;
+
+  /// Whether [node] builds parent data the engine cannot see into, so no
+  /// wrapper can go inside it: an app widget declared as parent data, or a
+  /// bare `container` around an in-place output.
+  static bool _opaque(PlainDirective node) => switch (node) {
+    PlainDirective(type: 'container', children: [final child]) =>
+      presenceMode(child) == PresenceMode.inPlace,
+    _ => _parentData(node.type) && !WidgetFactory.isBuiltin(node.type),
+  };
 
   static PresenceMode? _presenceModeOf(List<Directive> bodies) {
     var mode = PresenceMode.box;
@@ -127,7 +170,8 @@ final class NodeBuilder {
 
   /// Builds the output of [directive] (a cond or switch) showing [body]
   /// under [key], or nothing when [body] is `null`: in a presence slot when
-  /// [presence] is on and the bodies fit one, plainly otherwise.
+  /// [presence] is on and the bodies fit one, plainly otherwise. Nothing in
+  /// a sliver position is an empty sliver.
   static Widget branch(
     Directive directive,
     PresenceConfig presence,
@@ -136,7 +180,10 @@ final class NodeBuilder {
   ) {
     final mode = presence.enabled ? presenceMode(directive) : null;
     if (mode == null) {
-      return body == null ? const SizedBox.shrink() : build(body);
+      if (body != null) return build(body);
+      return produces(directive) == LayoutProtocol.sliver
+          ? const SliverToBoxAdapter()
+          : const SizedBox.shrink();
     }
     return PresenceGroup.single(
       config: presence,
@@ -147,8 +194,10 @@ final class NodeBuilder {
   }
 
   /// Builds [directive] as the direct widget of a continuously animating
-  /// morph or of a scope: a plain box node gets its own repaint boundary.
-  static Widget _isolated(Directive directive) => directive is PlainDirective
+  /// morph or of a scope: a plain box node gets its own repaint boundary,
+  /// unless it builds parent data the boundary cannot go inside.
+  static Widget _isolated(Directive directive) =>
+      directive is PlainDirective && !_opaque(directive)
       ? _plain(directive, isolate: true)
       : build(directive);
 

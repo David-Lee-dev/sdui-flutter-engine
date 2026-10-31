@@ -32,7 +32,11 @@ class SwitchObserver extends StatelessWidget {
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget resolve() => NodeGuard.run(directive.path, () => _resolve(env));
+    Widget resolve() => NodeGuard.run(
+      directive.path,
+      () => _resolve(env),
+      produces: NodeBuilder.produces(directive),
+    );
     if (listenable == null) return resolve();
     return ListenableBuilder(
       listenable: listenable,

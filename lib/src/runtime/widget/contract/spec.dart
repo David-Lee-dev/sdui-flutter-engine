@@ -10,15 +10,23 @@ import 'child_builder.dart';
 ///
 /// [produces] identifies the node's own protocol. A null [childProtocol] opts
 /// out of uniform child validation for widgets with mixed child roles.
+/// [parentData] declares that the widget's output is parent data
+/// (`Expanded`, `Positioned`, ...) and so must stay the direct widget of its
+/// parent: the engine places it in place and wraps nothing around it. The
+/// engine cannot see inside an app widget, so a template cannot put
+/// `_motion`, `_on` or `_skeleton` on an app widget declared so.
 sealed class WidgetSpec {
   const WidgetSpec({
     this.produces = LayoutProtocol.box,
     this.childProtocol = LayoutProtocol.box,
+    this.parentData = false,
   });
 
   final LayoutProtocol produces;
 
   final LayoutProtocol? childProtocol;
+
+  final bool parentData;
 }
 
 /// Builds a widget from resolved props and positional children.
@@ -31,7 +39,12 @@ typedef EagerBuild =
 
 /// Describes a widget built from an already-built positional child list.
 final class EagerSpec extends WidgetSpec {
-  const EagerSpec(this.build, {super.produces, super.childProtocol});
+  const EagerSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.parentData,
+  });
 
   final EagerBuild build;
 }
@@ -46,7 +59,12 @@ typedef SlotBuild =
 
 /// Describes a widget built from already-built children addressed by slot name.
 final class SlotSpec extends WidgetSpec {
-  const SlotSpec(this.build, {super.produces, super.childProtocol});
+  const SlotSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.parentData,
+  });
 
   final SlotBuild build;
 }
@@ -62,7 +80,12 @@ typedef BuilderBuild =
 
 /// Describes a widget that requests children lazily through [ChildBuilder].
 final class BuilderSpec extends WidgetSpec {
-  const BuilderSpec(this.build, {super.produces, super.childProtocol});
+  const BuilderSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.parentData,
+  });
 
   final BuilderBuild build;
 }
@@ -79,7 +102,12 @@ typedef BoundBuild =
 
 /// Describes a controlled widget supplied with live value and event callbacks.
 final class BoundSpec extends WidgetSpec {
-  const BoundSpec(this.build, {super.produces, super.childProtocol});
+  const BoundSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.parentData,
+  });
 
   final BoundBuild build;
 }
@@ -95,7 +123,12 @@ typedef ActionBuild =
 
 /// Describes a widget that can dispatch its own gesture-driven actions.
 final class ActionSpec extends WidgetSpec {
-  const ActionSpec(this.build, {super.produces, super.childProtocol});
+  const ActionSpec(
+    this.build, {
+    super.produces,
+    super.childProtocol,
+    super.parentData,
+  });
 
   final ActionBuild build;
 }

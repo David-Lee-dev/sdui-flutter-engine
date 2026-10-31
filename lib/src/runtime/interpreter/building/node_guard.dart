@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:sdui_engine/src/contract/error_observer.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import '../../engine_errors.dart';
 import '../../engine_presentation.dart';
 
@@ -9,17 +10,27 @@ import '../../engine_presentation.dart';
 ///
 /// [FormatException] and [StateError] become compact diagnostics in debug builds
 /// and empty layout in release. Other errors remain visible as engine defects.
+/// The fallback keeps the node's layout protocol [produces]: in a sliver
+/// position it sits in a sliver.
 final class NodeGuard {
   const NodeGuard._();
 
-  static Widget run(String path, Widget Function() build) {
+  static Widget run(
+    String path,
+    Widget Function() build, {
+    LayoutProtocol produces = LayoutProtocol.box,
+  }) {
+    final Widget fallback;
     try {
       return build();
     } on FormatException catch (e, s) {
-      return _degrade(path, e, s);
+      fallback = _degrade(path, e, s);
     } on StateError catch (e, s) {
-      return _degrade(path, e, s);
+      fallback = _degrade(path, e, s);
     }
+    return produces == LayoutProtocol.sliver
+        ? SliverToBoxAdapter(child: fallback)
+        : fallback;
   }
 
   static Widget _degrade(String path, Object error, StackTrace stack) {

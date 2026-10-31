@@ -12,9 +12,14 @@ class WidgetSchema {
     required this.kind,
     this.produces = LayoutProtocol.box,
     this.childProtocol = LayoutProtocol.box,
+    this.parentData = false,
   });
 
   final WidgetKind kind;
   final LayoutProtocol produces;
   final LayoutProtocol? childProtocol;
+
+  /// Whether the widget's output is parent data, which must stay the direct
+  /// widget of its parent.
+  final bool parentData;
 }

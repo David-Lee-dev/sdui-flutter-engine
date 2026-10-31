@@ -138,9 +138,9 @@ final class WidgetFactory {
     'center': EagerSpec(CenterWidget.build),
     'align': EagerSpec(AlignWidget.build),
     'stack': EagerSpec(StackWidget.build),
-    'positioned': EagerSpec(PositionedWidget.build),
-    'expanded': EagerSpec(ExpandedWidget.build),
-    'flexible': EagerSpec(FlexibleWidget.build),
+    'positioned': EagerSpec(PositionedWidget.build, parentData: true),
+    'expanded': EagerSpec(ExpandedWidget.build, parentData: true),
+    'flexible': EagerSpec(FlexibleWidget.build, parentData: true),
     'absorb_pointer': EagerSpec(AbsorbPointerWidget.build),
     'backdrop_filter': EagerSpec(BackdropFilterWidget.build),
     'badge': EagerSpec(BadgeWidget.build),
@@ -152,7 +152,7 @@ final class WidgetFactory {
     'tooltip': EagerSpec(TooltipWidget.build),
     'unconstrained_box': EagerSpec(UnconstrainedBoxWidget.build),
     'wrap': EagerSpec(WrapWidget.build),
-    'spacer': EagerSpec(SpacerWidget.build),
+    'spacer': EagerSpec(SpacerWidget.build, parentData: true),
     'aspect_ratio': EagerSpec(AspectRatioWidget.build),
     'clip_rrect': EagerSpec(ClipRRectWidget.build),
     'clip_rect': EagerSpec(ClipRectWidget.build),
@@ -169,7 +169,7 @@ final class WidgetFactory {
     'skeleton': EagerSpec(SkeletonWidget.build),
     'rotated_box': EagerSpec(RotatedBoxWidget.build),
     'visibility': EagerSpec(VisibilityWidget.build),
-    'positioned_fill': EagerSpec(PositionedFillWidget.build),
+    'positioned_fill': EagerSpec(PositionedFillWidget.build, parentData: true),
     'image': SlotSpec(ImageWidget.build),
     'icon': EagerSpec(IconWidget.build),
     'interactive_viewer': EagerSpec(InteractiveViewerWidget.build),
@@ -289,6 +289,7 @@ final class WidgetFactory {
     kind: _kindOf(spec),
     produces: spec.produces,
     childProtocol: spec.childProtocol,
+    parentData: spec.parentData,
   );
 
   static WidgetKind _kindOf(WidgetSpec spec) => switch (spec) {

@@ -300,8 +300,11 @@ class LoopObserver extends StatelessWidget {
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget expand(BuildContext ctx) =>
-        NodeGuard.run(directive.path, () => _expand(ctx, env));
+    Widget expand(BuildContext ctx) => NodeGuard.run(
+      directive.path,
+      () => _expand(ctx, env),
+      produces: NodeBuilder.produces(directive),
+    );
     if (listenable == null) return expand(context);
     return ListenableBuilder(
       listenable: listenable,
