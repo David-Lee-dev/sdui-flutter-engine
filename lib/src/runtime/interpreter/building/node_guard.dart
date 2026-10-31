@@ -18,7 +18,7 @@ final class NodeGuard {
   static Widget run(
     String path,
     Widget Function() build, {
-    LayoutProtocol produces = LayoutProtocol.box,
+    LayoutProtocol? produces = LayoutProtocol.box,
   }) {
     final Widget fallback;
     try {

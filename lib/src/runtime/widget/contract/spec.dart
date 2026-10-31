@@ -13,8 +13,9 @@ import 'child_builder.dart';
 /// [parentData] declares that the widget's output is parent data
 /// (`Expanded`, `Positioned`, ...) and so must stay the direct widget of its
 /// parent: the engine places it in place and wraps nothing around it. The
-/// engine cannot see inside an app widget, so a template cannot put
-/// `_motion`, `_on` or `_skeleton` on an app widget declared so.
+/// engine cannot see inside an app widget (a replacement of a built-in
+/// included), so a template cannot put `_motion`, `_on` or `_skeleton` on an
+/// app widget declared so.
 sealed class WidgetSpec {
   const WidgetSpec({
     this.produces = LayoutProtocol.box,

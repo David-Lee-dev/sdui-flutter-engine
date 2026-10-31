@@ -271,7 +271,10 @@ final class WidgetFactory {
 
   static Map<String, WidgetSpec> _buildSpecs() {
     for (final entry in _builtins.entries) {
-      WidgetSchemaRegistry.register(entry.key, _schemaOf(entry.value));
+      WidgetSchemaRegistry.register(
+        entry.key,
+        _schemaOf(entry.key, entry.value),
+      );
     }
     return {..._builtins};
   }
@@ -282,14 +285,18 @@ final class WidgetFactory {
   /// The structural schema the factory derives for [type], if registered.
   static WidgetSchema? schemaOf(String type) {
     final spec = _specs[type];
-    return spec == null ? null : _schemaOf(spec);
+    return spec == null ? null : _schemaOf(type, spec);
   }
 
-  static WidgetSchema _schemaOf(WidgetSpec spec) => WidgetSchema(
+  /// The schema of [spec] registered as [type]. Only the engine's own
+  /// parent-data builders let the engine decorate their child; an app
+  /// implementation, a replacement included, does not.
+  static WidgetSchema _schemaOf(String type, WidgetSpec spec) => WidgetSchema(
     kind: _kindOf(spec),
     produces: spec.produces,
     childProtocol: spec.childProtocol,
     parentData: spec.parentData,
+    decoratesChild: spec.parentData && identical(spec, _builtins[type]),
   );
 
   static WidgetKind _kindOf(WidgetSpec spec) => switch (spec) {
@@ -340,7 +347,7 @@ final class WidgetFactory {
   static void register(String type, WidgetSpec spec) {
     _requireUnfrozen();
     _specs[type] = spec;
-    WidgetSchemaRegistry.register(type, _schemaOf(spec));
+    WidgetSchemaRegistry.register(type, _schemaOf(type, spec));
   }
 
   /// Registers every entry in [specs], or throws [StateError] when frozen.
@@ -359,7 +366,10 @@ final class WidgetFactory {
       ..clear()
       ..addAll(_builtins);
     for (final entry in _builtins.entries) {
-      WidgetSchemaRegistry.register(entry.key, _schemaOf(entry.value));
+      WidgetSchemaRegistry.register(
+        entry.key,
+        _schemaOf(entry.key, entry.value),
+      );
     }
   }
 

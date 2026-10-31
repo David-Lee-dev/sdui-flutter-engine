@@ -63,6 +63,10 @@ final class TemplateValidator {
   /// How many [_intrinsicTypes] nodes enclose the node being walked.
   int _intrinsicDepth = 0;
 
+  /// How many legacy `_scope._skeleton` bone trees enclose the node being
+  /// walked; inside one, binding and action references are not checked.
+  int _unbound = 0;
+
   static void validate(
     Directive root,
     Set<String> declared, {
@@ -113,7 +117,7 @@ final class TemplateValidator {
           );
         }
         if ((node.motions.isNotEmpty || node.on.isNotEmpty) &&
-            _hidesParentData(node)) {
+            _parentDataOf(node) == ParentDataOutput.opaque) {
           throw InvalidTemplateException(
             node.path,
             '"_motion"/"_on" here would wrap a parent-data widget the engine '
@@ -154,6 +158,7 @@ final class TemplateValidator {
         if (fallback != null) {
           _walk(fallback, declared, writable, actions, expected);
         }
+        _checkBodiesAgree(cond.path, cond);
       case SwitchDirective sw:
         _check(sw.roots, declared, sw.path);
         for (final branch in sw.cases) {
@@ -163,6 +168,7 @@ final class TemplateValidator {
         if (fallback != null) {
           _walk(fallback, declared, writable, actions, expected);
         }
+        _checkBodiesAgree(sw.path, sw);
       case LoopDirective loop:
         // Wrap names pass through compilation, so validate them before observer
         // dispatch can encounter an unknown strategy.
@@ -203,17 +209,11 @@ final class TemplateValidator {
         final bones = scope.skeleton;
         if (bones != null) {
           _checkSkeletonPlacement(scope.path, scope.child, bones, expected);
-          // Legacy bones are not walked, so their bindings stay unchecked;
-          // only the protocol they build is.
-          _checkProtocol(
-            scope.path,
-            '"_skeleton" bones',
-            producesOf(
-              bones,
-              (type) => _catalog.widgets[type]?.produces ?? LayoutProtocol.box,
-            ),
-            LayoutProtocol.box,
-          );
+          // Legacy bones are walked for their structure only; their
+          // bindings stay unchecked.
+          _unbound++;
+          _walk(bones, declared, writable, actions, LayoutProtocol.box);
+          _unbound--;
         }
         // Scope state and actions extend the child's lexical environment.
         final stateKeys = scope.config.state.keys.toSet();
@@ -249,7 +249,8 @@ final class TemplateValidator {
     Directive bones,
     LayoutProtocol? expected,
   ) {
-    if (_parentData(child) || _parentData(bones)) {
+    if (_parentDataOf(child) != ParentDataOutput.none ||
+        _parentDataOf(bones) != ParentDataOutput.none) {
       throw InvalidTemplateException(
         path,
         '"_skeleton" on or with a parent-data node would move it out of its '
@@ -259,30 +260,28 @@ final class TemplateValidator {
     _checkProtocol(path, '"_skeleton"', LayoutProtocol.box, expected);
   }
 
-  /// Whether [node] builds parent data the engine cannot see into, so a
-  /// wrapper on it lands outside the parent data: an app widget declared as
-  /// parent data, or a bare `container` around parent data.
-  bool _hidesParentData(PlainDirective node) => switch (node) {
-    PlainDirective(type: 'container', children: [final child]) => _parentData(
-      child,
-    ),
-    _ => _parentData(node) && !BuiltinLanguage.widgets.containsKey(node.type),
-  };
+  /// The parent data [directive] builds, by the registered declarations.
+  ParentDataOutput _parentDataOf(Directive directive) => parentDataOf(
+    directive,
+    (type) => _catalog.widgets[type]?.parentDataOutput ?? ParentDataOutput.none,
+  );
 
-  /// Whether [directive] can build a parent-data widget.
-  bool _parentData(Directive directive) => switch (directive) {
-    PlainDirective node => _catalog.widgets[node.type]?.parentData ?? false,
-    ConditionDirective cond =>
-      cond.branches.any((branch) => _parentData(branch.body)) ||
-          (cond.fallback != null && _parentData(cond.fallback!)),
-    SwitchDirective sw =>
-      sw.cases.any((branch) => _parentData(branch.branch)) ||
-          (sw.fallback != null && _parentData(sw.fallback!)),
-    MorphDirective morph => _parentData(morph.child),
-    ScopeDirective scope => _parentData(scope.child),
-    SkeletonDirective skeleton => _parentData(skeleton.child),
-    LoopDirective() => false,
-  };
+  /// Verifies that every body of [directive] (a cond or switch) builds one
+  /// layout protocol: the place it sits in takes only one, even under a
+  /// parent that accepts both.
+  void _checkBodiesAgree(String path, Directive directive) {
+    final produced = producesOf(
+      directive,
+      (type) => _catalog.widgets[type]?.produces ?? LayoutProtocol.box,
+    );
+    if (produced != null) return;
+    throw InvalidTemplateException(
+      path,
+      'layout protocol mismatch: the branches build both box and sliver '
+      'children, but one place takes only one (a box↔sliver misplacement '
+      'crashes at render time).',
+    );
+  }
 
   /// Verifies that [produced] satisfies the parent's [expected] layout protocol.
   ///
@@ -313,7 +312,7 @@ final class TemplateValidator {
   /// be checked statically and are skipped.
   void _checkBind(PlainDirective node, Set<String> writable) {
     final bind = node.props['bind'];
-    if (bind is! String || bind.isEmpty) return;
+    if (bind is! String || bind.isEmpty || _unbound > 0) return;
     if (!writable.contains(bind)) {
       throw InvalidTemplateException(
         node.path,
@@ -382,7 +381,7 @@ final class TemplateValidator {
           '"_on.$event" works only on input widgets (text_field/checkbox/…) — this widget does not support it.',
         );
       }
-      if (!actions.contains(name)) {
+      if (_unbound == 0 && !actions.contains(name)) {
         throw InvalidTemplateException(
           path,
           'interaction references unknown action "$name" '
@@ -514,7 +513,7 @@ final class TemplateValidator {
       _check(when.roots, declared, path);
       _checkCalls(when.calls, path);
     }
-    if (command.type == 'set') {
+    if (command.type == 'set' && _unbound == 0) {
       for (final key in command.params.keys) {
         if (!writable.contains(key)) {
           throw InvalidTemplateException(
@@ -542,6 +541,7 @@ final class TemplateValidator {
 
   /// Throws for any root in [refs] that is absent from [declared].
   void _check(Set<String> refs, Set<String> declared, String path) {
+    if (_unbound > 0) return;
     for (final root in refs) {
       if (!declared.contains(root)) {
         throw InvalidTemplateException(

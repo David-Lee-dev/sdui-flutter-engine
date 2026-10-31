@@ -108,11 +108,10 @@ final class NodeBuilder {
   /// builds no render object and hands its child to its parent.
   static PresenceMode? presenceMode(Directive directive) => switch (directive) {
     PlainDirective node
-        when _parentData(node.type) || !WidgetFactory.isBuiltin(node.type) =>
+        when _parentDataOf(node) != ParentDataOutput.none ||
+            !WidgetFactory.isBuiltin(node.type) =>
       _sliver(node.type) ? null : PresenceMode.inPlace,
-    PlainDirective(type: 'container', children: [final child])
-        when presenceMode(child) == PresenceMode.inPlace =>
-      PresenceMode.inPlace,
+    PlainDirective node when _handsOnInPlace(node) => PresenceMode.inPlace,
     PlainDirective node =>
       node.type == 'dismissible' || _sliver(node.type)
           ? null
@@ -135,8 +134,9 @@ final class NodeBuilder {
   };
 
   /// The layout protocol [directive] builds, which its empty or failed
-  /// output keeps.
-  static LayoutProtocol produces(Directive directive) => producesOf(
+  /// output keeps; `null` for bodies of both kinds, which validation
+  /// rejects.
+  static LayoutProtocol? produces(Directive directive) => producesOf(
     directive,
     (type) => WidgetFactory.specFor(type)?.produces ?? LayoutProtocol.box,
   );
@@ -145,18 +145,19 @@ final class NodeBuilder {
   static bool _sliver(String type) =>
       WidgetFactory.specFor(type)?.produces == LayoutProtocol.sliver;
 
-  /// Whether the widget type's output is parent data.
-  static bool _parentData(String type) =>
-      WidgetFactory.specFor(type)?.parentData ?? false;
+  /// The parent data [directive] builds, by the registered declarations.
+  static ParentDataOutput _parentDataOf(Directive directive) => parentDataOf(
+    directive,
+    (type) =>
+        WidgetFactory.schemaOf(type)?.parentDataOutput ?? ParentDataOutput.none,
+  );
 
-  /// Whether [node] builds parent data the engine cannot see into, so no
-  /// wrapper can go inside it: an app widget declared as parent data, or a
-  /// bare `container` around an in-place output.
-  static bool _opaque(PlainDirective node) => switch (node) {
-    PlainDirective(type: 'container', children: [final child]) =>
-      presenceMode(child) == PresenceMode.inPlace,
-    _ => _parentData(node.type) && !WidgetFactory.isBuiltin(node.type),
-  };
+  /// Whether [node] is a bare `container` that hands an in-place output to
+  /// its parent.
+  static bool _handsOnInPlace(PlainDirective node) {
+    final child = passThrough(node);
+    return child != null && presenceMode(child) == PresenceMode.inPlace;
+  }
 
   static PresenceMode? _presenceModeOf(List<Directive> bodies) {
     var mode = PresenceMode.box;
@@ -197,7 +198,8 @@ final class NodeBuilder {
   /// morph or of a scope: a plain box node gets its own repaint boundary,
   /// unless it builds parent data the boundary cannot go inside.
   static Widget _isolated(Directive directive) =>
-      directive is PlainDirective && !_opaque(directive)
+      directive is PlainDirective &&
+          _parentDataOf(directive) != ParentDataOutput.opaque
       ? _plain(directive, isolate: true)
       : build(directive);
 
