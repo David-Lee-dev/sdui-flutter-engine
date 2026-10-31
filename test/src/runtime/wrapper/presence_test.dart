@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' hide Action;
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
@@ -1033,6 +1034,190 @@ void main() {
       await tester.enterText(find.byType(TextField), 'hi');
       await tester.pump();
       expect(find.text('q=hi'), findsOneWidget);
+    });
+
+    group('leaving focusables', () {
+      /// A field `a`, a leaving branch with a field, a checkbox and a toggle,
+      /// then a field `b`, under a theme [dark] can rebuild.
+      Widget page(ValueNotifier<bool> dark) => MaterialApp(
+        home: ValueListenableBuilder(
+          valueListenable: dark,
+          builder: (context, isDark, child) => Theme(
+            data: isDark ? ThemeData.dark() : ThemeData.light(),
+            child: child!,
+          ),
+          child: Material(
+            child: _host(
+              {'show': true, 'a': '', 'q': '', 'b': '', 'c': false, 't': false},
+              _content({
+                '_type': 'column',
+                '_children': [
+                  {'_type': 'text_field', 'bind': 'a'},
+                  {
+                    '_type': 'column',
+                    '_if': r'${show}',
+                    '_children': [
+                      {'_type': 'text_field', 'bind': 'q'},
+                      {'_type': 'checkbox', 'bind': 'c'},
+                      {'_type': 'toggle', 'bind': 't'},
+                    ],
+                  },
+                  {'_type': 'text_field', 'bind': 'b'},
+                ],
+              }),
+            ),
+          ),
+        ),
+      );
+
+      List<FocusNode> fields(WidgetTester tester) => [
+        for (final e in tester.widgetList<EditableText>(
+          find.byType(EditableText),
+        ))
+          e.focusNode,
+      ];
+
+      bool leavingFocused(WidgetTester tester) {
+        final context = FocusManager.instance.primaryFocus?.context;
+        if (context == null) return false;
+        final branch = [
+          ...find.byType(Checkbox).evaluate(),
+          ...find.byType(Switch).evaluate(),
+          tester.element(find.byType(EditableText).at(1)),
+        ];
+        var inside = false;
+        context.visitAncestorElements((a) => !(inside = branch.contains(a)));
+        return inside || branch.contains(context);
+      }
+
+      testWidgets('Tab skips a leaving branch and leaves outside focus be', (
+        tester,
+      ) async {
+        final dark = ValueNotifier(false);
+        addTearDown(dark.dispose);
+        await tester.pumpWidget(page(dark));
+        await tester.showKeyboard(find.byType(TextField).first);
+        final [a, q, b] = fields(tester);
+
+        _scope(tester).set('show', false);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(a.hasFocus, isTrue);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(b.hasFocus, isTrue);
+        expect(q.hasFocus, isFalse);
+        expect(leavingFocused(tester), isFalse);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(a.hasFocus, isTrue);
+        expect(leavingFocused(tester), isFalse);
+      });
+
+      testWidgets('a rebuild of the leaving branch keeps it unfocusable', (
+        tester,
+      ) async {
+        final dark = ValueNotifier(false);
+        addTearDown(dark.dispose);
+        await tester.pumpWidget(page(dark));
+        await tester.showKeyboard(find.byType(TextField).first);
+        final [_, q, b] = fields(tester);
+
+        _scope(tester).set('show', false);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        dark.value = true;
+        await tester.pump();
+        expect(find.byType(Checkbox), findsOneWidget);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(b.hasFocus, isTrue);
+        expect(leavingFocused(tester), isFalse);
+
+        await tester.tap(find.byType(TextField).at(1));
+        await tester.pump();
+        expect(q.hasFocus, isFalse);
+        expect(b.hasFocus, isTrue);
+      });
+
+      testWidgets('coming back mid-exit makes the branch focusable again', (
+        tester,
+      ) async {
+        final dark = ValueNotifier(false);
+        addTearDown(dark.dispose);
+        await tester.pumpWidget(page(dark));
+        await tester.showKeyboard(find.byType(TextField).first);
+        final field = tester.element(find.byType(EditableText).at(1));
+        final [a, q, _] = fields(tester);
+
+        _scope(tester).set('show', false);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        _scope(tester).set('show', true);
+        await tester.pump();
+        expect(tester.element(find.byType(EditableText).at(1)), same(field));
+        expect(a.hasFocus, isTrue);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(q.hasFocus, isTrue);
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+        expect(leavingFocused(tester), isTrue);
+
+        await tester.showKeyboard(find.byType(TextField).at(1));
+        expect(q.hasFocus, isTrue);
+        expect(tester.testTextInput.hasAnyClients, isTrue);
+      });
+
+      testWidgets('a tap on a leaving in-place field does not focus it', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Material(
+              child: _host(
+                {'show': true, 'q': ''},
+                _content({
+                  '_type': 'row',
+                  '_children': [
+                    {'_type': 'sizedbox', 'width': 100, 'height': 20},
+                    {
+                      '_type': 'expanded',
+                      '_if': r'${show}',
+                      '_motion': {'type': 'fade', 'on': 'exit'},
+                      '_child': {'_type': 'text_field', 'bind': 'q'},
+                    },
+                  ],
+                }),
+              ),
+            ),
+          ),
+        );
+        final field = tester.element(find.byType(EditableText));
+        final [q] = fields(tester);
+        await tester.showKeyboard(find.byType(TextField));
+
+        _scope(tester).set('show', false);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(q.hasFocus, isFalse);
+
+        await tester.tap(find.byType(TextField));
+        await tester.pump();
+        expect(q.hasFocus, isFalse);
+        expect(tester.testTextInput.hasAnyClients, isFalse);
+
+        _scope(tester).set('show', true);
+        await tester.pump();
+        await tester.tap(find.byType(TextField));
+        await tester.pump();
+        expect(tester.element(find.byType(EditableText)), same(field));
+        expect(q.hasFocus, isTrue);
+      });
     });
 
     group('skeleton swap', () {

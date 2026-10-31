@@ -300,6 +300,7 @@ class _PresenceGroupState extends State<PresenceGroup>
   /// motions return to rest, at once unless [animate].
   void _restore(_Entry e, {required bool animate}) {
     e.present = true;
+    _returnFocus(e);
     e._view?._release();
     for (final m in [...e._members]) {
       if (m.phase != MotionPhase.enter) m.cancelExit(animate: animate);
@@ -353,19 +354,65 @@ class _PresenceGroupState extends State<PresenceGroup>
     return visual;
   }
 
-  /// Takes keyboard focus, and so the keyboard, out of [e]'s leaving
-  /// output.
-  static void _releaseFocus(_Entry e) {
-    final focused = FocusManager.instance.primaryFocus;
-    final context = focused?.context;
-    if (context == null) return;
+  /// Takes keyboard focus, and so the keyboard, out of [e]'s leaving output
+  /// and keeps every focus node in it out of reach until it comes back.
+  ///
+  /// The slot's top nodes are children of the focus node around the group,
+  /// so only those are checked for being in the slot.
+  void _releaseFocus(_Entry e) {
+    final around =
+        Focus.maybeOf(context, scopeOk: true, createDependency: false) ??
+        FocusManager.instance.rootScope;
+    final held = <(FocusNode, bool, bool)>[];
+    for (final top in around.children) {
+      final at = top.context;
+      if (at == null || !_holds(at, e, around.context)) continue;
+      for (final node in [top, ...top.descendants]) {
+        if (node.hasPrimaryFocus) node.unfocus();
+        held.add((node, node.canRequestFocus, node.skipTraversal));
+      }
+    }
+    if (held.isEmpty) return;
+    e._held = held;
+    _holdFocus(e);
+  }
+
+  /// Whether [context] is inside [e]'s slot, looking no higher than [stop].
+  static bool _holds(BuildContext context, _Entry e, BuildContext? stop) {
     var inside = false;
     context.visitAncestorElements((a) {
       final w = a.widget;
       inside = w is PresenceScope && identical(w.handle, e);
-      return !inside;
+      return !inside && !identical(a, stop);
     });
-    if (inside) focused!.unfocus();
+    return inside;
+  }
+
+  /// Keeps [e]'s held nodes unfocusable after every frame of its exit: a
+  /// leaving widget that rebuilds may set its node's flags again.
+  static void _holdFocus(_Entry e) {
+    final held = e._held;
+    if (held == null || e.present) return;
+    for (final (node, _, _) in held) {
+      if (node.context?.mounted != true) continue;
+      node
+        ..canRequestFocus = false
+        ..skipTraversal = true;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _holdFocus(e));
+  }
+
+  /// Gives [e]'s held nodes back the flags they had before its exit.
+  static void _returnFocus(_Entry e) {
+    final held = e._held;
+    if (held == null) return;
+    e._held = null;
+    for (final (node, canRequest, skip) in held) {
+      if (node.context?.mounted != true) continue;
+      node
+        ..canRequestFocus = canRequest
+        ..skipTraversal = skip;
+    }
   }
 
   void _run(
@@ -407,7 +454,10 @@ class _PresenceGroupState extends State<PresenceGroup>
     e._controller = null;
     e._swap = false;
     e._enterDelay = Duration.zero;
-    if (!e.present) _entries.remove(e);
+    if (!e.present) {
+      e._held = null;
+      _entries.remove(e);
+    }
     if (_tickerMode != null && !_entries.any((e) => e.running)) {
       _tickerMode!.removeListener(_onTickerMode);
       _tickerMode = null;
@@ -484,6 +534,10 @@ final class _Entry implements PresenceHandle {
 
   final Set<PresenceMember> _members = {};
   _PresenceEnv? _view;
+
+  /// The focus nodes kept out of reach while leaving, with the
+  /// `canRequestFocus` and `skipTraversal` each had before.
+  List<(FocusNode, bool, bool)>? _held;
 
   AnimationController? _controller;
   double _from = 1;

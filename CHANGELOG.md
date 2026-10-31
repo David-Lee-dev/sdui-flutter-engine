@@ -15,8 +15,10 @@ reload stay instant. Turn it off per node with `_presence: false`.
   on any node tunes the transitions of its structural directives.
 - `_motion` entries take `on: enter|exit|both` (default `enter`). An exit entry
   plays its motion backwards when the directive removes the content.
-- Leaving content keeps its last values, takes no input, keyboard focus or
-  semantics, sees no action host and pauses its `_scope` lifecycle hooks.
+- Leaving content keeps its last values, takes no input or semantics, sees
+  no action host and pauses its `_scope` lifecycle hooks. It gives up
+  keyboard focus and cannot take it again (by tap or Tab) until it comes
+  back.
 - `SduiPresentation.presence` (`PresenceStyle`) sets the app-wide durations and
   curves. `Motion.affectsLayout` (default `false`, `reveal` true) lets a
   custom motion own the space. It is a new concrete getter on `Motion`: an
@@ -26,9 +28,12 @@ reload stay instant. Turn it off per node with `_presence: false`.
   bodies of `cond`/`switch` stay instant. Parent-data bodies (`expanded`,
   `flexible`, `positioned*`, `spacer`) play exits in place without a size
   animation; while leaving they still receive taps, which dispatch nothing
-  (no action host), and they give up keyboard focus when the exit starts.
+  (no action host), and they cannot take keyboard focus while they exit.
   App-registered widgets are placed in place the same way (no space
-  animation) under structural directives.
+  animation) under structural directives: if any branch of a `cond` or
+  `switch`, or an eager loop body, is an app-registered type, that whole
+  directive is placed in place (no space or swap animation; exit motions
+  still play).
 - Declare `_requires: [presence_v1]` for `_presence` and `on:`. Older engines
   play `on: exit` entries as entrances; gate by app version on the server.
 
