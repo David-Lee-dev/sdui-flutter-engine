@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.3
 
 - Fix: a presence exit (a `_skeleton` swap, an `_if` that turns false, ...)
   in the same frame as a focus node elsewhere going away no longer fails
