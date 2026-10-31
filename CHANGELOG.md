@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a modal closed before its first frame (a `_background` open followed
+  by `close` in the same action) now closes. The open completes with the
+  first close's `return` value, and telemetry records the surface's
+  `screen_view` and `screen_leave` (reason `closed`).
+- Fix: removing the `swipe_pane` being dragged (an `_if` or
+  `_presence: false` around it) ends that drag. The other panes settle on
+  the nearest page, `on_changed` fires if the index changed, other panes
+  can be dragged again, and autoplay resumes after `autoplay_resume_delay`.
+- Fix: removing a `video` or changing its `src` while it is still setting up
+  stops the setup. The released player gets no further looping, volume or
+  play calls.
+
 ## 0.17.4
 
 - Fix: during a presence run (a `_skeleton` swap, an `_if` that shows or
