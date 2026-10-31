@@ -2,8 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-
-import 'model_bytes.dart';
+import 'package:sdui_model_support/sdui_model_support.dart';
 
 /// One response served to the viewer webview.
 typedef ViewerResource = ({Uint8List data, String contentType});

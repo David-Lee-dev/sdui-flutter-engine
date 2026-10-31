@@ -1,0 +1,20 @@
+name: sdui_model_support
+description: "Renderer-agnostic helpers for sdui_engine `model` renderers: a model byte cache and a load-measurement overlay."
+version: 0.1.0
+repository: https://github.com/David-Lee-dev/sdui-flutter-engine
+publish_to: http://100.115.77.18:28400/api/packages/david/pub
+
+environment:
+  sdk: ^3.10.8
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  http: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

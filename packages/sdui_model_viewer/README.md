@@ -14,7 +14,8 @@ Sdui.initialize(
 );
 ```
 
-- Model bytes load in Dart (`ModelBytesCache`, in memory, LRU) and reach the
+- Model bytes load in Dart (`ModelBytesCache` from `sdui_model_support`, in
+  memory, LRU) and reach the
   page through a same-origin scheme the webview hands back to Dart: a custom
   scheme (`sdui-model://`) on iOS, an intercepted reserved host on Android.
   The page never fetches the network itself, so there is no CORS setup.

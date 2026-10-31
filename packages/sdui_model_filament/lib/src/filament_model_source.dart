@@ -1,0 +1,395 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
+import 'package:http/http.dart' as http;
+import 'package:sdui_engine/sdui_engine.dart';
+import 'package:sdui_model_support/sdui_model_support.dart';
+import 'package:thermion_flutter/thermion_flutter.dart' hide Texture, View;
+
+/// A [ModelSource] that renders each `model` natively with Filament (through
+/// `thermion_flutter`) into a Flutter `Texture`.
+///
+/// ```dart
+/// Sdui.initialize(
+///   modelSource: FilamentModelSource(
+///     baseUrl: Uri.parse(apiUrl),       // resolves `/assets/...` srcs
+///     prefetch: ['/assets/character.glb'],
+///   ),
+///   ...
+/// );
+/// ```
+///
+/// The view is an ordinary Flutter widget: it clips, transforms and fades
+/// with its parent, and drag rotation goes through Flutter's gesture arena
+/// (a horizontal drag rotates, a vertical one still scrolls the page).
+/// [warmUp] creates the Filament engine ahead of the first mount.
+///
+/// [debugOverlay] (default: `--dart-define=SDUI_MODEL_DEBUG=true`) paints each
+/// view's load timeline, app memory and frame times over it for measurement.
+final class FilamentModelSource extends ModelSource {
+  FilamentModelSource({
+    Uri? baseUrl,
+    this.prefetch = const [],
+    this.loadTimeout = const Duration(seconds: 30),
+    this.iblIntensity = 30000,
+    http.Client? client,
+    AssetBundle? bundle,
+    int cachedModels = 4,
+    this.debugOverlay = const bool.fromEnvironment('SDUI_MODEL_DEBUG'),
+  }) : models = ModelBytesCache(
+         baseUrl: baseUrl,
+         client: client,
+         bundle: bundle,
+         maxEntries: cachedModels,
+       );
+
+  /// Model srcs loaded into memory during [warmUp].
+  final List<String> prefetch;
+
+  /// How long a model may take to load before the widget falls back to its
+  /// poster.
+  final Duration loadTimeout;
+
+  /// Brightness of the bundled studio image-based light.
+  final double iblIntensity;
+
+  /// Paints [ModelDebugOverlay] over every view.
+  final bool debugOverlay;
+
+  final ModelBytesCache models;
+
+  /// Filament's neutral studio environment (`lightroom_ibl.ktx`, Apache-2.0).
+  static const iblAsset =
+      'asset://packages/sdui_model_filament/assets/lightroom_ibl.ktx';
+
+  int _mounts = 0;
+  int? _warmUpMs;
+
+  @override
+  Future<SduiModelController> controllerFor(ModelRequest request) async =>
+      FilamentModelController(request, this);
+
+  ModelLoadStats _statsFor(String src) => ModelLoadStats(
+    src: src,
+    mount: ++_mounts,
+    warmUpMs: _warmUpMs,
+    renderer: 'filament',
+  );
+
+  @override
+  Future<void> warmUp() async {
+    final clock = Stopwatch()..start();
+    final loads = [for (final src in prefetch) models.load(src)];
+    // The first viewer creates the engine and render thread, which outlive
+    // it; later viewers attach to them.
+    final viewer = await ThermionFlutterPlugin.createViewer();
+    await viewer.dispose();
+    await Future.wait(loads);
+    _warmUpMs = clock.elapsedMilliseconds;
+    debugPrint('[sdui_model_filament] warm-up took ${_warmUpMs}ms');
+  }
+}
+
+/// Drives one Filament viewer for the engine's `model` widget.
+final class FilamentModelController implements SduiModelController {
+  FilamentModelController(this._request, this._source)
+    : stats = _source._statsFor(_request.src);
+
+  final ModelRequest _request;
+  final FilamentModelSource _source;
+
+  /// This view's load timeline, also painted when
+  /// [FilamentModelSource.debugOverlay] is on.
+  final ModelLoadStats stats;
+
+  /// Set once the viewer exists, so the view allocates its texture while the
+  /// model is still loading.
+  final _viewer = ValueNotifier<ThermionViewer?>(null);
+  final _listeners = <VoidCallback>[];
+  Future<void>? _loading;
+  ThermionAsset? _asset;
+  Matrix4 _base = Matrix4.identity();
+  double _yaw = 0;
+  double? _framedAspect;
+  Timer? _clipEnd;
+  List<String> _clips = const [];
+  ModelPlayback _playback = const ModelPlayback();
+  bool _disposed = false;
+  Widget? _view;
+
+  /// Radius the camera keeps in frame; the asset is scaled so its largest
+  /// extent spans -1..1.
+  static const _frameRadius = 1.15;
+
+  /// Radians of rotation per logical pixel dragged.
+  static const _dragRadiansPerPixel = 0.012;
+
+  /// Auto-rotate speed in radians per second.
+  static const _autoRotateSpeed = 0.5;
+
+  @override
+  Future<void> initialize() =>
+      (_loading ??= _load()).timeout(_source.loadTimeout);
+
+  Future<void> _load() async {
+    try {
+      final src = _request.src;
+      final cached = _source.models.contains(src);
+      final bytesStarted = stats.elapsedMs;
+      final bytes = _source.models.load(src).then((data) {
+        _ifAlive(
+          () => stats.served(
+            bytes: data.length,
+            cached: cached,
+            ms: stats.elapsedMs - bytesStarted,
+          ),
+        );
+        return data;
+      });
+
+      final viewer = await ThermionFlutterPlugin.createViewer();
+      if (_disposed) {
+        await viewer.dispose();
+        return;
+      }
+      _viewer.value = viewer;
+      stats.mark('viewer');
+
+      await viewer.setBackgroundColor(0, 0, 0, 0);
+      await viewer.view.setBlendMode(BlendMode.transparent);
+      await viewer.setPostProcessing(true);
+      await viewer.setAntiAliasing(false, true, false);
+      await viewer.loadIbl(
+        FilamentModelSource.iblAsset,
+        intensity: _source.iblIntensity,
+      );
+
+      final asset = await viewer.loadGltfFromBuffer(await bytes);
+      if (_disposed) return;
+      await asset.transformToUnitCube();
+      _base = await asset.getLocalTransform();
+      _asset = asset;
+      _clips = List.unmodifiable(await asset.getGltfAnimationNames());
+      stats.mark('asset');
+
+      await _frame(_framedAspect ?? 1);
+      await viewer.setRendering(true);
+      _ifAlive(() => stats.mark('ready'));
+      debugPrint('[sdui_model_filament] ${stats.summary()}, clips: $_clips');
+    } catch (error) {
+      _ifAlive(() => stats.fail('$error'));
+      debugPrint('[sdui_model_filament] ${stats.summary()}');
+      rethrow;
+    }
+  }
+
+  void _ifAlive(VoidCallback action) {
+    if (!_disposed) action();
+  }
+
+  /// Places the camera so [_frameRadius] fits the narrower field of view.
+  Future<void> _frame(double aspect) async {
+    _framedAspect = aspect;
+    final viewer = _viewer.value;
+    if (viewer == null || _disposed) return;
+    final camera = await viewer.getActiveCamera();
+    final focalLength = await camera.getFocalLength();
+    // Filament's lens projection assumes a 24mm-tall sensor.
+    final vertical = 2 * math.atan(12 / focalLength);
+    final horizontal = 2 * math.atan(math.tan(vertical / 2) * aspect);
+    final fov = math.min(vertical, horizontal);
+    final distance = _frameRadius / math.sin(fov / 2);
+    await camera.lookAt(Vector3(0, 0, distance));
+  }
+
+  void _rotateBy(double radians) {
+    final asset = _asset;
+    if (asset == null || _disposed) return;
+    _yaw += radians;
+    unawaited(asset.setTransform(Matrix4.rotationY(_yaw) * _base));
+  }
+
+  @override
+  List<String> get clips => _clips;
+
+  @override
+  ModelPlayback get playback => _playback;
+
+  @override
+  Future<void> play(
+    String clip, {
+    required bool loop,
+    Duration crossfade = Duration.zero,
+  }) async {
+    final asset = _asset;
+    final index = _clips.indexOf(clip);
+    _clipEnd?.cancel();
+    _update(
+      ModelPlayback(
+        clip: clip,
+        isPlaying: true,
+        completions: _playback.completions,
+      ),
+    );
+    if (asset == null || index < 0) return;
+    await asset.playGltfAnimation(
+      index,
+      loop: loop,
+      crossfade: crossfade.inMicroseconds / Duration.microsecondsPerSecond,
+    );
+    if (loop) return;
+    // Filament reports no end event: a non-looping clip ends after its
+    // duration and holds its last frame.
+    final seconds = await asset.getGltfAnimationDuration(index);
+    _clipEnd = Timer(
+      Duration(
+        microseconds: (seconds * Duration.microsecondsPerSecond).round(),
+      ),
+      () => _update(
+        ModelPlayback(
+          clip: clip,
+          isPlaying: false,
+          completions: _playback.completions + 1,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Future<void> stop() async {
+    _clipEnd?.cancel();
+    final asset = _asset;
+    final index = _clips.indexOf(_playback.clip ?? '');
+    if (asset != null && index >= 0) await asset.stopGltfAnimation(index);
+    _update(
+      ModelPlayback(
+        clip: _playback.clip,
+        isPlaying: false,
+        completions: _playback.completions,
+      ),
+    );
+  }
+
+  @override
+  void addListener(VoidCallback listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+
+  void _update(ModelPlayback playback) {
+    if (_disposed) return;
+    _playback = playback;
+    for (final listener in [..._listeners]) {
+      listener();
+    }
+  }
+
+  @override
+  Widget buildView() {
+    return _view ??= () {
+      final view = _FilamentView(controller: this);
+      return _source.debugOverlay
+          ? ModelDebugOverlay(stats: stats, child: view)
+          : view;
+    }();
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    _clipEnd?.cancel();
+    _listeners.clear();
+    final viewer = _viewer.value;
+    _viewer.value = null;
+    _asset = null;
+    if (viewer == null) return;
+    try {
+      // The texture's render target refers to the view; release it before
+      // the viewer destroys the view.
+      await ThermionFlutterPlugin.instance.destroyTextureForView(viewer.view);
+    } finally {
+      await viewer.dispose();
+      await ThermionFlutterPlugin.instance.onViewerDisposed(viewer.view);
+    }
+  }
+}
+
+/// The Filament texture, with drag rotation (when interactive) and
+/// auto-rotation (when requested) driven from Flutter.
+final class _FilamentView extends StatefulWidget {
+  const _FilamentView({required this.controller});
+
+  final FilamentModelController controller;
+
+  @override
+  State<_FilamentView> createState() => _FilamentViewState();
+}
+
+final class _FilamentViewState extends State<_FilamentView>
+    with SingleTickerProviderStateMixin {
+  Ticker? _ticker;
+  Duration _lastTick = Duration.zero;
+  bool _dragging = false;
+
+  FilamentModelController get _controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_controller._request.autoRotate) {
+      _ticker = createTicker(_tick)..start();
+    }
+  }
+
+  void _tick(Duration elapsed) {
+    final dt = (elapsed - _lastTick).inMicroseconds / 1e6;
+    _lastTick = elapsed;
+    if (_dragging) return;
+    _controller._rotateBy(dt * FilamentModelController._autoRotateSpeed);
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final aspect =
+            constraints.hasBoundedWidth &&
+                constraints.hasBoundedHeight &&
+                constraints.maxHeight > 0
+            ? constraints.maxWidth / constraints.maxHeight
+            : 1.0;
+        if (aspect != _controller._framedAspect) {
+          unawaited(_controller._frame(aspect));
+        }
+        Widget view = ValueListenableBuilder<ThermionViewer?>(
+          valueListenable: _controller._viewer,
+          builder: (context, viewer, _) => viewer == null
+              ? const SizedBox.expand()
+              : ThermionWidget(viewer: viewer),
+        );
+        if (_controller._request.interactive) {
+          view = GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (_) => _dragging = true,
+            onHorizontalDragUpdate: (details) => _controller._rotateBy(
+              details.delta.dx * FilamentModelController._dragRadiansPerPixel,
+            ),
+            onHorizontalDragEnd: (_) => _dragging = false,
+            onHorizontalDragCancel: () => _dragging = false,
+            child: view,
+          );
+        }
+        return view;
+      },
+    );
+  }
+}

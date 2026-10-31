@@ -6,9 +6,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 import 'package:sdui_engine/sdui_engine.dart';
+import 'package:sdui_model_support/sdui_model_support.dart';
 
-import 'load_stats.dart';
-import 'model_bytes.dart';
 import 'viewer_page.dart';
 
 /// A [ModelSource] that renders each `model` in a transparent webview
@@ -75,8 +74,13 @@ final class WebModelSource extends ModelSource {
   Future<SduiModelController> controllerFor(ModelRequest request) async =>
       WebModelController(request, this);
 
-  ModelLoadStats _statsFor(String src) =>
-      ModelLoadStats(src: src, mount: ++_mounts, warmUpMs: _warmUpMs);
+  ModelLoadStats _statsFor(String src) => ModelLoadStats(
+    src: src,
+    mount: ++_mounts,
+    warmUpMs: _warmUpMs,
+    renderer: 'web',
+    outOfProcess: true,
+  );
 
   @override
   Future<void> warmUp() async {

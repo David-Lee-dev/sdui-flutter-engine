@@ -1,21 +1,27 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_model_viewer/sdui_model_viewer.dart';
+import 'package:sdui_model_support/sdui_model_support.dart';
 
 void main() {
   group('ModelLoadStats', () {
     test('summary는 마운트 순번, 워밍업, 단계별 시간, 모델 경로를 싣는다', () {
-      final stats = ModelLoadStats(src: '/a.glb', mount: 2, warmUpMs: 800)
-        ..mark('webview')
-        ..served(bytes: 3 * 1024 * 1024, cached: true, ms: 4)
-        ..mark('ready');
+      final stats =
+          ModelLoadStats(
+              src: '/a.glb',
+              mount: 2,
+              warmUpMs: 800,
+              renderer: 'filament',
+            )
+            ..mark('webview')
+            ..served(bytes: 3 * 1024 * 1024, cached: true, ms: 4)
+            ..mark('ready');
 
       expect(
         stats.summary(),
         matches(
           RegExp(
-            r'^#2 warm-up 800ms /a\.glb: webview \d+ms, model \d+ms, '
+            r'^\[filament\] #2 warm-up 800ms /a\.glb: webview \d+ms, model \d+ms, '
             r'ready \d+ms \(3\.0MB cache 4ms\)$',
           ),
         ),

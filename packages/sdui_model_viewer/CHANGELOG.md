@@ -9,3 +9,5 @@
 - `ModelLoadStats` load timeline per view (logged on ready) and
   `ModelDebugOverlay` (`debugOverlay`, or `--dart-define=SDUI_MODEL_DEBUG=true`)
   painting it with app RSS and frame times for measurement.
+- `ModelBytesCache` and the measurement types move to `sdui_model_support`
+  (re-exported here).
