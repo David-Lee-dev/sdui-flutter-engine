@@ -6,3 +6,6 @@
   sdui_engine 0.15 `model` widget rendering through a transparent
   `<model-viewer>` webview, with a Dart-side model byte cache, prefetch and a
   headless warm-up.
+- `ModelLoadStats` load timeline per view (logged on ready) and
+  `ModelDebugOverlay` (`debugOverlay`, or `--dart-define=SDUI_MODEL_DEBUG=true`)
+  painting it with app RSS and frame times for measurement.

@@ -3,5 +3,6 @@
 /// Install [WebModelSource] as `Sdui.initialize(modelSource: ...)`.
 library;
 
+export 'src/load_stats.dart' show FrameStats, ModelDebugOverlay, ModelLoadStats;
 export 'src/model_bytes.dart' show ModelBytesCache;
 export 'src/web_model_source.dart' show WebModelController, WebModelSource;

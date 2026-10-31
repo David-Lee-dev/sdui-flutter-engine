@@ -7,6 +7,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:http/http.dart' as http;
 import 'package:sdui_engine/sdui_engine.dart';
 
+import 'load_stats.dart';
 import 'model_bytes.dart';
 import 'viewer_page.dart';
 
@@ -27,6 +28,9 @@ import 'viewer_page.dart';
 /// same-origin scheme the webview hands back to Dart, so [prefetch] and
 /// revisits skip the network. [warmUp] loads the viewer once in a headless
 /// webview so the first visible mount does not pay the engine start-up.
+///
+/// [debugOverlay] (default: `--dart-define=SDUI_MODEL_DEBUG=true`) paints each
+/// view's load timeline, app memory and frame times over it for measurement.
 final class WebModelSource extends ModelSource {
   WebModelSource({
     Uri? baseUrl,
@@ -35,6 +39,7 @@ final class WebModelSource extends ModelSource {
     http.Client? client,
     AssetBundle? bundle,
     int cachedModels = 4,
+    this.debugOverlay = const bool.fromEnvironment('SDUI_MODEL_DEBUG'),
   }) : models = ModelBytesCache(
          baseUrl: baseUrl,
          client: client,
@@ -51,8 +56,14 @@ final class WebModelSource extends ModelSource {
   /// poster.
   final Duration loadTimeout;
 
+  /// Paints [ModelDebugOverlay] over every view.
+  final bool debugOverlay;
+
   final ModelBytesCache models;
   late final ViewerPage page;
+
+  int _mounts = 0;
+  int? _warmUpMs;
 
   /// iOS serves the page from a custom scheme (WKURLSchemeHandler); Android
   /// WebView cannot navigate to one, so it intercepts a reserved https host.
@@ -64,12 +75,18 @@ final class WebModelSource extends ModelSource {
   Future<SduiModelController> controllerFor(ModelRequest request) async =>
       WebModelController(request, this);
 
+  ModelLoadStats _statsFor(String src) =>
+      ModelLoadStats(src: src, mount: ++_mounts, warmUpMs: _warmUpMs);
+
   @override
   Future<void> warmUp() async {
+    final clock = Stopwatch()..start();
     await page.script();
     final loads = [for (final src in prefetch) models.load(src)];
     await _warmWebView();
     await Future.wait(loads);
+    _warmUpMs = clock.elapsedMilliseconds;
+    debugPrint('[sdui_model_viewer] warm-up took ${_warmUpMs}ms');
   }
 
   /// Loads the viewer script in a throwaway headless webview so the web
@@ -81,8 +98,10 @@ final class WebModelSource extends ModelSource {
         url: WebUri(page.pageUrl(src: '').toString()),
       ),
       initialSettings: settings(),
-      onLoadResourceWithCustomScheme: (_, request) => _custom(request.url),
-      shouldInterceptRequest: (_, request) => _intercept(request.url),
+      onLoadResourceWithCustomScheme: (_, request) async =>
+          _custom(await page.respond(request.url.uriValue)),
+      shouldInterceptRequest: (_, request) async =>
+          _intercept(await page.respond(request.url.uriValue)),
       onLoadStop: (_, _) {
         if (!loaded.isCompleted) loaded.complete();
       },
@@ -115,8 +134,7 @@ final class WebModelSource extends ModelSource {
     isInspectable: kDebugMode,
   );
 
-  Future<CustomSchemeResponse?> _custom(WebUri url) async {
-    final resource = await page.respond(url.uriValue);
+  static CustomSchemeResponse? _custom(ViewerResource? resource) {
     if (resource == null) return null;
     return CustomSchemeResponse(
       data: resource.data,
@@ -124,8 +142,7 @@ final class WebModelSource extends ModelSource {
     );
   }
 
-  Future<WebResourceResponse?> _intercept(WebUri url) async {
-    final resource = await page.respond(url.uriValue);
+  static WebResourceResponse? _intercept(ViewerResource? resource) {
     if (resource == null) return null;
     return WebResourceResponse(
       data: resource.data,
@@ -140,7 +157,8 @@ final class WebModelSource extends ModelSource {
 
 /// Drives one `<model-viewer>` webview for the engine's `model` widget.
 final class WebModelController implements SduiModelController {
-  WebModelController(this._request, this._source) {
+  WebModelController(this._request, this._source)
+    : stats = _source._statsFor(_request.src) {
     // A load error may land before the engine awaits [initialize].
     _ready.future.ignore();
   }
@@ -149,7 +167,10 @@ final class WebModelController implements SduiModelController {
   final WebModelSource _source;
   final _ready = Completer<void>();
   final _listeners = <VoidCallback>[];
-  final _stopwatch = Stopwatch()..start();
+
+  /// This view's load timeline, also painted when
+  /// [WebModelSource.debugOverlay] is on.
+  final ModelLoadStats stats;
   InAppWebViewController? _web;
   Widget? _view;
   List<String> _clips = const [];
@@ -196,7 +217,11 @@ final class WebModelController implements SduiModelController {
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
 
   @override
-  Widget buildView() => _view ??= InAppWebView(
+  Widget buildView() => _view ??= _source.debugOverlay
+      ? ModelDebugOverlay(stats: stats, child: _webView())
+      : _webView();
+
+  Widget _webView() => InAppWebView(
     initialUrlRequest: URLRequest(
       url: WebUri(
         _source.page
@@ -210,9 +235,11 @@ final class WebModelController implements SduiModelController {
     ),
     initialSettings: _source.settings(),
     onWebViewCreated: _attach,
-    onLoadResourceWithCustomScheme: (_, request) =>
-        _source._custom(request.url),
-    shouldInterceptRequest: (_, request) => _source._intercept(request.url),
+    onLoadStop: (_, _) => _mark('page'),
+    onLoadResourceWithCustomScheme: (_, request) async =>
+        WebModelSource._custom(await _serve(request.url)),
+    shouldInterceptRequest: (_, request) async =>
+        WebModelSource._intercept(await _serve(request.url)),
     onReceivedError: (_, request, error) {
       if (request.isForMainFrame ?? false) {
         _fail('page failed: ${error.description}');
@@ -220,8 +247,30 @@ final class WebModelController implements SduiModelController {
     },
   );
 
+  /// Serves a page resource, timing the model bytes.
+  Future<ViewerResource?> _serve(WebUri url) async {
+    final uri = url.uriValue;
+    if (uri.path != '/model') return _source.page.respond(uri);
+    final cached = _source.models.contains(uri.queryParameters['src'] ?? '');
+    final started = stats.elapsedMs;
+    final resource = await _source.page.respond(uri);
+    if (resource != null && !_disposed) {
+      stats.served(
+        bytes: resource.data.length,
+        cached: cached,
+        ms: stats.elapsedMs - started,
+      );
+    }
+    return resource;
+  }
+
+  void _mark(String label) {
+    if (!_disposed) stats.mark(label);
+  }
+
   void _attach(InAppWebViewController web) {
     _web = web;
+    _mark('webview');
     web.addJavaScriptHandler(
       handlerName: 'sduiReady',
       callback: (args) {
@@ -229,10 +278,8 @@ final class WebModelController implements SduiModelController {
         _clips = clips is List
             ? List.unmodifiable(clips.whereType<String>())
             : const [];
-        debugPrint(
-          '[sdui_model_viewer] ${_request.src} ready in '
-          '${_stopwatch.elapsedMilliseconds}ms, clips: $_clips',
-        );
+        _mark('ready');
+        debugPrint('[sdui_model_viewer] ${stats.summary()}, clips: $_clips');
         if (!_ready.isCompleted) _ready.complete();
       },
     );
@@ -267,7 +314,8 @@ final class WebModelController implements SduiModelController {
   }
 
   void _fail(String reason) {
-    debugPrint('[sdui_model_viewer] ${_request.src} failed: $reason');
+    if (!_disposed) stats.fail(reason);
+    debugPrint('[sdui_model_viewer] ${stats.summary()}');
     if (!_ready.isCompleted) _ready.completeError(StateError(reason));
   }
 

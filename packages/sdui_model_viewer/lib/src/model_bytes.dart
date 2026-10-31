@@ -40,6 +40,9 @@ final class ModelBytesCache {
     return null;
   }
 
+  /// Whether [src] is loaded or loading.
+  bool contains(String src) => _entries.containsKey(src);
+
   /// The bytes of [src], loading them on first use. A failed load is not
   /// cached, so the next call retries.
   Future<Uint8List> load(String src) {
