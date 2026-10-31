@@ -18,33 +18,10 @@ import 'invalid_template_exception.dart';
 /// properties remain nullable at runtime. Validation covers inactive branches so
 /// template defects cannot remain hidden until a branch is selected.
 final class TemplateValidator {
-  /// The recognized `_loop._wrap` strategies.
-  static const Set<String> _knownWraps = {
-    'column',
-    'row',
-    'wrap',
-    'serpentine',
-    'serpentine_row',
-    'spin_grid',
-    'auto_scroll',
-    'swipe',
-    'list',
-    'sliver_list',
-    'grid',
-    'sliver_grid',
-    'reorderable',
-    'dismissible',
-  };
-
-  /// The recognized `_loop._wrap` strategies, for cross-checking against
-  /// [LoopObserver]'s dispatch in tests.
-  ///
-  /// Compile-time validation and runtime expansion are two separate sources
-  /// of truth over the same strategy names; without this seam a name added
-  /// here with no matching case in the observer's switch degrades silently
-  /// into a bare column instead of failing loudly.
+  /// The recognized `_loop._wrap` strategies: the names of [loopWraps], for
+  /// cross-checking against [LoopObserver]'s dispatch in tests.
   @visibleForTesting
-  static const Set<String> knownWraps = _knownWraps;
+  static final Set<String> knownWraps = Set.unmodifiable(loopWraps.keys);
 
   /// Validates [root] using [declared] as the outermost binding declarations.
   ///
@@ -199,7 +176,7 @@ final class TemplateValidator {
       case LoopDirective loop:
         // Wrap names pass through compilation, so validate them before observer
         // dispatch can encounter an unknown strategy.
-        if (!_knownWraps.contains(loop.wrap)) {
+        if (!loopWraps.containsKey(loop.wrap)) {
           throw InvalidTemplateException(
             loop.path,
             'unknown loop layout "${loop.wrap}" — not a registered _wrap strategy (typo?).',

@@ -7,12 +7,113 @@ import 'directive/_base.dart';
 /// instead of triggering a Flutter render assertion outside node isolation.
 enum LayoutProtocol { box, sliver }
 
+/// What one `_loop._wrap` strategy is: the protocol it builds, the
+/// registered widget it lays its items in ([widget], whose accepted parent
+/// data the items get; `null` when it lays them in a widget of its own,
+/// which takes none), whether it builds items lazily or as slivers ([lazy]),
+/// and whether it takes input or runs actions ([interactive]).
+typedef LoopWrap = ({
+  LayoutProtocol produces,
+  String? widget,
+  bool lazy,
+  bool interactive,
+});
+
+/// Every `_loop._wrap` strategy the engine has, by name. The validator's
+/// known names, [loopWrapProduces], [loopWrapWidget] and the skeleton's
+/// lazy and interactive wraps all read this; the runtime's dispatch handles
+/// exactly these names (`loop_wrap_table_test.dart`).
+const Map<String, LoopWrap> loopWraps = {
+  'column': (
+    produces: LayoutProtocol.box,
+    widget: 'column',
+    lazy: false,
+    interactive: false,
+  ),
+  'row': (
+    produces: LayoutProtocol.box,
+    widget: 'row',
+    lazy: false,
+    interactive: false,
+  ),
+  'wrap': (
+    produces: LayoutProtocol.box,
+    widget: 'wrap',
+    lazy: false,
+    interactive: false,
+  ),
+  'serpentine': (
+    produces: LayoutProtocol.box,
+    widget: 'serpentine',
+    lazy: false,
+    interactive: false,
+  ),
+  'serpentine_row': (
+    produces: LayoutProtocol.box,
+    widget: 'serpentine_row',
+    lazy: false,
+    interactive: false,
+  ),
+  'spin_grid': (
+    produces: LayoutProtocol.box,
+    widget: null,
+    lazy: false,
+    interactive: true,
+  ),
+  'auto_scroll': (
+    produces: LayoutProtocol.box,
+    widget: 'auto_scroll',
+    lazy: false,
+    interactive: true,
+  ),
+  'swipe': (
+    produces: LayoutProtocol.box,
+    widget: null,
+    lazy: false,
+    interactive: true,
+  ),
+  'list': (
+    produces: LayoutProtocol.box,
+    widget: null,
+    lazy: true,
+    interactive: false,
+  ),
+  'sliver_list': (
+    produces: LayoutProtocol.sliver,
+    widget: null,
+    lazy: true,
+    interactive: false,
+  ),
+  'grid': (
+    produces: LayoutProtocol.box,
+    widget: null,
+    lazy: true,
+    interactive: false,
+  ),
+  'sliver_grid': (
+    produces: LayoutProtocol.sliver,
+    widget: null,
+    lazy: true,
+    interactive: false,
+  ),
+  'reorderable': (
+    produces: LayoutProtocol.box,
+    widget: null,
+    lazy: false,
+    interactive: true,
+  ),
+  'dismissible': (
+    produces: LayoutProtocol.box,
+    widget: null,
+    lazy: false,
+    interactive: true,
+  ),
+};
+
 /// The protocol a `_loop._wrap` strategy builds; it does not depend on the
 /// widget registered under the same name.
 LayoutProtocol loopWrapProduces(String wrap) =>
-    wrap == 'sliver_list' || wrap == 'sliver_grid'
-    ? LayoutProtocol.sliver
-    : LayoutProtocol.box;
+    loopWraps[wrap]?.produces ?? LayoutProtocol.box;
 
 /// The protocol [directive] builds, with each widget type's own protocol
 /// given by [widget]. A cond or switch builds what every body builds, its
@@ -58,15 +159,7 @@ enum ParentDataKind { none, flex, stack }
 /// The registered widget a `_loop._wrap` strategy lays its items in, whose
 /// accepted parent data the items get; `null` for a strategy that lays them
 /// in a widget of its own, which takes none.
-String? loopWrapWidget(String wrap) => switch (wrap) {
-  'column' ||
-  'row' ||
-  'wrap' ||
-  'serpentine' ||
-  'serpentine_row' ||
-  'auto_scroll' => wrap,
-  _ => null,
-};
+String? loopWrapWidget(String wrap) => loopWraps[wrap]?.widget;
 
 /// What parent data a widget or directive builds, for the wrappers the
 /// engine puts around it.

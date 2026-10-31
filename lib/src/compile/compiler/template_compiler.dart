@@ -5,6 +5,7 @@ import 'package:sdui_engine/src/ir/model/engine_spring.dart';
 import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/model/lifecycle_hook.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
 import 'package:sdui_engine/src/ir/compiled_value.dart';
@@ -1171,20 +1172,6 @@ final class TemplateCompiler {
     );
   }
 
-  /// Loop strategies that build items lazily or as slivers, which a skeleton
-  /// slot cannot hold.
-  static const _lazyWraps = {'list', 'grid', 'sliver_list', 'sliver_grid'};
-
-  /// Loop strategies that take input or run actions; bone rows lay out in a
-  /// plain column (or row) instead.
-  static const _interactiveWraps = {
-    'reorderable',
-    'dismissible',
-    'swipe',
-    'spin_grid',
-    'auto_scroll',
-  };
-
   /// The params of an interactive wrap that its plain bone column keeps.
   static const _boneWrapKeys = {
     'spacing',
@@ -1248,7 +1235,9 @@ final class TemplateCompiler {
     final loop = node.reserved['_loop'] as Map;
     final wrap = loop['_wrap'] ?? 'column';
     final wrapType = wrap is Map ? wrap['_type'] : wrap;
-    if (_lazyWraps.contains(wrapType)) {
+    final strategy = loopWraps[wrapType];
+    // A lazy or sliver loop builds items a skeleton slot cannot hold.
+    if (strategy?.lazy ?? false) {
       throw InvalidTemplateException(
         node.path,
         '"_skeleton" does not support a lazy or sliver loop '
@@ -1289,7 +1278,8 @@ final class TemplateCompiler {
         '"_skeleton" "count" must be a positive integer.',
       );
     }
-    final interactive = _interactiveWraps.contains(wrapType);
+    // An interactive loop's bone rows lay out in a plain column (or row).
+    final interactive = strategy?.interactive ?? false;
     final params = wrap is Map ? wrap : const {};
     final index = loop['_index'] ?? 'index';
     final rows = UiNode(

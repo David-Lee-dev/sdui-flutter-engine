@@ -52,16 +52,13 @@ class LoopObserver extends StatelessWidget {
     );
   }
 
-  /// The `_wrap` strategies with a real case below, other than `'column'`
-  /// (which is deliberately the same as the unhandled-name fallback).
-  ///
-  /// [TemplateValidator]'s `_knownWraps` is a second, compile-time list of the
-  /// same strategy names. Keep the two in sync by hand when editing the switch
-  /// below — a name declared valid there with no case here degrades silently
-  /// into a bare column instead of failing loudly, which is exactly the bug
-  /// this set exists to let a test catch.
+  /// The `_wrap` strategies with a case below. Keep it equal to the names of
+  /// `loopWraps` when editing the switch: `loop_wrap_table_test.dart` checks
+  /// the two match and that each case builds the protocol and host widget
+  /// the table declares.
   @visibleForTesting
   static const Set<String> handledWraps = {
+    'column',
     'row',
     'wrap',
     'serpentine',
@@ -195,6 +192,7 @@ class LoopObserver extends StatelessWidget {
             child: _item(resolved[i]),
           ),
         );
+      case 'column':
       default:
         return _eager(context, 'column', p, resolved);
     }
