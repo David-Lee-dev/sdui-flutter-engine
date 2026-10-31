@@ -804,6 +804,165 @@ void main() {
         }
       }
     }
+
+    // home 1.3.0 section/07_invite_event: derived bones holding loop bones
+    // whose row is an `expanded`, over a bare container around an `_if`
+    // expanded, while `invite_event` arrives from null.
+    for (final slow in const [true, false]) {
+      testWidgets('the invite section under its derived bones loads after a '
+          '${speed(slow)} load', (tester) async {
+        await tester.pumpWidget(
+          _app({
+            '_type': 'container',
+            '_scope': {
+              '_state': {'invite_event': null},
+              '_action': {
+                'load': {
+                  '_type': 'gate',
+                  '_then': {
+                    '_type': 'set',
+                    'invite_event': {
+                      'active': true,
+                      'cycleSlots': [
+                        for (var i = 0; i < 4; i++)
+                          {'index': i, 'reached': i < 2},
+                      ],
+                    },
+                  },
+                },
+              },
+              '_lifecycle': const [
+                {'on': 'mount', 'action': 'load'},
+              ],
+            },
+            '_child': {
+              '_type': 'padding',
+              '_if': r'${invite_event != null and invite_event.active}',
+              '_skeleton': true,
+              'padding': [16, 8],
+              '_child': {
+                '_type': 'column',
+                'cross_axis_alignment': 'stretch',
+                '_children': [
+                  {
+                    '_type': 'stack',
+                    'alignment': 'center',
+                    '_children': [
+                      {
+                        '_type': 'padding',
+                        'padding': [35, 0],
+                        '_child': {
+                          '_type': 'container',
+                          '_skeleton': {
+                            'count': 1,
+                            'tree': {
+                              '_type': 'expanded',
+                              '_child': {
+                                '_type': 'skeleton',
+                                'height': 4,
+                                'shape': 'pill',
+                              },
+                            },
+                          },
+                          '_loop': {
+                            '_in': r'${invite_event.cycleSlots}',
+                            '_as': 'item',
+                            '_key': r'${item.index}',
+                            '_wrap': {'_type': 'row', 'main_axis_size': 'max'},
+                          },
+                          '_child': {
+                            '_type': 'expanded',
+                            '_if': r'${item.index > 0}',
+                            '_child': {
+                              '_type': 'container',
+                              'height': 4,
+                              'decoration': {
+                                'color':
+                                    r'${item.reached ? "#FF0000" : "#00FF00"}',
+                                'border_radius': 999,
+                              },
+                            },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          }),
+        );
+        await tester.pump(Duration(milliseconds: slow ? 300 : 100));
+        expect(tester.takeException(), isNull);
+        openAll();
+        await tester.pump();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 150));
+        await tester.pump(const Duration(seconds: 1));
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(ShaderMask), findsNothing);
+        expect(find.byType(Expanded), findsNWidgets(3));
+      });
+    }
+
+    for (final type in const ['expanded', 'flexible']) {
+      for (final bones in const ['node', 'legacy']) {
+        for (final slow in const [true, false]) {
+          testWidgets('loop bones whose row is a $type under $bones bones '
+              'swap out after a ${speed(slow)} load', (tester) async {
+            final row = slot(type, leaf);
+            final content = {
+              '_type': 'container',
+              '_loop': {
+                '_in': r'${items}',
+                '_as': 'item',
+                '_key': r'${item.index}',
+                '_wrap': 'row',
+              },
+              '_child': slot(type, {
+                '_type': 'text',
+                'value': r'item ${item.index}',
+              }),
+            };
+            await load(
+              tester,
+              bones == 'node'
+                  ? section({
+                      ...content,
+                      '_skeleton': {'count': 2, 'tree': row},
+                    })
+                  : section(content, skeleton: host(type, [row, row])),
+              slow: slow,
+            );
+            expect(find.text('item 2'), findsOneWidget);
+          });
+        }
+      }
+    }
+
+    for (final type in const ['expanded', 'flexible', 'positioned']) {
+      for (final slow in const [true, false]) {
+        testWidgets('a bone tree whose root is a $type swaps out of a bare '
+            'container after a ${speed(slow)} load', (tester) async {
+          await load(
+            tester,
+            section(
+              host(type, [
+                leaf,
+                {
+                  '_type': 'container',
+                  '_skeleton': slot(type, leaf),
+                  '_child': slot(type, _content),
+                },
+              ]),
+            ),
+            slow: slow,
+          );
+          expect(find.text('ready true'), findsOneWidget);
+        });
+      }
+    }
   });
 
   group('inert bones', () {
