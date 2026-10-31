@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/engine_runner.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/swipe_layout_widget.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/swipe_pane_widget.dart';
 import 'package:sdui_engine/src/runtime/widget/contract/action_sink.dart';
 import 'package:sdui_engine/src/runtime/widget/swipe/swipe_controller_scope.dart';
+import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 
 class _FakeSink implements ActionSink {
   final List<(String, Object?)> calls = <(String, Object?)>[];
@@ -155,6 +157,72 @@ void main() {
 
         controller.endInteraction('user', 0); // schedules resume
         await tester.pumpWidget(const SizedBox()); // dispose → cancel timers
+      });
+
+      testWidgets('resumes after the dragged pane is removed by _if', (
+        tester,
+      ) async {
+        Map<String, Object?> pane(String name) => {
+          '_type': 'swipe_pane',
+          '_children': [
+            for (var i = 0; i < 3; i++) {'_type': 'text', 'value': '$name$i'},
+          ],
+        };
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: EngineRunner(
+                template: {
+                  '_type': 'swipe_layout',
+                  'length': 3,
+                  'loop': false,
+                  'autoplay_interval': 1000,
+                  'autoplay_resume_delay': 50,
+                  '_scope': {
+                    '_state': {'show': true},
+                  },
+                  '_child': {
+                    '_type': 'column',
+                    '_children': [
+                      {
+                        '_type': 'sizedbox',
+                        'height': 150,
+                        '_if': r'${show}',
+                        '_presence': false,
+                        '_child': pane('A'),
+                      },
+                      {'_type': 'sizedbox', 'height': 150, '_child': pane('B')},
+                    ],
+                  },
+                },
+              ),
+            ),
+          ),
+        );
+        final controller = _scope(tester).controller;
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(PageView).first),
+        );
+        await gesture.moveBy(const Offset(-450, 0));
+        await tester.pump();
+        expect(controller.isInteracting, isTrue);
+        final target = controller.page.round();
+
+        tester.state<ScopeState>(find.byType(Scope).first).set('show', false);
+        await tester.pump();
+        await gesture.up();
+        expect(controller.isInteracting, isFalse);
+        await tester.pump(); // starts the deferred settle animation
+        await tester.pump(const Duration(milliseconds: 310));
+
+        expect(controller.index, target);
+        final remaining = tester.widget<PageView>(find.byType(PageView));
+        expect(remaining.controller!.page, closeTo(target.toDouble(), .001));
+        // Autoplay resumed: its first tick is one interval after the resume.
+        await tester.pump(const Duration(milliseconds: 1000));
+        expect(controller.index, (target + 1).clamp(0, 2));
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
       });
     });
   });

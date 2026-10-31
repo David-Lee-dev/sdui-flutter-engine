@@ -136,6 +136,140 @@ void main() {
       });
     });
 
+    group('unregisterLink', () {
+      test(
+        'removing the drag owner releases it and settles the rest',
+        () async {
+          final controller = SwipeController(length: 3);
+          addTearDown(controller.dispose);
+          final a = _FakeLink('a');
+          final b = _FakeLink('b');
+          controller
+            ..registerLink(a)
+            ..registerLink(b);
+          final settled = <int>[];
+          var ended = 0;
+          controller.onSettled = settled.add;
+          controller.onInteractionEnd = () => ended++;
+
+          controller.beginInteraction('a');
+          controller.drive('a', 1.4);
+          controller.unregisterLink(a);
+
+          expect(controller.isInteracting, isFalse);
+          expect(b.moved, isEmpty); // settling waits for a microtask
+          await Future<void>.value();
+          expect(b.moved, [(1, true)]);
+          expect(settled, [1]);
+          expect(ended, 1);
+        },
+      );
+
+      test('removing another pane keeps the active drag', () async {
+        final controller = SwipeController(length: 3);
+        addTearDown(controller.dispose);
+        final a = _FakeLink('a');
+        final b = _FakeLink('b');
+        controller
+          ..registerLink(a)
+          ..registerLink(b);
+        var calls = 0;
+        controller.onSettled = (_) => calls++;
+        controller.onInteractionEnd = () => calls++;
+
+        controller.beginInteraction('b');
+        controller.unregisterLink(a);
+        await Future<void>.value();
+
+        expect(controller.isInteracting, isTrue);
+        expect(calls, 0);
+        expect(b.moved, isEmpty);
+      });
+
+      test('dispose before the settle cancels it', () async {
+        final controller = SwipeController(length: 3);
+        final a = _FakeLink('a');
+        controller.registerLink(a);
+        var calls = 0;
+        controller.onSettled = (_) => calls++;
+        controller.onInteractionEnd = () => calls++;
+
+        controller.beginInteraction('a');
+        controller.unregisterLink(a);
+        controller.dispose();
+        await Future<void>.value();
+
+        expect(calls, 0);
+      });
+
+      test('a pane re-registered by the same owner is settled', () async {
+        final controller = SwipeController(length: 3);
+        addTearDown(controller.dispose);
+        final old = _FakeLink('a');
+        controller.registerLink(old);
+
+        controller.beginInteraction('a');
+        controller.drive('a', 1.4);
+        controller.unregisterLink(old);
+        final replacement = _FakeLink('a');
+        controller.registerLink(replacement);
+        await Future<void>.value();
+
+        expect(controller.isInteracting, isFalse);
+        expect(replacement.moved, [(1, true)]);
+        expect(controller.index, 1);
+      });
+
+      test('a removal settle does not end a newer drag', () async {
+        final controller = SwipeController(length: 4);
+        addTearDown(controller.dispose);
+        final a = _FakeLink('a');
+        final b = _FakeLink('b');
+        controller
+          ..registerLink(a)
+          ..registerLink(b);
+        var ended = 0;
+        controller.onInteractionEnd = () => ended++;
+
+        controller.beginInteraction('a');
+        controller.drive('a', 1.4);
+        controller.unregisterLink(a);
+        controller.beginInteraction('b');
+        controller.drive('b', 2.3);
+        await Future<void>.value();
+
+        expect(controller.isInteracting, isTrue);
+        expect(ended, 0);
+        expect(b.moved, isEmpty);
+        expect(controller.page, closeTo(2.3, .001));
+      });
+
+      test('only the latest removed owner settles', () async {
+        final controller = SwipeController(length: 4);
+        addTearDown(controller.dispose);
+        final a = _FakeLink('a');
+        final b = _FakeLink('b');
+        controller
+          ..registerLink(a)
+          ..registerLink(b);
+        var ended = 0;
+        final settled = <int>[];
+        controller.onInteractionEnd = () => ended++;
+        controller.onSettled = settled.add;
+
+        controller.beginInteraction('a');
+        controller.drive('a', 1.4);
+        controller.unregisterLink(a);
+        controller.beginInteraction('b');
+        controller.drive('b', 2.3);
+        controller.unregisterLink(b);
+        await Future<void>.value();
+
+        expect(ended, 1);
+        expect(settled, [2]);
+      });
+    });
+
     group('goTo', () {
       test('moves every link and reports the settled index', () async {
         final controller = SwipeController(length: 4);

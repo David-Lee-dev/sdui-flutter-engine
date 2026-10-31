@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 /// A single swipe area's bridge to the shared [SwipeController].
@@ -81,6 +83,8 @@ class SwipeController extends ChangeNotifier {
   double _page;
   int _index;
   Object? _activeSource;
+  int _interaction = 0;
+  bool _disposed = false;
   final List<SwipePaneLink> _links = <SwipePaneLink>[];
 
   /// Invoked after a position settles (drag release, tap, autoplay, programmatic
@@ -145,7 +149,27 @@ class SwipeController extends ChangeNotifier {
   }
 
   /// Removes a pane (on dispose).
-  void unregisterLink(SwipePaneLink link) => _links.remove(link);
+  ///
+  /// Removing the drag owner ends its drag: ownership is released now and the
+  /// remaining panes settle on the nearest page in a microtask, because removal
+  /// runs while the tree is locked. A newer drag or disposal cancels the settle.
+  void unregisterLink(SwipePaneLink link) {
+    _links.remove(link);
+    if (!identical(_activeSource, link.owner)) return;
+    _activeSource = null;
+    final interaction = _interaction;
+    scheduleMicrotask(() {
+      if (_disposed || interaction != _interaction) return;
+      _commit(_page.round().toDouble(), animate: true, exclude: null);
+      onInteractionEnd?.call();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   /// Rebroadcasts a pane's per-frame movement so watchers repaint. Panes call
   /// this from their controller listener; it is a no-op to logical state.
@@ -156,6 +180,7 @@ class SwipeController extends ChangeNotifier {
   void beginInteraction(Object source) {
     if (_activeSource != null) return;
     _activeSource = source;
+    _interaction++;
     onInteractionStart?.call();
   }
 
