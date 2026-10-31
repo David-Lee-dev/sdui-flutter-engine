@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.2
 
 - Fix: a bare `container` around a parent-data node (`expanded`,
   `flexible`, `positioned`, ...) as an `_if` / `cond` body or an eager loop
