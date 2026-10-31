@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.4
 
 - Fix: during a presence run (a `_skeleton` swap, an `_if` that shows or
   hides, a list insert or removal) content painted above or beside the slot
