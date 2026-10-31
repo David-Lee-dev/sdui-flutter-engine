@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+- Fix: during a presence run (a `_skeleton` swap, an `_if` that shows or
+  hides, a list insert or removal) content painted above or beside the slot
+  (a balloon at `top: -24`, a shadow) and the overflow of a child that
+  already fits stay painted. Only a child larger than its moving slot is
+  cut, on the side it grows from (the bottom; across, the trailing side).
+- Fix: a sliver `_if` or `switch` that shows nothing, and a sliver node that
+  fails to build, no longer break the scroll view: they leave an empty
+  sliver (the failure diagnostic sits in one).
+- Fix: `container(_scope._lifecycle)` or a repeating `_morph` on a bare
+  `container` around `expanded` / `flexible` / `positioned` lays out instead
+  of failing with "Incorrect use of ParentDataWidget".
+- Fix: a `_scope._skeleton` on a bare `container` around parent data is
+  skipped with a warning (tag `scope`) and shows the content.
+- Fix: a skeleton follows a load notifier its scope replaces, and a keyed
+  node `_skeleton` moved to another loading scope follows that scope's load
+  and shimmer; the old scope stops its shimmer.
+- Fix: when the mount hooks are replaced while a load is pending, the
+  skeleton waits for the new hooks, not the replaced ones.
+- Fix: a leaving slot gives its focus nodes back their focus and traversal
+  flags when its exit ends or it goes away mid-exit, so a reused focus node
+  can take focus again. A moved group settles at once under a muted ticker,
+  and a moved `_motion` exit plays with the slot it moved into.
+- Loop strategies decide their own layout protocol: an app widget
+  registered as `sliver_list` or `sliver_grid` no longer changes how such
+  a loop is placed.
+- `WidgetSpec.parentData` (default `false`): an app widget whose output is
+  parent data (`Expanded`, `Positioned`, ...) declares it so the engine
+  places it in place and wraps nothing around it. The built-in
+  `expanded`, `flexible`, `positioned`, `positioned_fill` and `spacer`
+  declare it.
+- **New compile errors:** `_motion` or `_on` on an app widget declared as
+  parent data, or on a bare `container` around parent data (put it on a
+  node inside); `_skeleton` on such an app widget; a node `_skeleton` whose
+  bones' root is parent data; `_scope._skeleton` in a sliver position, on a
+  parent-data node, or with bones whose root is parent data or a sliver.
+  `_scope._skeleton` bones are still not checked for bindings.
+
 ## 0.17.3
 
 - Fix: a presence exit (a `_skeleton` swap, an `_if` that turns false, ...)
