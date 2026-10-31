@@ -21,33 +21,26 @@ class SwitchObserver extends StatelessWidget {
     return ('default', directive.fallback);
   }
 
-  Widget _resolve(Environment env, Widget Function(Directive) childOf) {
+  Widget _resolve(Environment env) {
     final (key, branch) = _match(
       ExpressionEvaluator.evaluate(directive.selector, env),
     );
-    return NodeBuilder.branch(
-      directive,
-      directive.presence,
-      key,
-      branch,
-      childOf: childOf,
-    );
+    return NodeBuilder.branch(directive, directive.presence, key, branch);
   }
 
   @override
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget resolve(Widget Function(Directive) childOf) => NodeGuard.run(
+    Widget resolve() => NodeGuard.run(
       directive.path,
-      () => _resolve(env, childOf),
+      () => _resolve(env),
       produces: NodeBuilder.produces(directive),
     );
-    if (listenable == null) return resolve(NodeBuilder.build);
-    final childOf = NodeBuilder.memo();
+    if (listenable == null) return resolve();
     return ListenableBuilder(
       listenable: listenable,
-      builder: (context, _) => resolve(childOf),
+      builder: (context, _) => resolve(),
     );
   }
 }

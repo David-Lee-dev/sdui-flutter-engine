@@ -32,30 +32,12 @@ import 'observer/switch_observer.dart';
 ///
 /// Directive dispatch remains separate from plain-node assembly so loops and
 /// branches can rebuild only their own observer boundary.
-///
-/// An observer that reassembles on state notifications builds its children
-/// through [memo], so a notification hands back the same child widgets and
-/// Flutter skips them; any rebuild of the observer itself starts a new memo.
-/// This holds only while every environment layer an observer inserts above a
-/// child keeps the same environment identity across its notification
-/// rebuilds: a skipped child does not see a layer swapped for a new
-/// environment.
 final class NodeBuilder {
   const NodeBuilder._();
 
   /// Indexes of `_motion` layers turned off per node element after their
   /// parameters failed to evaluate; a layer stays off for the node's lifetime.
   static final _offMotions = Expando<Set<int>>('NodeBuilder.offMotions');
-
-  /// Returns a child builder that builds each directive once and returns the
-  /// same widget on later calls. An observer makes one per build and reuses
-  /// it for that build's notification rebuilds. The widgets come from the
-  /// directive alone, so they hold no environment or runtime object.
-  static Widget Function(Directive) memo() {
-    final configs = HashMap<Directive, Widget>.identity();
-    return (directive) =>
-        configs.putIfAbsent(directive, () => build(directive));
-  }
 
   /// Builds the observer or scope boundary represented by [directive].
   static Widget build(Directive directive) {
@@ -195,17 +177,16 @@ final class NodeBuilder {
   /// Builds the output of [directive] (a cond or switch) showing [body]
   /// under [key], or nothing when [body] is `null`: in a presence slot when
   /// [presence] is on and the bodies fit one, plainly otherwise. Nothing in
-  /// a sliver position is an empty sliver. [childOf] builds the body.
+  /// a sliver position is an empty sliver.
   static Widget branch(
     Directive directive,
     PresenceConfig presence,
     Object key,
-    Directive? body, {
-    Widget Function(Directive) childOf = build,
-  }) {
+    Directive? body,
+  ) {
     final mode = presence.enabled ? presenceMode(directive) : null;
     if (mode == null) {
-      if (body != null) return childOf(body);
+      if (body != null) return build(body);
       return produces(directive) == LayoutProtocol.sliver
           ? const SliverToBoxAdapter()
           : const SizedBox.shrink();
@@ -214,7 +195,7 @@ final class NodeBuilder {
       config: presence,
       mode: mode,
       childKey: key,
-      child: body == null ? null : Scope.retained(child: childOf(body)),
+      child: body == null ? null : Scope.retained(child: build(body)),
     );
   }
 
@@ -243,13 +224,11 @@ final class NodeBuilder {
   /// scroll events, the repaint boundary ([isolate]) and identity wrappers are
   /// applied in that order. For a parent-data widget (`positioned`,
   /// `expanded`, ...) all but the identity wrapper go around its child.
-  /// [childOf] builds the child directives.
   static Widget assemble(
     BuildContext context,
     PlainDirective directive,
     Environment env, {
     bool isolate = false,
-    Widget Function(Directive) childOf = build,
   }) {
     final resolved = ExpressionEvaluator.resolveMap(directive.props, env);
     Map<String, Object?> props = resolved;
@@ -268,7 +247,7 @@ final class NodeBuilder {
     Widget widget = switch (spec) {
       SlotSpec spec => spec.build(context, props, {
         for (final entry in directive.slots.entries)
-          entry.key: childOf(entry.value),
+          entry.key: build(entry.value),
       }),
       BuilderSpec spec => spec.build(
         context,
@@ -276,12 +255,12 @@ final class NodeBuilder {
         directive.children.length,
         (index, {Map<String, Object?> vars = const {}}) {
           if (index < 0 || index >= directive.children.length) return null;
-          final child = childOf(directive.children[index]);
+          final child = build(directive.children[index]);
           return vars.isEmpty ? child : Scope.ofState(vars, child: child);
         },
       ),
       EagerSpec spec => spec.build(context, props, [
-        for (final child in directive.children) childOf(child),
+        for (final child in directive.children) build(child),
       ]),
       BoundSpec spec => BoundBuilder(
         bind: PropsResolver.text(props['bind']),
@@ -297,7 +276,7 @@ final class NodeBuilder {
             spec.build(context, props, value, onChanged, onSubmit),
       ),
       ActionSpec spec => spec.build(context, props, [
-        for (final child in directive.children) childOf(child),
+        for (final child in directive.children) build(child),
       ], Scope.actionHost(context)),
       null => throw StateError('Unknown widget type: "${directive.type}".'),
     };

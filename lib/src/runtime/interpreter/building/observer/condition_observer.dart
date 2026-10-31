@@ -14,41 +14,31 @@ class ConditionObserver extends StatelessWidget {
 
   final ConditionDirective directive;
 
-  Widget _resolve(Environment env, Widget Function(Directive) childOf) {
+  Widget _resolve(Environment env) {
     for (final (index, branch) in directive.branches.indexed) {
       if (ExpressionEvaluator.evaluateTruthy(branch.predicate, env)) {
-        return _show(index, branch.body, childOf);
+        return _show(index, branch.body);
       }
     }
-    return _show('else', directive.fallback, childOf);
+    return _show('else', directive.fallback);
   }
 
-  Widget _show(
-    Object key,
-    Directive? body,
-    Widget Function(Directive) childOf,
-  ) => NodeBuilder.branch(
-    directive,
-    directive.presence,
-    key,
-    body,
-    childOf: childOf,
-  );
+  Widget _show(Object key, Directive? body) =>
+      NodeBuilder.branch(directive, directive.presence, key, body);
 
   @override
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget resolve(Widget Function(Directive) childOf) => NodeGuard.run(
+    Widget resolve() => NodeGuard.run(
       directive.path,
-      () => _resolve(env, childOf),
+      () => _resolve(env),
       produces: NodeBuilder.produces(directive),
     );
-    if (listenable == null) return resolve(NodeBuilder.build);
-    final childOf = NodeBuilder.memo();
+    if (listenable == null) return resolve();
     return ListenableBuilder(
       listenable: listenable,
-      builder: (context, _) => resolve(childOf),
+      builder: (context, _) => resolve(),
     );
   }
 }
