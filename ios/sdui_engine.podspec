@@ -3,7 +3,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'sdui_engine'
-  s.version          = '0.17.0'
+  s.version          = '0.17.1'
   s.summary          = 'Native haptics for the sdui_engine sys_haptic command.'
   s.description      = <<-DESC
 Core Haptics taps and continuous patterns for sdui_engine sys_haptic.

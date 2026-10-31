@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.1
 
 - **Behavior change (`_scope._skeleton` too):** a load that finishes inside
   the 300 ms grace fades the content in again (as in 0.16): the presence swap
