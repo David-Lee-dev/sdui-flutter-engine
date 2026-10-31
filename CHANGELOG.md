@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a presence exit (a `_skeleton` swap, an `_if` that turns false, ...)
+  in the same frame as a focus node elsewhere going away no longer fails
+  with "Looking up a deactivated widget's ancestor is unsafe" (seen on hot
+  restart). Leaving content now gives up focus at the end of the frame its
+  exit starts in.
+
 ## 0.17.2
 
 - Fix: a bare `container` around a parent-data node (`expanded`,

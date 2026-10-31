@@ -358,15 +358,27 @@ class _PresenceGroupState extends State<PresenceGroup>
   /// and keeps every focus node in it out of reach until it comes back.
   ///
   /// The slot's top nodes are children of the focus node around the group,
-  /// so only those are checked for being in the slot.
+  /// so only those are checked for being in the slot. That check climbs from
+  /// nodes outside the group too, so it waits for the end of the frame: in
+  /// the build a node elsewhere can belong to a deactivated element.
   void _releaseFocus(_Entry e) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || e.present || e._held != null) return;
+      if (!_entries.contains(e)) return;
+      _holdLeaving(e);
+    });
+  }
+
+  void _holdLeaving(_Entry e) {
     final around =
         Focus.maybeOf(context, scopeOk: true, createDependency: false) ??
         FocusManager.instance.rootScope;
     final held = <(FocusNode, bool, bool)>[];
     for (final top in around.children) {
       final at = top.context;
-      if (at == null || !_holds(at, e, around.context)) continue;
+      if (at == null || !at.mounted || !_holds(at, e, around.context)) {
+        continue;
+      }
       for (final node in [top, ...top.descendants]) {
         if (node.hasPrimaryFocus) node.unfocus();
         held.add((node, node.canRequestFocus, node.skipTraversal));

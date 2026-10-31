@@ -1301,6 +1301,88 @@ void main() {
         expect(tester.getSize(find.byType(SkeletonScope)).height, 40);
         expect(find.byType(ShaderMask), findsNothing);
       });
+
+      testWidgets('swaps while a focus node elsewhere goes in the same frame', (
+        tester,
+      ) async {
+        final loading = ValueNotifier(true);
+        final field = ValueNotifier(true);
+        addTearDown(loading.dispose);
+        addTearDown(field.dispose);
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: ValueListenableBuilder(
+              valueListenable: field,
+              builder: (context, shown, _) => Column(
+                children: [
+                  if (shown) Focus(child: const SizedBox(height: 10)),
+                  SkeletonScope(
+                    loading: loading,
+                    skeleton: const SizedBox(width: 100, height: 120),
+                    child: const SizedBox(width: 100, height: 40),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+
+        field.value = false;
+        loading.value = false;
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(tester.getSize(find.byType(SkeletonScope)).height, 40);
+      });
+
+      testWidgets('swaps beside focus nodes of other routes and tabs', (
+        tester,
+      ) async {
+        final loading = ValueNotifier(true);
+        addTearDown(loading.dispose);
+        final navigator = GlobalKey<NavigatorState>();
+        await tester.pumpWidget(
+          MaterialApp(
+            navigatorKey: navigator,
+            home: Material(
+              child: Column(
+                children: [
+                  SizedBox(
+                    height: 60,
+                    child: IndexedStack(
+                      children: const [Text('tab'), TextField(), TextField()],
+                    ),
+                  ),
+                  SkeletonScope(
+                    loading: loading,
+                    skeleton: const SizedBox(width: 100, height: 120),
+                    child: const TextField(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        navigator.currentState!.push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Material(
+              child: Column(children: [TextField(), TextField()]),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.showKeyboard(find.byType(TextField).last);
+        final focused = FocusManager.instance.primaryFocus;
+
+        loading.value = false;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(tester.takeException(), isNull);
+        expect(FocusManager.instance.primaryFocus, same(focused));
+      });
     });
   });
 }
