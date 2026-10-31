@@ -739,7 +739,16 @@ class _PresenceBox extends MultiChildRenderObjectWidget {
   }
 }
 
-class _PresenceParentData extends ContainerBoxParentData<RenderBox> {}
+class _PresenceParentData extends ContainerBoxParentData<RenderBox> {
+  /// The clip of this child while it outgrows its moving slot.
+  final LayerHandle<ClipRectLayer> clip = LayerHandle();
+
+  @override
+  void detach() {
+    clip.layer = null;
+    super.detach();
+  }
+}
 
 /// Lays every child out with the incoming constraints at its start corner
 /// and sizes itself to the sum of each child's size times its entry's share
@@ -808,8 +817,6 @@ class _RenderPresence extends RenderBox
     markNeedsLayout();
   }
 
-  final LayerHandle<ClipRectLayer> _clip = LayerHandle();
-
   _Entry? _entryAt(int index) =>
       index < _entries.length ? _entries[index] : null;
 
@@ -839,7 +846,12 @@ class _RenderPresence extends RenderBox
 
   @override
   void dispose() {
-    _clip.layer = null;
+    var child = firstChild;
+    while (child != null) {
+      final data = child.parentData! as _PresenceParentData;
+      data.clip.layer = null;
+      child = data.nextSibling;
+    }
     super.dispose();
   }
 
@@ -970,41 +982,56 @@ class _RenderPresence extends RenderBox
     }
   }
 
-  void _paintChildren(PaintingContext context, Offset offset) {
+  /// Paints each child crossfaded by its entry. While its slot moves, a
+  /// child larger than the slot along an animated axis is cut on the side
+  /// it grows from only (the bottom; across, the trailing side), so what it
+  /// paints above or beside the slot and a fitting child's overflow stay
+  /// visible.
+  @override
+  void paint(PaintingContext context, Offset offset) {
     var child = firstChild;
     var i = 0;
     while (child != null) {
       final data = child.parentData! as _PresenceParentData;
-      final alpha = _entryAt(i)?.alpha;
-      final at = offset + data.offset;
+      final entry = _entryAt(i);
       final painted = child;
-      if (alpha == null) {
-        context.paintChild(painted, at);
-      } else if (alpha > 0) {
-        context.pushOpacity(
-          at,
-          (alpha.clamp(0.0, 1.0) * 255).round(),
-          (context, offset) => context.paintChild(painted, offset),
+      void paintChild(PaintingContext context, Offset offset) {
+        final alpha = entry?.alpha;
+        final at = offset + data.offset;
+        if (alpha == null) {
+          context.paintChild(painted, at);
+        } else if (alpha > 0) {
+          context.pushOpacity(
+            at,
+            (alpha.clamp(0.0, 1.0) * 255).round(),
+            (context, offset) => context.paintChild(painted, offset),
+          );
+        }
+      }
+
+      final cutWidth = _sumsWidth && painted.size.width > size.width;
+      final cutHeight = _sumsHeight && painted.size.height > size.height;
+      if ((entry?.clips ?? false) && (cutWidth || cutHeight)) {
+        final rtl = _textDirection == TextDirection.rtl;
+        const open = Rect.largest;
+        data.clip.layer = context.pushClipRect(
+          needsCompositing,
+          offset,
+          Rect.fromLTRB(
+            cutWidth && rtl ? 0 : open.left,
+            open.top,
+            cutWidth && !rtl ? size.width : open.right,
+            cutHeight ? size.height : open.bottom,
+          ),
+          paintChild,
+          oldLayer: data.clip.layer,
         );
+      } else {
+        data.clip.layer = null;
+        paintChild(context, offset);
       }
       child = data.nextSibling;
       i++;
     }
-  }
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    if (!_entries.any((e) => e.clips)) {
-      _clip.layer = null;
-      _paintChildren(context, offset);
-      return;
-    }
-    _clip.layer = context.pushClipRect(
-      needsCompositing,
-      offset,
-      Offset.zero & size,
-      _paintChildren,
-      oldLayer: _clip.layer,
-    );
   }
 }
