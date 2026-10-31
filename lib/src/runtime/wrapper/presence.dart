@@ -470,7 +470,7 @@ class _PresenceGroupState extends State<PresenceGroup>
     e._swap = false;
     e._enterDelay = Duration.zero;
     if (!e.present) {
-      e._held = null;
+      _returnFocus(e);
       _entries.remove(e);
     }
     if (_tickerMode != null && !_entries.any((e) => e.running)) {
@@ -490,12 +490,38 @@ class _PresenceGroupState extends State<PresenceGroup>
     setState(_settleAll);
   }
 
+  /// Gives the leaving nodes their focus flags back while they are still
+  /// mounted: the group may be leaving the tree or moving.
+  @override
+  void deactivate() {
+    for (final e in _entries) {
+      if (!e.present) _returnFocus(e);
+    }
+    super.deactivate();
+  }
+
+  /// After a move, watches the new place's ticker mode, settling at once if
+  /// it is off, and holds the leaving nodes again.
+  @override
+  void activate() {
+    super.activate();
+    final tickerMode = _tickerMode;
+    if (tickerMode != null) {
+      tickerMode.removeListener(_onTickerMode);
+      _tickerMode = TickerMode.getNotifier(context)..addListener(_onTickerMode);
+      if (!_tickerMode!.value) _settleAll();
+    }
+    for (final e in _entries) {
+      if (!e.present) _releaseFocus(e);
+    }
+  }
+
   @override
   void dispose() {
     _tickerMode?.removeListener(_onTickerMode);
     for (final e in _entries) {
       e._controller?.dispose();
-      e._held = null;
+      _returnFocus(e);
     }
     super.dispose();
   }
