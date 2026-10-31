@@ -27,7 +27,10 @@ class LoopObserver extends StatelessWidget {
 
   final LoopDirective directive;
 
-  Widget _item(({Map<String, Object?> frame, String key}) item) {
+  Widget _item(
+    ({Map<String, Object?> frame, String key}) item,
+    Widget Function(Directive) childOf,
+  ) {
     return KeyedSubtree(
       key: ValueKey(item.key),
       child: Builder(
@@ -42,10 +45,7 @@ class LoopObserver extends StatelessWidget {
           );
           return LoopTelemetryScope(
             entries: [...parent, entry],
-            child: Scope.ofState(
-              item.frame,
-              child: NodeBuilder.build(directive.child),
-            ),
+            child: Scope.ofState(item.frame, child: childOf(directive.child)),
           );
         },
       ),
@@ -74,26 +74,30 @@ class LoopObserver extends StatelessWidget {
     'dismissible',
   };
 
-  Widget _expand(BuildContext context, Environment env) {
+  Widget _expand(
+    BuildContext context,
+    Environment env,
+    Widget Function(Directive) childOf,
+  ) {
     final resolved = LoopResolver.resolve(directive, env);
     final p = ExpressionEvaluator.resolveMap(directive.wrapParams, env);
     final finder = _indexFinder(resolved);
     switch (directive.wrap) {
       case 'row':
-        return _eager(context, 'row', p, resolved);
+        return _eager(context, 'row', p, resolved, childOf);
       case 'wrap':
-        return _eager(context, 'wrap', p, resolved);
+        return _eager(context, 'wrap', p, resolved, childOf);
       case 'serpentine':
         return WidgetFactory.build(context, 'serpentine', p, [
-          for (final item in resolved) _item(item),
+          for (final item in resolved) _item(item, childOf),
         ]);
       case 'serpentine_row':
         return WidgetFactory.build(context, 'serpentine_row', p, [
-          for (final item in resolved) _item(item),
+          for (final item in resolved) _item(item, childOf),
         ]);
       case 'auto_scroll':
         return WidgetFactory.build(context, 'auto_scroll', p, [
-          for (final item in resolved) _item(item),
+          for (final item in resolved) _item(item, childOf),
         ]);
       case 'swipe':
         // A data-driven swipe carousel: the loop owns the page count, so the
@@ -112,7 +116,7 @@ class LoopObserver extends StatelessWidget {
           {...p, 'length': resolved.length},
           [
             SwipePaneWidget.build(context, p, [
-              for (final item in resolved) _item(item),
+              for (final item in resolved) _item(item, childOf),
             ]),
           ],
           Scope.actionHost(context),
@@ -126,13 +130,13 @@ class LoopObserver extends StatelessWidget {
           physics: PropsResolver.scrollPhysics(p['physics']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
           itemCount: resolved.length,
-          itemBuilder: (context, i) => _item(resolved[i]),
+          itemBuilder: (context, i) => _item(resolved[i], childOf),
           findChildIndexCallback: finder,
         );
       case 'sliver_list':
         return SliverList(
           delegate: SliverChildBuilderDelegate(
-            (context, i) => _item(resolved[i]),
+            (context, i) => _item(resolved[i], childOf),
             childCount: resolved.length,
             findChildIndexCallback: finder,
           ),
@@ -144,7 +148,7 @@ class LoopObserver extends StatelessWidget {
         // following the 'swipe' precedent above: the action host is required
         // so `on_finish` can dispatch once the spin animation settles.
         return SpinGridWidget.build(context, p, [
-          for (final item in resolved) _item(item),
+          for (final item in resolved) _item(item, childOf),
         ], Scope.actionHost(context));
       case 'grid':
         return GridView.builder(
@@ -153,14 +157,14 @@ class LoopObserver extends StatelessWidget {
           physics: PropsResolver.scrollPhysics(p['physics']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
           itemCount: resolved.length,
-          itemBuilder: (context, i) => _item(resolved[i]),
+          itemBuilder: (context, i) => _item(resolved[i], childOf),
           findChildIndexCallback: finder,
         );
       case 'sliver_grid':
         return SliverGrid(
           gridDelegate: _gridDelegate(context, p),
           delegate: SliverChildBuilderDelegate(
-            (context, i) => _item(resolved[i]),
+            (context, i) => _item(resolved[i], childOf),
             childCount: resolved.length,
             findChildIndexCallback: finder,
           ),
@@ -172,7 +176,7 @@ class LoopObserver extends StatelessWidget {
           padding: PropsResolver.edge(context, p['padding']),
           shrinkWrap: PropsResolver.flag(p['shrink_wrap']) ?? false,
           itemCount: resolved.length,
-          itemBuilder: (context, i) => _item(resolved[i]),
+          itemBuilder: (context, i) => _item(resolved[i], childOf),
           onReorder: (oldIndex, newIndex) =>
               _reorder(context, env, oldIndex, newIndex),
         );
@@ -189,12 +193,12 @@ class LoopObserver extends StatelessWidget {
                 PropsResolver.dismissDirection(p['direction']) ??
                 DismissDirection.horizontal,
             onDismissed: (_) => _dismissKey(context, env, resolved[i].key),
-            child: _item(resolved[i]),
+            child: _item(resolved[i], childOf),
           ),
         );
       case 'column':
       default:
-        return _eager(context, 'column', p, resolved);
+        return _eager(context, 'column', p, resolved, childOf);
     }
   }
 
@@ -203,6 +207,7 @@ class LoopObserver extends StatelessWidget {
     String type,
     Map<String, Object?> p,
     List<({Map<String, Object?> frame, String key})> resolved,
+    Widget Function(Directive) childOf,
   ) {
     final props = type == 'wrap' ? p : {'main_axis_size': 'min', ...p};
     final presence = directive.presence;
@@ -210,7 +215,7 @@ class LoopObserver extends StatelessWidget {
         ? NodeBuilder.presenceMode(directive.child)
         : null;
     if (mode == null) {
-      final children = [for (final item in resolved) _item(item)];
+      final children = [for (final item in resolved) _item(item, childOf)];
       return WidgetFactory.build(context, type, props, children);
     }
     return PresenceGroup.list(
@@ -223,7 +228,7 @@ class LoopObserver extends StatelessWidget {
       },
       items: [
         for (final item in resolved)
-          (item.key, Scope.retained(child: _item(item))),
+          (item.key, Scope.retained(child: _item(item, childOf))),
       ],
       builder: (children) =>
           WidgetFactory.build(context, type, props, children),
@@ -298,15 +303,16 @@ class LoopObserver extends StatelessWidget {
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget expand(BuildContext ctx) => NodeGuard.run(
+    Widget expand(Widget Function(Directive) childOf) => NodeGuard.run(
       directive.path,
-      () => _expand(ctx, env),
+      () => _expand(context, env, childOf),
       produces: NodeBuilder.produces(directive),
     );
-    if (listenable == null) return expand(context);
+    if (listenable == null) return expand(NodeBuilder.build);
+    final childOf = NodeBuilder.memo();
     return ListenableBuilder(
       listenable: listenable,
-      builder: (ctx, _) => expand(ctx),
+      builder: (context, _) => expand(childOf),
     );
   }
 }

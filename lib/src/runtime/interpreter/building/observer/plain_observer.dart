@@ -26,15 +26,22 @@ class PlainObserver extends StatelessWidget {
   Widget build(BuildContext context) {
     final env = Scope.envOf(context) ?? MapEnvironment.empty;
     final listenable = env.listen(directive.roots);
-    Widget assemble() => NodeGuard.run(
+    Widget assemble(Widget Function(Directive) childOf) => NodeGuard.run(
       directive.path,
-      () => NodeBuilder.assemble(context, directive, env, isolate: isolate),
+      () => NodeBuilder.assemble(
+        context,
+        directive,
+        env,
+        isolate: isolate,
+        childOf: childOf,
+      ),
       produces: NodeBuilder.produces(directive),
     );
-    if (listenable == null) return assemble();
+    if (listenable == null) return assemble(NodeBuilder.build);
+    final childOf = NodeBuilder.memo();
     return ListenableBuilder(
       listenable: listenable,
-      builder: (context, _) => assemble(),
+      builder: (context, _) => assemble(childOf),
     );
   }
 }

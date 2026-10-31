@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Perf: when a bound node's value changes, only that node is rebuilt. Its
+  children that did not change are no longer rebuilt with it, in plain
+  nodes, `_if`/`switch` branches and `_loop` items. A child that reads the
+  changed value still updates. For example, moving the home logo
+  (`left: ${logo_offset}`) now rebuilds one node per change instead of
+  three.
 - Fix: a modal closed before its first frame (a `_background` open followed
   by `close` in the same action) now closes. The open completes with the
   first close's `return` value, and telemetry records the surface's

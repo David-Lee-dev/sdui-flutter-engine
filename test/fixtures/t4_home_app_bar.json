@@ -1,0 +1,210 @@
+{
+  "_type": "scaffold",
+  "_scope": {
+    "_state": {
+      "scroll_offset": 0,
+      "logo_offset": -70,
+      "notified": false
+    },
+    "_action": {
+      "push_guide": {
+        "_type": "navigate",
+        "route": "/guide"
+      },
+      "push_tuk_point_shop": {
+        "_type": "navigate",
+        "route": "/tuk-point-shop-main"
+      },
+      "push_partner_search": {
+        "_type": "navigate",
+        "route": "/partner-search"
+      },
+      "push_notification": {
+        "_type": "navigate",
+        "route": "/notification-list"
+      }
+    }
+  },
+  "_slots": {
+    "app_bar": {
+      "_type": "app_bar",
+      "center_title": true,
+      "background_color": "#0E0E0E",
+      "_slots": {
+        "leading": {
+          "_type": "stack",
+          "alignment": "center_left",
+          "clip_behavior": "none",
+          "_children": [
+            {
+              "_type": "positioned",
+              "left": "${logo_offset}",
+              "_child": {
+                "_type": "shader_mask",
+                "gradient": {
+                  "type": "linear",
+                  "begin": "center_left",
+                  "end": "center_right",
+                  "colors": [
+                    "#F1FF8C",
+                    "#34DCCE"
+                  ]
+                },
+                "blend_mode": "src_in",
+                "_child": {
+                  "_type": "text",
+                  "value": "은 무제한",
+                  "style": {
+                    "font_family": "KOTRA_BOLD",
+                    "font_size": 20,
+                    "font_weight": "w700",
+                    "color": "#FFFFFF"
+                  }
+                }
+              }
+            },
+            {
+              "_type": "container",
+              "color": "#0E0E0E",
+              "padding": [
+                16,
+                0,
+                0,
+                0
+              ],
+              "_child": {
+                "_type": "image",
+                "src": "/assets/5180cfb0.webp",
+                "width": 24,
+                "height": 24,
+                "color": "${mix('#EBFE5C', '#EDEDED', clamp(scroll_offset / 500, 0, 1))}"
+              }
+            }
+          ]
+        },
+        "title": {
+          "_type": "container",
+          "_on": {
+            "tap": "push_guide"
+          },
+          "_child": {
+            "_type": "container",
+            "padding": [
+              7,
+              2,
+              1,
+              2
+            ],
+            "decoration": {
+              "border_radius": 999,
+              "border": {
+                "color": "#838383"
+              }
+            },
+            "_child": {
+              "_type": "row",
+              "main_axis_size": "min",
+              "cross_axis_alignment": "center",
+              "_children": [
+                {
+                  "_type": "text",
+                  "value": "적립 가이드",
+                  "text_align": "center",
+                  "style": {
+                    "height": 1,
+                    "leading_distribution": "even",
+                    "font_size": 10,
+                    "font_weight": "w500"
+                  }
+                },
+                {
+                  "_type": "icon",
+                  "name": "chevron_right",
+                  "size": 16,
+                  "color": "#838383"
+                }
+              ]
+            }
+          }
+        },
+        "actions": {
+          "_type": "row",
+          "main_axis_size": "min",
+          "spacing": 4,
+          "_children": [
+            {
+              "_type": "padding",
+              "_on": {
+                "tap": "push_tuk_point_shop"
+              },
+              "padding": [
+                6,
+                12
+              ],
+              "_child": {
+                "_type": "image",
+                "src": "/assets/e2ca7565.png",
+                "width": 20,
+                "height": 20
+              }
+            },
+            {
+              "_type": "padding",
+              "_on": {
+                "tap": "push_partner_search"
+              },
+              "padding": [
+                6,
+                12
+              ],
+              "_child": {
+                "_type": "image",
+                "src": "/assets/dc9947d1.svg",
+                "width": 20,
+                "height": 20
+              }
+            },
+            {
+              "_type": "padding",
+              "_on": {
+                "tap": "push_notification"
+              },
+              "padding": [
+                6,
+                12,
+                22,
+                12
+              ],
+              "_child": {
+                "_type": "cond",
+                "_children": [
+                  {
+                    "_if": "${notified}",
+                    "_type": "image",
+                    "src": "/assets/96a67192.svg",
+                    "width": 20,
+                    "height": 20,
+                    "_motion": {
+                      "type": "swing",
+                      "align": "top_center"
+                    }
+                  },
+                  {
+                    "_else": true,
+                    "_type": "image",
+                    "src": "/assets/a068ef2e.svg",
+                    "width": 20,
+                    "height": 20
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "body": {
+      "_type": "sizedbox"
+    }
+  }
+}
