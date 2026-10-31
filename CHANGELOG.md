@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.1
 
 - Fix: a binding inside a `_scope` under a presence slot no longer stops
   updating after the content that watched it was removed and shown again
