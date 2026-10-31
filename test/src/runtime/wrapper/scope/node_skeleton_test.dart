@@ -650,6 +650,162 @@ void main() {
     });
   });
 
+  group('parent-data outputs of presence slots', () {
+    const leaf = {'_type': 'skeleton', 'width': 40, 'height': 20};
+    const items = [
+      {'index': 0},
+      {'index': 1},
+      {'index': 2},
+    ];
+
+    /// A [type] parent-data node around [child], shown when [when] holds.
+    Map<String, Object?> slot(
+      String type,
+      Map<String, Object?> child, {
+      String? when,
+    }) => {
+      '_type': type,
+      if (type == 'positioned') ...{'left': 0, 'top': 0},
+      '_if': ?when,
+      '_child': child,
+    };
+
+    /// The flex or stack that gives [type] its parent data.
+    Map<String, Object?> host(String type, List<Map<String, Object?>> kids) =>
+        type == 'positioned'
+        ? {
+            '_type': 'sizedbox',
+            'width': 200,
+            'height': 40,
+            '_child': {'_type': 'stack', '_children': kids},
+          }
+        : {'_type': 'row', '_children': kids};
+
+    /// A section loading `ready` and `items` through the gate driver.
+    Map<String, Object?> section(
+      Map<String, Object?> child, {
+      Map<String, Object?>? skeleton,
+    }) => {
+      '_type': 'column',
+      '_scope': {
+        '_state': {'ready': false, 'items': <Object?>[]},
+        '_action': {
+          'load': {
+            '_type': 'gate',
+            '_then': {'_type': 'set', 'ready': true, 'items': items},
+          },
+        },
+        '_lifecycle': const [
+          {'on': 'mount', 'action': 'load'},
+        ],
+        '_skeleton': ?skeleton,
+      },
+      '_children': [child],
+    };
+
+    /// Loads after the grace ([slow]) or inside it and plays the swap out.
+    Future<void> load(
+      WidgetTester tester,
+      Map<String, Object?> template, {
+      required bool slow,
+    }) async {
+      await tester.pumpWidget(_app(template));
+      await tester.pump(Duration(milliseconds: slow ? 300 : 100));
+      openAll();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ShaderMask), findsNothing);
+      expect(tester.binding.transientCallbackCount, 0);
+    }
+
+    String speed(bool slow) => slow ? 'slow' : 'fast';
+
+    for (final type in const ['expanded', 'flexible', 'positioned']) {
+      for (final bones in const ['node', 'legacy']) {
+        for (final slow in const [true, false]) {
+          testWidgets('an _if $type under $bones bones swaps in after a '
+              '${speed(slow)} load', (tester) async {
+            final content = host(type, [
+              leaf,
+              slot(type, _content, when: r'${ready}'),
+            ]);
+            final tree = host(type, [leaf, slot(type, leaf)]);
+            await load(
+              tester,
+              bones == 'node'
+                  ? section({...content, '_skeleton': tree})
+                  : section(content, skeleton: tree),
+              slow: slow,
+            );
+            expect(find.text('ready true'), findsOneWidget);
+          });
+
+          testWidgets('a bare container with _if around a $type under '
+              '$bones bones swaps in after a ${speed(slow)} load', (
+            tester,
+          ) async {
+            final content = host(type, [
+              leaf,
+              {
+                '_type': 'container',
+                '_if': r'${ready}',
+                '_child': slot(type, _content),
+              },
+            ]);
+            final tree = host(type, [leaf, slot(type, leaf)]);
+            await load(
+              tester,
+              bones == 'node'
+                  ? section({...content, '_skeleton': tree})
+                  : section(content, skeleton: tree),
+              slow: slow,
+            );
+            expect(find.text('ready true'), findsOneWidget);
+          });
+        }
+      }
+    }
+
+    for (final type in const ['expanded', 'flexible']) {
+      for (final bones in const ['loop', 'legacy', 'no']) {
+        for (final slow in const [true, false]) {
+          testWidgets('loop items of a bare container around an _if $type '
+              'under $bones bones enter after a ${speed(slow)} load', (
+            tester,
+          ) async {
+            final row = {
+              '_type': 'container',
+              if (bones == 'loop')
+                '_skeleton': {'count': 1, 'tree': slot(type, leaf)},
+              '_loop': {
+                '_in': r'${items}',
+                '_as': 'item',
+                '_key': r'${item.index}',
+                '_wrap': {'_type': 'row', 'main_axis_size': 'max'},
+              },
+              '_child': slot(type, const {
+                '_type': 'text',
+                'value': r'item ${item.index}',
+              }, when: r'${item.index > 0}'),
+            };
+            await load(
+              tester,
+              section(row, skeleton: bones == 'legacy' ? leaf : null),
+              slow: slow,
+            );
+            expect(find.text('item 0'), findsNothing);
+            expect(find.text('item 1'), findsOneWidget);
+            expect(find.text('item 2'), findsOneWidget);
+          });
+        }
+      }
+    }
+  });
+
   group('inert bones', () {
     Widget materialApp(Map<String, Object?> template) =>
         MaterialApp(home: Material(child: _app(template)));

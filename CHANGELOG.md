@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a bare `container` around a parent-data node (`expanded`,
+  `flexible`, `positioned`, ...) as an `_if` / `cond` body or an eager loop
+  item is placed in place like the parent-data node itself. It was put in a
+  presence box, so the parent data failed ("Incorrect use of
+  ParentDataWidget ... _PresenceParentData") and the frames after it broke.
+
 ## 0.17.1
 
 - **Behavior change (`_scope._skeleton` too):** a load that finishes inside

@@ -82,12 +82,17 @@ final class NodeBuilder {
   /// place (a parent-data widget), or not at all (`null`: a sliver, or a
   /// `dismissible`, which plays its own removal and must leave the tree as
   /// soon as it is dismissed). An app-registered widget may return parent
-  /// data, so it is placed in place too.
+  /// data, so it is placed in place too, and so is a `container` around a
+  /// parent-data output: it is only valid as a bare `container`, which
+  /// builds no render object and hands its child to its parent.
   static PresenceMode? presenceMode(Directive directive) => switch (directive) {
     PlainDirective node
         when parentDataTypes.contains(node.type) ||
             !WidgetFactory.isBuiltin(node.type) =>
       _sliver(node.type) ? null : PresenceMode.inPlace,
+    PlainDirective(type: 'container', children: [final child])
+        when presenceMode(child) == PresenceMode.inPlace =>
+      PresenceMode.inPlace,
     PlainDirective node =>
       node.type == 'dismissible' || _sliver(node.type)
           ? null
