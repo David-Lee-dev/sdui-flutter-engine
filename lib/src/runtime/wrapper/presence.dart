@@ -121,8 +121,11 @@ class PresenceGroup extends StatefulWidget {
   /// Builds the list container from the item slots (list mode).
   final Widget Function(List<Widget>)? builder;
 
-  /// The axis an item slot grows along (list mode); a single slot grows in
-  /// both.
+  /// The axis an item slot grows along (list mode). A single slot's entry
+  /// and exit grow along the main axis of its enclosing layout, vertical when
+  /// that has none, and keep the cross axis; a run that begins as a swap
+  /// grows in both. The choice is made when a run begins and kept until every
+  /// output has settled.
   final Axis? axis;
 
   final PresenceConfig config;
@@ -153,6 +156,11 @@ class _PresenceGroupState extends State<PresenceGroup>
   ];
 
   bool _reduce = false;
+
+  /// Whether the current run began as a swap, so the single slot sizes in
+  /// both axes until every entry has settled. Decided once per run: changing
+  /// it part way would jump the size.
+  bool _swapRun = false;
 
   /// The ticker mode notifier watched while a slot moves, so a hidden page
   /// settles at once instead of freezing half way.
@@ -444,6 +452,7 @@ class _PresenceGroupState extends State<PresenceGroup>
       _settle(e);
       return;
     }
+    if (!_entries.any((e) => e.running)) _swapRun = swap;
     e
       .._from = from
       .._to = to
@@ -547,6 +556,7 @@ class _PresenceGroupState extends State<PresenceGroup>
       return _PresenceBox(
         entries: [..._entries],
         animation: moving.isEmpty ? null : Listenable.merge(moving),
+        swaps: _swapRun,
         children: [for (final e in _entries) slot(e)],
       );
     }
@@ -741,18 +751,24 @@ class _PresenceBox extends MultiChildRenderObjectWidget {
     required this.animation,
     required super.children,
     this.axis,
+    this.swaps = false,
   });
 
   final List<_Entry> entries;
   final Listenable? animation;
   final Axis? axis;
 
+  /// Whether the current run sizes the slot in both axes.
+  final bool swaps;
+
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderPresence(
     entries: entries,
     animation: animation,
     axis: axis,
+    swaps: swaps,
     textDirection: Directionality.maybeOf(context),
+    viewportDirection: Scrollable.maybeOf(context)?.axisDirection,
   );
 
   @override
@@ -761,7 +777,12 @@ class _PresenceBox extends MultiChildRenderObjectWidget {
       ..entries = entries
       ..animation = animation
       ..axis = axis
-      ..textDirection = Directionality.maybeOf(context);
+      ..swaps = swaps
+      ..textDirection = Directionality.maybeOf(context)
+      ..viewportDirection = Scrollable.maybeOf(context)?.axisDirection
+      // An ancestor that changed direction does not lay out a child whose
+      // constraints stay the same.
+      .._recheckSpace();
   }
 }
 
@@ -778,7 +799,7 @@ class _PresenceParentData extends ContainerBoxParentData<RenderBox> {
 
 /// Lays every child out with the incoming constraints at its start corner
 /// and sizes itself to the sum of each child's size times its entry's share
-/// along the animated axes ([axis], or both when `null`), the largest child
+/// along the resolved space axis, the largest child
 /// across. Leaving children take no input and no semantics.
 class _RenderPresence extends RenderBox
     with
@@ -788,11 +809,15 @@ class _RenderPresence extends RenderBox
     required List<_Entry> entries,
     required Listenable? animation,
     required Axis? axis,
+    required bool swaps,
     required TextDirection? textDirection,
+    required AxisDirection? viewportDirection,
   }) : _entries = entries,
        _animation = animation,
        _axis = axis,
-       _textDirection = textDirection;
+       _swaps = swaps,
+       _textDirection = textDirection,
+       _viewportDirection = viewportDirection;
 
   List<_Entry> _entries;
   set entries(List<_Entry> value) {
@@ -833,13 +858,39 @@ class _RenderPresence extends RenderBox
   set axis(Axis? value) {
     if (value == _axis) return;
     _axis = value;
-    markNeedsLayout();
+    _recheckSpace();
+  }
+
+  bool _swaps;
+  set swaps(bool value) {
+    if (value == _swaps) return;
+    _swaps = value;
+    _recheckSpace();
   }
 
   TextDirection? _textDirection;
   set textDirection(TextDirection? value) {
     if (value == _textDirection) return;
     _textDirection = value;
+    markNeedsLayout();
+  }
+
+  AxisDirection? _viewportDirection;
+  set viewportDirection(AxisDirection? value) {
+    if (value == _viewportDirection) return;
+    _viewportDirection = value;
+    _recheckSpace();
+  }
+
+  /// The axis [_spaceAxis] resolved at the last layout or recheck, `null`
+  /// for both: measuring, intrinsic sizes, positioning and clipping read it.
+  late Axis? _resolvedAxis = _spaceAxis();
+
+  /// Resolves the space axis again and lays out if it changed.
+  void _recheckSpace() {
+    final next = _spaceAxis();
+    if (next == _resolvedAxis) return;
+    _resolvedAxis = next;
     markNeedsLayout();
   }
 
@@ -862,6 +913,8 @@ class _RenderPresence extends RenderBox
   void attach(PipelineOwner owner) {
     super.attach(owner);
     _animation?.addListener(_tick);
+    // A move under another layout keeps the constraints it had.
+    if (_axis == null) _recheckSpace();
   }
 
   @override
@@ -884,7 +937,43 @@ class _RenderPresence extends RenderBox
   @override
   bool get alwaysNeedsCompositing => _entries.any((e) => e.alpha != null);
 
+  /// Uses the closest flow layout through single-child box wrappers. Unknown
+  /// layouts stop the search: an outer row must not give a stack a flow axis.
+  /// A run that began as a swap ([_swaps]) sizes both axes. Without a flow,
+  /// entry/exit reveals vertically and keeps the full width.
+  Axis? _spaceAxis() {
+    if (_axis != null) return _axis!;
+    if (_swaps) return null;
+    var layout = parent;
+    while (layout != null) {
+      if (layout is RenderFlex) return layout.direction;
+      if (layout is RenderWrap) return layout.direction;
+      if (layout is RenderListBody) return layout.mainAxis;
+      // Read from the viewport: a sliver has no constraints before its
+      // first layout, and this also runs on update and attach.
+      if (layout is RenderViewportBase) {
+        return axisDirectionToAxis(layout.axisDirection);
+      }
+      // SingleChildScrollView's private render viewport has no public axis
+      // getter. Its Scrollable provides the same direction, including during
+      // intrinsic queries before this slot has layout constraints.
+      if (layout is RenderAbstractViewport && _viewportDirection != null) {
+        return axisDirectionToAxis(_viewportDirection!);
+      }
+      // A single-child box, or a slot around this one, takes one place in
+      // its parent's flow; a sliver flows along its viewport.
+      if (layout is! RenderObjectWithChildMixin<RenderBox> &&
+          layout is! _RenderPresence &&
+          layout is! RenderSliver) {
+        break;
+      }
+      layout = layout.parent;
+    }
+    return Axis.vertical;
+  }
+
   Size _measure(Size Function(RenderBox) sizeOf, BoxConstraints constraints) {
+    final axis = _resolvedAxis;
     var width = 0.0;
     var height = 0.0;
     var child = firstChild;
@@ -892,10 +981,10 @@ class _RenderPresence extends RenderBox
     while (child != null) {
       final share = _entryAt(i)?.size ?? 1;
       final s = sizeOf(child);
-      width = _axis == Axis.vertical
+      width = axis == Axis.vertical
           ? math.max(width, s.width)
           : width + s.width * share;
-      height = _axis == Axis.horizontal
+      height = axis == Axis.horizontal
           ? math.max(height, s.height)
           : height + s.height * share;
       child = childAfter(child);
@@ -910,16 +999,18 @@ class _RenderPresence extends RenderBox
 
   @override
   void performLayout() {
+    _resolvedAxis = _spaceAxis();
     size = _measure((child) {
       child.layout(constraints, parentUsesSize: true);
       return child.size;
     }, constraints);
     final rtl = _textDirection == TextDirection.rtl;
+    final axis = _resolvedAxis;
     var child = firstChild;
     while (child != null) {
       final data = child.parentData! as _PresenceParentData;
       data.offset = Offset(
-        rtl && _axis != Axis.vertical ? size.width - child.size.width : 0,
+        rtl && axis != Axis.vertical ? size.width - child.size.width : 0,
         0,
       );
       child = data.nextSibling;
@@ -941,8 +1032,8 @@ class _RenderPresence extends RenderBox
     return result;
   }
 
-  bool get _sumsWidth => _axis != Axis.vertical;
-  bool get _sumsHeight => _axis != Axis.horizontal;
+  bool get _sumsWidth => _resolvedAxis != Axis.vertical;
+  bool get _sumsHeight => _resolvedAxis != Axis.horizontal;
 
   @override
   double computeMinIntrinsicWidth(double height) =>

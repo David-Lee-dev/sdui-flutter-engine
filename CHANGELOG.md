@@ -13,6 +13,20 @@
 - Fix: removing a `video` or changing its `src` while it is still setting up
   stops the setup. The released player gets no further looping, volume or
   play calls.
+- Fix: an `_if` or `switch` that shows or hides (a fold) now grows and
+  shrinks only along the main axis of the layout it sits in, and keeps its
+  size across. In a `column` the height animates and the width stays full,
+  so a full-width card no longer narrows while it folds. In a `row` the width
+  animates, in a `wrap` or a scroll view its direction does. The slot looks
+  through single-child wrappers (`container`, `padding`, `align`, `center`,
+  `layout_builder`, another `_if`) for that layout. A `stack` or a layout
+  with no direction folds vertically. A swap between two outputs (a
+  `_skeleton` load, `_if`/`_else`) still sizes both axes. A run keeps the
+  sizing it started with until it settles, so a fold that interrupts a swap,
+  or the other way round, does not jump. `_loop` item slots are unchanged
+  (they keep their container's axis). Inside a wrapper with a fixed main-axis size (a `sizedbox` with
+  a `width` in a `row`) the fold shows no size change, only its motions and
+  crossfade.
 
 ## 0.17.4
 
