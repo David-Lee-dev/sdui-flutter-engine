@@ -54,6 +54,9 @@ final class LifecycleRunner {
 
   /// Bounds the pending mount load; outlives [reconcile].
   Timer? _watchdog;
+
+  /// Counts hook starts; only the latest start's mount flows settle the load.
+  int _run = 0;
   bool _started = false;
   bool _wasObscured = false;
   bool _inBackground = false;
@@ -119,6 +122,7 @@ final class LifecycleRunner {
 
   /// Starts the hooks; returns whether a mount load awaits them.
   bool _start() {
+    final run = ++_run;
     final mountFutures = <Future<void>>[];
     for (final hook in hooks) {
       if (kDebugMode &&
@@ -178,7 +182,9 @@ final class LifecycleRunner {
     }
     if (mountFutures.isEmpty) return false;
     final settle = _settleMount ?? _awaitMount();
-    Future.wait(mountFutures).then((_) => settle());
+    Future.wait(mountFutures).then((_) {
+      if (run == _run) settle();
+    });
     return true;
   }
 
