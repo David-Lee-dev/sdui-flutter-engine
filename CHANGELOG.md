@@ -1,13 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- Fix: a `swipe_layout` (and a `_loop` `swipe` wrap) stops autoplay while it
-  is deactivated and resumes when it returns, and a deactivated `swipe_pane`
-  is no longer moved and stops its in-flight move. A subtree left
-  deactivated, as when a frame's unmount fails, no longer throws "Looking up
-  a deactivated widget's ancestor is unsafe" on every autoplay tick.
-
 ## 0.17.1
 
 - **Behavior change (`_scope._skeleton` too):** a load that finishes inside

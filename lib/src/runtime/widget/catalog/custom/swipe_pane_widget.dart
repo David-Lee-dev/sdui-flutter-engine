@@ -54,25 +54,21 @@ final class SwipePaneWidget {
 
 /// The controller-side of a pane: converts logical pages to its own pixels so
 /// panes with differing viewport fractions stay synchronized by page index.
-///
-/// A deactivated pane is inert: its viewport may never return to the tree,
-/// and moving it would start a scroll animation on an inactive element.
 class _PaneLink implements SwipePaneLink {
   _PaneLink(this.owner, this.pageController);
 
   @override
-  final _SwipePaneState owner;
+  final Object owner;
 
   final PageController pageController;
 
-  bool get _live => owner._active && pageController.hasClients;
-
   @override
-  double? get currentPage => _live ? pageController.page : null;
+  double? get currentPage =>
+      pageController.hasClients ? pageController.page : null;
 
   @override
   void syncTo(double page) {
-    if (!_live) return;
+    if (!pageController.hasClients) return;
     final position = pageController.position;
     final current = pageController.page;
     if (current == null) return;
@@ -85,7 +81,7 @@ class _PaneLink implements SwipePaneLink {
 
   @override
   Future<void> moveTo(int index, {bool animate = true}) async {
-    if (!_live) return;
+    if (!pageController.hasClients) return;
     if (!animate) {
       pageController.jumpToPage(index);
       return;
@@ -128,9 +124,6 @@ class _SwipePaneState extends State<_SwipePane> {
   PageController? _pageController;
   _PaneLink? _link;
   bool _dragging = false;
-
-  /// Whether the pane is in the tree; false between deactivate and activate.
-  bool _active = true;
 
   @override
   void didChangeDependencies() {
@@ -207,28 +200,6 @@ class _SwipePaneState extends State<_SwipePane> {
       swipe.endInteraction(this, landed);
     }
     return false;
-  }
-
-  @override
-  void deactivate() {
-    _active = false;
-    // A move still animating would end on the inactive viewport; stop it
-    // while the viewport is active. A drag ends with the pane's disposal.
-    final controller = _pageController;
-    if (!_dragging && controller != null && controller.hasClients) {
-      final position = controller.position;
-      if (position is ScrollPositionWithSingleContext &&
-          position.isScrollingNotifier.value) {
-        position.goIdle();
-      }
-    }
-    super.deactivate();
-  }
-
-  @override
-  void activate() {
-    super.activate();
-    _active = true;
   }
 
   @override
