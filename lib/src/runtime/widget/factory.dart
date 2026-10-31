@@ -322,6 +322,11 @@ final class WidgetFactory {
   /// Returns the specification registered for [type], if any.
   static WidgetSpec? specFor(String type) => _specs[type];
 
+  /// Whether [type] is still served by its built-in specification (not one
+  /// an app registered or replaced).
+  static bool isBuiltin(String type) =>
+      _specs.containsKey(type) && identical(_specs[type], _builtins[type]);
+
   static void _requireUnfrozen() {
     if (_frozen) {
       throw StateError('WidgetFactory is frozen — register before freeze().');

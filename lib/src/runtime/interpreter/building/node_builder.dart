@@ -82,10 +82,13 @@ final class NodeBuilder {
   /// How a presence slot can hold what [directive] builds: in a box, in
   /// place (a parent-data widget), or not at all (`null`: a sliver, or a
   /// `dismissible`, which plays its own removal and must leave the tree as
-  /// soon as it is dismissed).
+  /// soon as it is dismissed). An app-registered widget may return parent
+  /// data, so it is placed in place too.
   static PresenceMode? presenceMode(Directive directive) => switch (directive) {
-    PlainDirective node when _parentData.contains(node.type) =>
-      PresenceMode.inPlace,
+    PlainDirective node
+        when _parentData.contains(node.type) ||
+            !WidgetFactory.isBuiltin(node.type) =>
+      _sliver(node.type) ? null : PresenceMode.inPlace,
     PlainDirective node =>
       node.type == 'dismissible' || _sliver(node.type)
           ? null

@@ -27,6 +27,8 @@ reload stay instant. Turn it off per node with `_presence: false`.
   `flexible`, `positioned*`, `spacer`) play exits in place without a size
   animation; while leaving they still receive taps, which dispatch nothing
   (no action host), and they give up keyboard focus when the exit starts.
+  App-registered widgets are placed in place the same way (no space
+  animation) under structural directives.
 - Declare `_requires: [presence_v1]` for `_presence` and `on:`. Older engines
   play `on: exit` entries as entrances; gate by app version on the server.
 

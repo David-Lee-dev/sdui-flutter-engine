@@ -78,7 +78,7 @@ Rules:
 - Content that comes back while it exits reverses in place, on the same element and state.
 - Leaving content keeps the values it showed last (bindings do not update), takes no taps, gives up keyboard focus, is left out of semantics, sees no action host (its widgets cannot dispatch), and its `_scope` lifecycle hooks pause; they resume, without `remount`, if it comes back. `dispose` hooks still fire when it is removed.
 - A `reveal_*` motion in the content owns the space in its phase, so the slot does not also animate the size.
-- Sliver bodies, `dismissible` bodies and lazy loops stay instant. A parent-data body (`expanded`, `flexible`, `positioned`, `positioned_fill`, `spacer`) keeps its parent data: it plays its exit motions in place without a size animation, still receives taps while it exits but they dispatch nothing (it sees no action host), gives up keyboard focus when its exit starts, and a new branch replaces it at once.
+- Sliver bodies, `dismissible` bodies and lazy loops stay instant. A parent-data body (`expanded`, `flexible`, `positioned`, `positioned_fill`, `spacer`) keeps its parent data: it plays its exit motions in place without a size animation, still receives taps while it exits but they dispatch nothing (it sees no action host), gives up keyboard focus when its exit starts, and a new branch replaces it at once. Widgets the app registers (`Engine.initialize(widgets:)`) are placed in place the same way, with no space animation, since they may return parent data.
 
 ## `_morph`
 

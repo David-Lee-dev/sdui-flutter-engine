@@ -11,6 +11,7 @@ import 'package:sdui_engine/src/presentation/presentation.dart';
 import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
+import 'package:sdui_engine/src/runtime/widget/factory.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/skeleton_scope.dart';
 
@@ -427,6 +428,151 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('fill'), findsNothing);
       expect(tester.takeException(), isNull);
+    });
+
+    group('an app-registered widget', () {
+      setUp(() {
+        WidgetFactory.register(
+          'app_fill',
+          EagerSpec(
+            (context, props, children) => Expanded(
+              child: SizedBox(height: 20, child: Text('${props['label']}')),
+            ),
+          ),
+        );
+        WidgetFactory.register(
+          'app_box',
+          EagerSpec(
+            (context, props, children) => SizedBox(
+              width: 100,
+              height: 50,
+              child: Text('${props['label']}'),
+            ),
+          ),
+        );
+      });
+      tearDown(WidgetFactory.reset);
+
+      Map<String, Object?> fillRow(Map<String, Object?> fill) => {
+        '_type': 'row',
+        '_children': [
+          {'_type': 'sizedbox', 'width': 100, 'height': 20},
+          fill,
+        ],
+      };
+
+      testWidgets('returning expanded under _if keeps its parent data', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _host(
+            {'show': true},
+            _content(
+              fillRow({
+                '_type': 'app_fill',
+                'label': 'fill',
+                '_if': r'${show}',
+              }),
+            ),
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(tester.getTopLeft(find.text('fill')).dx, 100);
+        expect(tester.getSize(find.byType(Expanded)).width, 200);
+      });
+
+      testWidgets('returning expanded under _if can turn on', (tester) async {
+        await tester.pumpWidget(
+          _host(
+            {'show': false},
+            _content(
+              fillRow({
+                '_type': 'app_fill',
+                'label': 'fill',
+                '_if': r'${show}',
+              }),
+            ),
+          ),
+        );
+
+        _scope(tester).set('show', true);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.getTopLeft(find.text('fill')).dx, 100);
+        expect(tester.getSize(find.byType(Expanded)).width, 200);
+      });
+
+      testWidgets('returning expanded as an eager row loop body', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _host(
+            {
+              'items': _items(['a', 'b']),
+            },
+            _content({
+              '_type': 'app_fill',
+              'label': r'${it.id}',
+              '_loop': {
+                '_in': r'${items}',
+                '_as': 'it',
+                '_key': r'${it.id}',
+                '_wrap': 'row',
+              },
+            }),
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(tester.getTopLeft(find.text('a')).dx, 0);
+        expect(tester.getTopLeft(find.text('b')).dx, 150);
+
+        _scope(tester).set('items', _items(['b']));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.getTopLeft(find.text('b')).dx, 0);
+      });
+
+      testWidgets(
+        'a box under _if takes no space animation but plays its exit',
+        (tester) async {
+          await tester.pumpWidget(
+            _host(
+              {'show': true},
+              _content({
+                '_type': 'column',
+                '_children': [
+                  {
+                    '_type': 'app_box',
+                    'label': 'top',
+                    '_if': r'${show}',
+                    '_motion': {'type': 'fade', 'on': 'exit'},
+                  },
+                  _box('below'),
+                ],
+              }),
+            ),
+          );
+          expect(_top(tester, 'below'), 50);
+
+          _scope(tester).set('show', false);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 150));
+          expect(find.text('top'), findsOneWidget);
+          expect(_top(tester, 'below'), 50);
+          expect(_opacityAbove(tester, 'top'), inExclusiveRange(0, 1));
+
+          await tester.pumpAndSettle();
+          expect(find.text('top'), findsNothing);
+          expect(_top(tester, 'below'), 0);
+
+          _scope(tester).set('show', true);
+          await tester.pump();
+          expect(_top(tester, 'below'), 50);
+          await tester.pumpAndSettle();
+        },
+      );
     });
 
     testWidgets('popping the route mid-exit disposes without errors', (
