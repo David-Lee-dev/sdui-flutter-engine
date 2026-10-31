@@ -23,6 +23,17 @@
   for at most 8 s. Then the content shows in its current state and a warning
   is logged (tag `scope`); requests are not cancelled and a late response
   updates the content in place.
+- Bones are inert (`_scope._skeleton` too): while held or shown they take no
+  taps, drags or focus and expose no semantics.
+- Derived bones turn an input or action widget (`toggle`, `checkbox`,
+  `text_field`, `page_view`, `refresh_indicator`, `dismissible`, …) into one
+  box of its literal `width` and `height`; without them compilation fails.
+  Loop bones lay an interactive `_wrap` (`reorderable`, `dismissible`,
+  `swipe`, `spin_grid`, `auto_scroll`) out as a plain column (a row when it
+  scrolls horizontally) keeping only `spacing`, the alignments and `padding`.
+- Replacing a scope's hook table while its skeleton waits no longer keeps the
+  skeleton: a table without mount hooks settles it, and the 8 s bound holds.
+- The shared shimmer runs only while some node skeleton shows bones.
 
 ## 0.16.1
 

@@ -48,6 +48,12 @@ final class LifecycleRunner {
   bool suspended = false;
 
   final List<Timer> _timers = [];
+
+  /// Settles the pending mount load; `null` when none is pending.
+  void Function()? _settleMount;
+
+  /// Bounds the pending mount load; outlives [reconcile].
+  Timer? _watchdog;
   bool _started = false;
   bool _wasObscured = false;
   bool _inBackground = false;
@@ -84,12 +90,16 @@ final class LifecycleRunner {
 
   /// Replaces the hook table (the scope's directive changed): cancels every
   /// pending timer and restarts from scratch when the new table is non-empty.
+  /// A pending mount load that the new table no longer awaits settles.
   void reconcile() {
     _cancelTimers();
     _started = false;
-    if (hooks.isEmpty || suspended) return;
-    _started = true;
-    _start();
+    var awaitsMount = false;
+    if (hooks.isNotEmpty && !suspended) {
+      _started = true;
+      awaitsMount = _start();
+    }
+    if (!awaitsMount) _settleMount?.call();
   }
 
   /// Fires `dispose` hooks (the host must still be live) and stops timers.
@@ -97,6 +107,7 @@ final class LifecycleRunner {
     suspended = false;
     fireByTrigger(LifecycleTrigger.dispose);
     _cancelTimers();
+    _watchdog?.cancel();
   }
 
   void _cancelTimers() {
@@ -106,7 +117,8 @@ final class LifecycleRunner {
     _timers.clear();
   }
 
-  void _start() {
+  /// Starts the hooks; returns whether a mount load awaits them.
+  bool _start() {
     final mountFutures = <Future<void>>[];
     for (final hook in hooks) {
       if (kDebugMode &&
@@ -164,18 +176,26 @@ final class LifecycleRunner {
           break;
       }
     }
-    if (mountFutures.isEmpty) return;
-    // A hung mount flow must not keep the skeleton forever: the watchdog
-    // settles it, and a late response still updates the content in place.
-    var settled = false;
-    void settle() {
-      if (settled) return;
-      settled = true;
-      if (_isMounted()) _onMountSettled();
-    }
+    if (mountFutures.isEmpty) return false;
+    final settle = _settleMount ?? _awaitMount();
+    Future.wait(mountFutures).then((_) => settle());
+    return true;
+  }
 
-    final watchdog = Timer(mountWatchdog, () {
-      if (settled || !_isMounted()) return;
+  /// Opens a pending mount load. A hung mount flow must not keep the skeleton
+  /// forever: the watchdog settles it, and a late response still updates the
+  /// content in place.
+  void Function() _awaitMount() {
+    late final void Function() settle;
+    settle = () {
+      if (!identical(_settleMount, settle)) return;
+      _settleMount = null;
+      _watchdog?.cancel();
+      _watchdog = null;
+      if (_isMounted()) _onMountSettled();
+    };
+    _watchdog = Timer(mountWatchdog, () {
+      if (!_isMounted()) return;
       EngineLog.warn(
         'mount hooks did not settle within '
         '${mountWatchdog.inSeconds} s; showing the content',
@@ -183,11 +203,7 @@ final class LifecycleRunner {
       );
       settle();
     });
-    _timers.add(watchdog);
-    Future.wait(mountFutures).then((_) {
-      watchdog.cancel();
-      settle();
-    });
+    return _settleMount = settle;
   }
 
   /// How long mount flows may hold the skeleton before it gives way.

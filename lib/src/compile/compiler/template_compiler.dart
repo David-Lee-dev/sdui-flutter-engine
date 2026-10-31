@@ -12,6 +12,8 @@ import 'package:sdui_engine/src/ir/expression.dart';
 import 'package:sdui_engine/src/ir/model/ui_node.dart';
 import '../invalid_template_exception.dart';
 import '../schema/builtin_language.dart';
+import '../schema/widget_schema.dart';
+import '../schema/widget_schema_registry.dart';
 import '../template_parser.dart';
 import 'action_compiler.dart';
 import 'value_compiler.dart';
@@ -1154,6 +1156,23 @@ final class TemplateCompiler {
   /// slot cannot hold.
   static const _lazyWraps = {'list', 'grid', 'sliver_list', 'sliver_grid'};
 
+  /// Loop strategies that take input or run actions; bone rows lay out in a
+  /// plain column (or row) instead.
+  static const _interactiveWraps = {
+    'reorderable',
+    'dismissible',
+    'swipe',
+    'spin_grid',
+    'auto_scroll',
+  };
+
+  /// The params of an interactive wrap that its plain bone column keeps.
+  static const _boneWrapKeys = {
+    'spacing',
+    'main_axis_alignment',
+    'cross_axis_alignment',
+  };
+
   /// Props whose binding only paints; derived bones drop them.
   static const _paintOnlyKeys = {
     'color',
@@ -1196,7 +1215,9 @@ final class TemplateCompiler {
   }
 
   /// Repeats a bone row `count` times (3 by default) in a literal loop with
-  /// the node's `_wrap`; the row is `tree` or derived from the node.
+  /// the node's `_wrap`; the row is `tree` or derived from the node. An
+  /// interactive wrap becomes a plain column (a row when it scrolls
+  /// horizontally) with its spacing, alignment and padding only.
   static UiNode _loopBones(UiNode node, Object? raw, String path) {
     final loop = node.reserved['_loop'] as Map;
     final wrap = loop['_wrap'] ?? 'column';
@@ -1242,8 +1263,10 @@ final class TemplateCompiler {
         '"_skeleton" "count" must be a positive integer.',
       );
     }
+    final interactive = _interactiveWraps.contains(wrapType);
+    final params = wrap is Map ? wrap : const {};
     final index = loop['_index'] ?? 'index';
-    return UiNode(
+    final rows = UiNode(
       type: row.type,
       props: row.props,
       reserved: {
@@ -1253,28 +1276,63 @@ final class TemplateCompiler {
           '_as': loop['_as'] ?? 'item',
           '_index': index,
           '_key': '\${$index}',
-          '_wrap': wrap,
+          '_wrap': !interactive
+              ? wrap
+              : {
+                  '_type': params['scroll_direction'] == 'horizontal'
+                      ? 'row'
+                      : 'column',
+                  for (final key in _boneWrapKeys)
+                    if (params.containsKey(key)) key: params[key],
+                },
         },
       },
       children: row.children,
       slots: row.slots,
       path: row.path,
     );
+    final padding = interactive ? params['padding'] : null;
+    if (padding == null) return rows;
+    return UiNode(
+      type: 'padding',
+      props: {'padding': padding},
+      children: [rows],
+      path: path,
+    );
   }
 
   /// Derives the bones of [node] without reading data: frames keep their
-  /// literal props, a bound text, image or icon becomes one `skeleton`, and
-  /// every reserved key is dropped.
+  /// literal props, a bound text, image or icon becomes one `skeleton`, an
+  /// input or action widget becomes one box, and every reserved key is
+  /// dropped.
   ///
   /// Nothing is guessed: a bound prop that is not paint-only, a bound image
-  /// without a literal size, and control flow without its own `_skeleton`
-  /// fail.
+  /// or an input or action widget without a literal size, and control flow
+  /// without its own `_skeleton` fail.
   static UiNode _deriveBones(UiNode node, {bool inOval = false}) {
     if (node.type == _condType || node.type == _switchType) {
       throw InvalidTemplateException(
         node.path,
         '"${node.type}" picks a branch from data; give "_skeleton" a bone '
         'tree.',
+      );
+    }
+    final kind = WidgetSchemaRegistry.schemaFor(node.type)?.kind;
+    if (kind == WidgetKind.bound || kind == WidgetKind.action) {
+      final width = node.props['width'];
+      final height = node.props['height'];
+      if (width == null || height == null || _isBound([width, height])) {
+        throw InvalidTemplateException(
+          node.path,
+          '"${node.type}" takes input or runs actions, so its bone is a box '
+          'of its literal "width" and "height"; give them or give '
+          '"_skeleton" a bone tree.',
+        );
+      }
+      return UiNode(
+        type: 'skeleton',
+        props: {'width': width, 'height': height},
+        path: node.path,
       );
     }
     final bound = _isBound(node.props);

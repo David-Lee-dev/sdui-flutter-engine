@@ -381,6 +381,55 @@ void main() {
       );
     });
 
+    test('turn an input or action widget into one box of its literal size', () {
+      final bones = _bones(const {
+        '_type': 'column',
+        '_skeleton': true,
+        '_children': [
+          {'_type': 'toggle', 'bind': 'user', 'width': 52, 'height': 32},
+          {
+            '_type': 'refresh_indicator',
+            'on_refresh': 'load',
+            'width': 300,
+            'height': 200,
+            '_child': {'_type': 'text', 'value': 'list'},
+          },
+          {
+            '_type': 'page_view',
+            'on_changed': 'load',
+            'width': 300,
+            'height': 120,
+            '_children': [
+              {'_type': 'text', 'value': 'page'},
+            ],
+          },
+        ],
+      });
+      final [toggle, refresh, pages] = bones.children.cast<PlainDirective>();
+      for (final (bone, width, height) in [
+        (toggle, 52, 32),
+        (refresh, 300, 200),
+        (pages, 300, 120),
+      ]) {
+        expect(bone.type, 'skeleton');
+        expect(bone.props, {'width': width, 'height': height});
+        expect(bone.children, isEmpty);
+      }
+    });
+
+    test('refuse an input or action widget without a literal size', () {
+      expect(
+        () => _bones(const {
+          '_type': 'row',
+          '_skeleton': true,
+          '_children': [
+            {'_type': 'checkbox', 'bind': 'user'},
+          ],
+        }),
+        _fails('"checkbox" takes input or runs actions'),
+      );
+    });
+
     test('width override applies only to a derived leaf', () {
       expect(
         () => _bones(const {
@@ -447,6 +496,75 @@ void main() {
           _fails('lazy or sliver'),
         );
       }
+    });
+
+    test('lays interactive wraps out as a plain column or row', () {
+      for (final type in const [
+        'reorderable',
+        'dismissible',
+        'swipe',
+        'spin_grid',
+        'auto_scroll',
+      ]) {
+        final bones = boneLoop(
+          loop(
+            true,
+            wrap: {
+              '_type': type,
+              'bind': 'user',
+              'on_finish': 'load',
+              'on_changed': 'load',
+              'spacing': 6,
+              'main_axis_alignment': 'center',
+              'cross_axis_alignment': 'start',
+              'shrink_wrap': true,
+            },
+          ),
+        );
+        expect(bones.wrap, 'column', reason: type);
+        expect(bones.wrapParams, {
+          'spacing': 6,
+          'main_axis_alignment': 'center',
+          'cross_axis_alignment': 'start',
+        }, reason: type);
+      }
+      final row = boneLoop(
+        loop(
+          true,
+          wrap: const {
+            '_type': 'reorderable',
+            'scroll_direction': 'horizontal',
+          },
+        ),
+      );
+      expect(row.wrap, 'row');
+      expect(row.wrapParams, isEmpty);
+    });
+
+    test('keep an interactive wrap padding around the bone rows', () {
+      final padded =
+          (_sectionChild(
+                        _compile(
+                          _section(
+                            loop(
+                              true,
+                              wrap: const {
+                                '_type': 'dismissible',
+                                'bind': 'user',
+                                'padding': 8,
+                              },
+                            ),
+                          ),
+                        ),
+                      )
+                      as SkeletonDirective)
+                  .bones
+              as PlainDirective;
+      expect(padded.type, 'padding');
+      expect(padded.props, {'padding': 8});
+      final bones = padded.children.single as LoopDirective;
+      expect(bones.wrap, 'column');
+      expect(bones.wrapParams, isEmpty);
     });
 
     test('rejects a bone tree without count and a bad count', () {

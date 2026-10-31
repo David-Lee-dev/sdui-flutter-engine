@@ -84,9 +84,15 @@ class _SkeletonScopeState extends State<SkeletonScope> {
 
   /// The author's outline, wrapped in the automatic shimmer sweep. Authors draw
   /// only bones (`skeleton` widgets) and layout — the effect is applied here so
-  /// no node wires its own animation.
-  Widget get _shimmered =>
-      _Shimmer(animation: widget.shimmer, child: widget.skeleton);
+  /// no node wires its own animation. Bones are inert in every phase: they
+  /// take no pointer or focus and say nothing to screen readers.
+  Widget get _shimmered => IgnorePointer(
+    child: ExcludeSemantics(
+      child: ExcludeFocus(
+        child: _Shimmer(animation: widget.shimmer, child: widget.skeleton),
+      ),
+    ),
+  );
 
   // The content keeps one key from the swap on, so finishing the swap never
   // remounts it or re-fires its entrance motion / mount lifecycle.
@@ -181,7 +187,7 @@ class _SlideTransform extends GradientTransform {
 }
 
 /// Gives the node skeletons below a scope its loading state and one shimmer
-/// phase, which runs only while the scope loads.
+/// phase, which runs only while the scope loads and some slot holds bones.
 class LoadingScope extends StatefulWidget {
   const LoadingScope({super.key, required this.loading, required this.child});
 
@@ -215,8 +221,21 @@ class _LoadingScopeState extends State<LoadingScope>
     _sync();
   }
 
+  /// The slots below that hold bones.
+  int _slots = 0;
+
+  void _retain() {
+    _slots++;
+    _sync();
+  }
+
+  void _release() {
+    _slots--;
+    _sync();
+  }
+
   void _sync() {
-    if (!widget.loading.value) {
+    if (!widget.loading.value || _slots == 0) {
       _shimmer.stop();
     } else if (!_shimmer.isAnimating) {
       _shimmer.repeat();
@@ -234,6 +253,7 @@ class _LoadingScopeState extends State<LoadingScope>
   Widget build(BuildContext context) => _LoadingLayer(
     loading: widget.loading,
     shimmer: _shimmer,
+    owner: this,
     child: widget.child,
   );
 }
@@ -242,11 +262,15 @@ class _LoadingLayer extends InheritedWidget {
   const _LoadingLayer({
     required this.loading,
     required this.shimmer,
+    required this.owner,
     required super.child,
   });
 
   final ValueListenable<bool> loading;
   final Animation<double> shimmer;
+
+  /// Counts the slots holding bones, which run the [shimmer].
+  final _LoadingScopeState owner;
 
   @override
   bool updateShouldNotify(_LoadingLayer oldWidget) =>
@@ -290,16 +314,28 @@ class SkeletonSlot extends StatefulWidget {
 class _SkeletonSlotState extends State<SkeletonSlot> {
   late final _LoadingLayer? _layer = _loadingLayer();
 
+  /// The loading scope whose shimmer this slot's bones keep running.
+  _LoadingScopeState? _retained;
+
   _LoadingLayer? _loadingLayer() {
     final layer = context.getInheritedWidgetOfExactType<_LoadingLayer>();
     if (layer == null || !layer.loading.value) return null;
-    if (widget.boxed) return layer;
+    if (widget.boxed) {
+      _retained = layer.owner.._retain();
+      return layer;
+    }
     EngineLog.warn(
       '"_skeleton" at ${widget.path} is skipped: the node is not a box '
       '(parent data, sliver or an app widget); showing the content',
       tag: 'scope',
     );
     return null;
+  }
+
+  @override
+  void dispose() {
+    if (_retained?.mounted ?? false) _retained!._release();
+    super.dispose();
   }
 
   @override

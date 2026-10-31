@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
@@ -580,6 +580,194 @@ void main() {
 
       expect(tester.binding.transientCallbackCount, 0);
       expect(tester.binding.hasScheduledFrame, isFalse);
+    });
+
+    testWidgets('the shimmer does not run while no bones are on stage', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          _section(
+            column([
+              const {'_type': 'text', 'value': 'static'},
+              {
+                '_type': 'column',
+                '_if': r'${ready == "never"}',
+                '_children': [boned(_content)],
+              },
+            ]),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(SkeletonScope), findsNothing);
+      expect(tester.binding.transientCallbackCount, 0);
+      await openAndSettle(tester);
+    });
+  });
+
+  group('inert bones', () {
+    Widget materialApp(Map<String, Object?> template) =>
+        MaterialApp(home: Material(child: _app(template)));
+
+    /// A scope whose bones hold a live toggle bound to `flag` and a label.
+    Map<String, Object?> flagSection({required bool legacy}) {
+      const tree = {
+        '_type': 'column',
+        '_children': [
+          {'_type': 'toggle', 'bind': 'flag'},
+          {'_type': 'text', 'value': 'bone label'},
+        ],
+      };
+      return {
+        '_type': 'column',
+        '_scope': {
+          '_state': {'ready': false, 'flag': false},
+          '_action': {
+            'load': {
+              '_type': 'gate',
+              '_then': {'_type': 'set', 'ready': true},
+            },
+          },
+          '_lifecycle': const [
+            {'on': 'mount', 'action': 'load'},
+          ],
+          if (legacy) '_skeleton': tree,
+        },
+        '_children': [
+          {
+            '_type': 'text',
+            'value': r'flag ${flag}',
+            if (!legacy) '_skeleton': tree,
+          },
+        ],
+      };
+    }
+
+    for (final legacy in [false, true]) {
+      final kind = legacy ? 'legacy' : 'node';
+
+      for (final (phase, wait) in const [
+        ('holding', Duration.zero),
+        ('showing', Duration(milliseconds: 300)),
+      ]) {
+        testWidgets('a tap on $kind bones while $phase changes nothing', (
+          tester,
+        ) async {
+          await tester.pumpWidget(materialApp(flagSection(legacy: legacy)));
+          await tester.pump(wait);
+          await tester.tap(find.byType(Switch), warnIfMissed: false);
+          await tester.pump();
+
+          openAll();
+          await tester.pump();
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.text('flag false'), findsOneWidget);
+        });
+      }
+
+      testWidgets('$kind bones add no semantics', (tester) async {
+        final semantics = tester.ensureSemantics();
+        await tester.pumpWidget(materialApp(flagSection(legacy: legacy)));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(find.bySemanticsLabel('bone label'), findsNothing);
+        openAll();
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        semantics.dispose();
+      });
+    }
+
+    testWidgets('dismissing a bone row of a dismissible loop changes nothing', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        materialApp({
+          '_type': 'column',
+          '_scope': {
+            '_state': {
+              'ready': false,
+              'items': ['a', 'b'],
+            },
+            '_action': {
+              'load': {
+                '_type': 'gate',
+                '_then': {'_type': 'set', 'ready': true},
+              },
+            },
+            '_lifecycle': const [
+              {'on': 'mount', 'action': 'load'},
+            ],
+          },
+          '_children': [
+            {
+              '_type': 'text',
+              'value': r'${item}',
+              '_loop': {
+                '_in': r'${items}',
+                '_as': 'item',
+                '_key': r'${item}',
+                '_wrap': {
+                  '_type': 'dismissible',
+                  'bind': 'items',
+                  'shrink_wrap': true,
+                },
+              },
+              '_skeleton': true,
+            },
+          ],
+        }),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(Dismissible), findsNothing);
+      await tester.fling(
+        find.byType(SkeletonScope),
+        const Offset(500, 0),
+        1000,
+        warnIfMissed: false,
+      );
+      await tester.pump(const Duration(seconds: 1));
+
+      openAll();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('a'), findsOneWidget);
+      expect(find.text('b'), findsOneWidget);
+    });
+
+    testWidgets('a legacy skeleton shows the content when its mount hook is '
+        'replaced by a table without one', (tester) async {
+      Map<String, Object?> section(List<Map<String, Object?>> lifecycle) =>
+          _section(
+            _content,
+            skeleton: const {'_type': 'skeleton', 'width': 80, 'height': 40},
+            lifecycle: lifecycle,
+          );
+
+      await tester.pumpWidget(
+        _app(
+          section(const [
+            {'on': 'mount', 'action': 'load', 'delay': 200},
+          ]),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpWidget(
+        _app(
+          section(const [
+            {'on': 'render', 'action': 'load'},
+          ]),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 9));
+      expect(find.text('ready false'), findsOneWidget);
+      expect(find.byType(ShaderMask), findsNothing);
+      openAll();
+      await tester.pump();
     });
   });
 }
