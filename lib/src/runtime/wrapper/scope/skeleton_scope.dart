@@ -67,6 +67,15 @@ class _SkeletonScopeState extends State<SkeletonScope> {
     }
   }
 
+  @override
+  void didUpdateWidget(SkeletonScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.loading == oldWidget.loading) return;
+    oldWidget.loading.removeListener(_handleLoading);
+    widget.loading.addListener(_handleLoading);
+    _handleLoading();
+  }
+
   void _handleLoading() {
     if (widget.loading.value || _phase == _Phase.done) return;
     _graceTimer?.cancel();
@@ -310,24 +319,41 @@ class SkeletonSlot extends StatefulWidget {
 }
 
 class _SkeletonSlotState extends State<SkeletonSlot> {
-  late final _LoadingLayer? _layer = _loadingLayer();
+  /// Whether the slot holds [SkeletonSlot.child] in a [SkeletonScope],
+  /// decided at the first build and kept, so the child never remounts.
+  bool? _wrapped;
+
+  /// The loading layer the slot is under now; it changes when the layer
+  /// replaces its load or the slot moves.
+  _LoadingLayer? _layer;
 
   /// The loading scope whose shimmer this slot's bones keep running.
   _LoadingScopeState? _retained;
 
-  _LoadingLayer? _loadingLayer() {
-    final layer = context.getInheritedWidgetOfExactType<_LoadingLayer>();
-    if (layer == null || !layer.loading.value) return null;
-    if (widget.boxed) {
-      _retained = layer.owner.._retain();
-      return layer;
-    }
+  /// What a slot moved out of every loading scope follows: nothing loads.
+  static final _loaded = ValueNotifier(false);
+
+  bool _wraps(_LoadingLayer? layer) {
+    if (layer == null || !layer.loading.value) return false;
+    if (widget.boxed) return true;
     EngineLog.warn(
       '"_skeleton" at ${widget.path} is skipped: the node is not a box '
       '(parent data, sliver or an app widget); showing the content',
       tag: 'scope',
     );
-    return null;
+    return false;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final layer = context.dependOnInheritedWidgetOfExactType<_LoadingLayer>();
+    final wrapped = _wrapped ??= _wraps(layer);
+    _layer = layer;
+    final owner = wrapped ? layer?.owner : null;
+    if (identical(owner, _retained)) return;
+    if (_retained?.mounted ?? false) _retained!._release();
+    _retained = owner?.._retain();
   }
 
   @override
@@ -338,13 +364,13 @@ class _SkeletonSlotState extends State<SkeletonSlot> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_wrapped!) return widget.child;
     final layer = _layer;
-    if (layer == null) return widget.child;
     return SkeletonScope(
-      loading: layer.loading,
+      loading: layer?.loading ?? _loaded,
       skeleton: widget.bones,
       presence: widget.presence,
-      shimmer: layer.shimmer,
+      shimmer: layer?.shimmer,
       child: widget.child,
     );
   }
