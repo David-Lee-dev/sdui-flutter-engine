@@ -87,9 +87,7 @@ final class NodeBuilder {
     PlainDirective node when _parentData.contains(node.type) =>
       PresenceMode.inPlace,
     PlainDirective node =>
-      node.type == 'dismissible' ||
-              WidgetFactory.specFor(node.type)?.produces ==
-                  LayoutProtocol.sliver
+      node.type == 'dismissible' || _sliver(node.type)
           ? null
           : PresenceMode.box,
     ConditionDirective cond => _presenceModeOf([
@@ -100,13 +98,14 @@ final class NodeBuilder {
       for (final branch in sw.cases) branch.branch,
       ?sw.fallback,
     ]),
-    LoopDirective loop =>
-      loop.wrap == 'sliver_list' || loop.wrap == 'sliver_grid'
-          ? null
-          : PresenceMode.box,
+    LoopDirective loop => _sliver(loop.wrap) ? null : PresenceMode.box,
     MorphDirective morph => presenceMode(morph.child),
     ScopeDirective scope => presenceMode(scope.child),
   };
+
+  /// Whether the widget type (or loop wrap of the same name) is a sliver.
+  static bool _sliver(String type) =>
+      WidgetFactory.specFor(type)?.produces == LayoutProtocol.sliver;
 
   static PresenceMode? _presenceModeOf(List<Directive> bodies) {
     var mode = PresenceMode.box;

@@ -136,6 +136,57 @@ void main() {
       },
     );
 
+    testWidgets('a cond over a sliver loop toggles in the same frame', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          {
+            'show': false,
+            'items': _items(['a', 'b']),
+          },
+          _content({
+            '_type': 'custom_scroll_view',
+            '_children': [
+              {
+                '_type': 'cond',
+                '_children': [
+                  {
+                    ..._box(r'${it.id}'),
+                    '_if': r'${show}',
+                    '_loop': {
+                      '_in': r'${items}',
+                      '_as': 'it',
+                      '_key': r'${it.id}',
+                      '_wrap': 'sliver_list',
+                    },
+                  },
+                  {
+                    '_type': 'sliver_to_box_adapter',
+                    '_else': true,
+                    '_child': _box('empty'),
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+
+      _scope(tester).set('show', true);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('empty'), findsNothing);
+      expect(tester.getTopLeft(find.text('b')).dy, 20);
+
+      _scope(tester).set('show', false);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.text('a'), findsNothing);
+      expect(find.text('empty'), findsOneWidget);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+    });
+
     testWidgets('the first build lays out cond bodies and loop items in full', (
       tester,
     ) async {

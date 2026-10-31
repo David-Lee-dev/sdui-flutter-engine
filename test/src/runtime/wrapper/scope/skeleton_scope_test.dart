@@ -93,8 +93,8 @@ void main() {
     });
 
     testWidgets(
-      'shows content at once and never paints the skeleton when loading '
-      'finishes quickly',
+      'swaps from a never-painted skeleton to content when loading '
+      'finishes within the grace',
       (tester) async {
         final loading = ValueNotifier(true);
         addTearDown(loading.dispose);

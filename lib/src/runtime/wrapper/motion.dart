@@ -429,10 +429,10 @@ class _MotionWrapperState extends State<MotionWrapper>
   }
 
   @override
-  void cancelExit() {
+  void cancelExit({bool animate = true}) {
     if (widget.phase == MotionPhase.enter || _off || _reduce) return;
     _generation++;
-    _controller.forward();
+    animate ? _controller.forward() : _controller.value = 1;
   }
 
   @override

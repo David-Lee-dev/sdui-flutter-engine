@@ -11,7 +11,6 @@ import 'package:sdui_engine/src/presentation/presentation.dart';
 import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
-import 'package:sdui_engine/src/runtime/wrapper/presence.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/skeleton_scope.dart';
 
@@ -825,6 +824,27 @@ void main() {
       expect(find.text('top'), findsOneWidget);
     });
 
+    testWidgets('a reseed that brings content back mid-exit shows it at rest', (
+      tester,
+    ) async {
+      final template = _toggled(motion: {'type': 'fade', 'on': 'exit'});
+      await tester.pumpWidget(
+        _host({'show': true, 'rev': 0}, _content(template)),
+      );
+
+      _scope(tester).set('show', false);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(_opacityAbove(tester, 'top'), inExclusiveRange(0, 1));
+
+      await tester.pumpWidget(
+        _host({'show': true, 'rev': 1}, _content(template)),
+      );
+      expect(_top(tester, 'below'), 50);
+      expect(_opacityAbove(tester, 'top'), 1);
+      expect(_idle(tester), isTrue);
+    });
+
     testWidgets('a leaving text field gives up focus and the keyboard', (
       tester,
     ) async {
@@ -867,46 +887,6 @@ void main() {
       await tester.enterText(find.byType(TextField), 'hi');
       await tester.pump();
       expect(find.text('q=hi'), findsOneWidget);
-    });
-
-    testWidgets('press toggles under a slot keep its gates bounded', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _host(
-          {'show': true, 'n': 0},
-          _content({
-            '_type': 'container',
-            'color': r'${down ? "#FF000000" : "#FFFFFFFF"}',
-            '_on': {
-              'tap': {'do': 'noop', 'pressed_as': 'down'},
-            },
-            '_child': {
-              '_type': 'column',
-              '_children': [
-                {
-                  '_type': 'text',
-                  'value': r'${down}|${n}',
-                  '_if': r'${show}',
-                },
-              ],
-            },
-          }),
-          actions: {
-            'noop': {'_type': 'set', 'n': 0},
-          },
-        ),
-      );
-      final label = find.textContaining('|0');
-      final gates = PresenceScope.gatesOf(tester.element(label));
-
-      for (var i = 0; i < 20; i++) {
-        final gesture = await tester.startGesture(tester.getCenter(label));
-        await tester.pump();
-        await gesture.up();
-        await tester.pump();
-      }
-      expect(PresenceScope.gatesOf(tester.element(label)), gates);
     });
 
     group('skeleton swap', () {

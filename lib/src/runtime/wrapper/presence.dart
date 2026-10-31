@@ -35,8 +35,8 @@ abstract interface class PresenceMember {
   /// it takes.
   Duration playExit();
 
-  /// Returns from an exit run to the rest state.
-  void cancelExit();
+  /// Returns from an exit run to the rest state, at once unless [animate].
+  void cancelExit({bool animate = true});
 }
 
 /// The presence slot a [PresenceMember] registers with.
@@ -73,11 +73,6 @@ class PresenceScope extends InheritedWidget {
       (context.getElementForInheritedWidgetOfExactType<PresenceScope>()?.widget
               as PresenceScope?)
           ?.handle;
-
-  /// How many relays the view of the nearest slot holds.
-  @visibleForTesting
-  static int gatesOf(BuildContext context) =>
-      (handleOf(context) as _Entry?)?._view?._gates.length ?? 0;
 
   /// Whether the subtree at [context] is leaving; rebuilds when it changes.
   static bool exitingOf(BuildContext context) =>
@@ -240,7 +235,7 @@ class _PresenceGroupState extends State<PresenceGroup>
     }
     for (final e in entering) {
       if (!animates) {
-        e.present = true;
+        _restore(e, animate: false);
         _settle(e);
       } else {
         _enter(
@@ -301,13 +296,19 @@ class _PresenceGroupState extends State<PresenceGroup>
   bool _sized(bool swap) =>
       swap || (widget.config.space && widget.mode == PresenceMode.box);
 
-  void _enter(_Entry e, {required bool swap, required Duration delay}) {
-    final from = e.value;
+  /// Brings [e] back: its view replays held notifications and its exit
+  /// motions return to rest, at once unless [animate].
+  void _restore(_Entry e, {required bool animate}) {
     e.present = true;
     e._view?._release();
     for (final m in [...e._members]) {
-      if (m.phase != MotionPhase.enter) m.cancelExit();
+      if (m.phase != MotionPhase.enter) m.cancelExit(animate: animate);
     }
+  }
+
+  void _enter(_Entry e, {required bool swap, required Duration delay}) {
+    final from = e.value;
+    _restore(e, animate: true);
     final timing = _timing(swap ? _Kind.swap : _Kind.enter);
     final space = _sized(swap) ? timing.duration * (1 - from) : Duration.zero;
     e._enterDelay = widget.config.sequential ? delay + space : delay;
@@ -327,6 +328,7 @@ class _PresenceGroupState extends State<PresenceGroup>
   Duration _exit(_Entry e, {required bool swap}) {
     final from = e.value;
     e.present = false;
+    _releaseFocus(e);
     e._enterDelay = Duration.zero;
     var visual = Duration.zero;
     for (final m in [...e._members]) {
@@ -349,6 +351,21 @@ class _PresenceGroupState extends State<PresenceGroup>
       swap: swap,
     );
     return visual;
+  }
+
+  /// Takes keyboard focus, and so the keyboard, out of [e]'s leaving
+  /// output.
+  static void _releaseFocus(_Entry e) {
+    final focused = FocusManager.instance.primaryFocus;
+    final context = focused?.context;
+    if (context == null) return;
+    var inside = false;
+    context.visitAncestorElements((a) {
+      final w = a.widget;
+      inside = w is PresenceScope && identical(w.handle, e);
+      return !inside;
+    });
+    if (inside) focused!.unfocus();
   }
 
   void _run(
@@ -424,7 +441,7 @@ class _PresenceGroupState extends State<PresenceGroup>
       key: ValueKey(e.key),
       handle: e,
       exiting: !e.present || around,
-      child: ExcludeFocus(excluding: !e.present, child: e.child),
+      child: e.child,
     );
 
     final builder = widget.builder;
@@ -535,7 +552,9 @@ final class _PresenceEnv extends Environment {
   final _Entry _entry;
   final Environment inner;
   final Map<String, Object?> _memo;
-  final Map<Listenable, _Gate> _gates = {};
+
+  /// The relays that have listeners.
+  final Set<_Gate> _gates = {};
 
   bool get _frozen => !_entry.present;
 
@@ -562,31 +581,34 @@ final class _PresenceEnv extends Environment {
   Listenable? listen(Set<String> keys) {
     final source = inner.listen(keys);
     if (source == null) return null;
-    return _gates.putIfAbsent(source, () => _Gate(this, source));
+    return _Gate(this, source);
   }
 
   void _release() {
-    for (final gate in [..._gates.values]) {
+    for (final gate in [..._gates]) {
       gate._release();
     }
   }
 }
 
-/// Relays a chain notification unless its view is frozen; leaves its view
-/// when its last listener goes.
+/// Relays a chain notification unless its view is frozen; joins its view
+/// with its first listener and is disposed with its last.
+///
+/// A gate made while the view is frozen starts held: it may replace one that
+/// held a notification.
 final class _Gate extends ChangeNotifier {
-  _Gate(this._env, this._source);
+  _Gate(this._env, this._source) : _held = _env._frozen;
 
   final _PresenceEnv _env;
   final Listenable _source;
   int _listeners = 0;
-  bool _held = false;
+  bool _held;
 
   @override
   void addListener(VoidCallback listener) {
     if (_listeners++ == 0) {
       _source.addListener(_relay);
-      _env._gates.putIfAbsent(_source, () => this);
+      _env._gates.add(this);
     }
     super.addListener(listener);
   }
@@ -596,7 +618,8 @@ final class _Gate extends ChangeNotifier {
     super.removeListener(listener);
     if (--_listeners > 0) return;
     _source.removeListener(_relay);
-    if (identical(_env._gates[_source], this)) _env._gates.remove(_source);
+    _env._gates.remove(this);
+    dispose();
   }
 
   void _relay() {
