@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/contract/image_source.dart';
@@ -18,9 +20,12 @@ final class _Play {
 }
 
 final class _FakeController implements SduiModelController {
-  _FakeController({this.fail = false});
+  _FakeController({this.fail = false, this.gate});
 
   final bool fail;
+
+  /// Holds [initialize] open until completed, to observe the loading phase.
+  final Completer<void>? gate;
   @override
   final List<String> clips = const ['Idle', 'Jump', 'Wave'];
   final plays = <_Play>[];
@@ -31,6 +36,7 @@ final class _FakeController implements SduiModelController {
 
   @override
   Future<void> initialize() async {
+    await gate?.future;
     if (fail) throw StateError('load failed');
   }
 
@@ -73,16 +79,17 @@ final class _FakeController implements SduiModelController {
 }
 
 final class _RecordingModelSource extends ModelSource {
-  _RecordingModelSource({this.fail = false});
+  _RecordingModelSource({this.fail = false, this.gate});
 
   final bool fail;
+  final Completer<void>? gate;
   final requests = <ModelRequest>[];
   final controllers = <_FakeController>[];
 
   @override
   Future<SduiModelController> controllerFor(ModelRequest request) async {
     requests.add(request);
-    final controller = _FakeController(fail: fail);
+    final controller = _FakeController(fail: fail, gate: gate);
     controllers.add(controller);
     return controller;
   }
@@ -118,6 +125,9 @@ const _states = {
   'wave': {'clip': 'Wave'},
   'dance': {'clip': 'Dance'},
 };
+
+double _posterOpacity(WidgetTester tester) =>
+    tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity;
 
 Future<void> _pump(
   WidgetTester tester,
@@ -189,12 +199,41 @@ void main() {
 
         expect(source.requests.single.src, 'char.glb');
         expect(find.byKey(const Key('model-view')), findsOneWidget);
-        expect(find.text('poster:char.png'), findsNothing);
+        expect(_posterOpacity(tester), 0);
         expect(sink.calls.map((c) => c.$1), ['ready']);
         final play = source.controllers.single.plays.single;
         expect(play.clip, 'Idle');
         expect(play.loop, isTrue);
         expect(play.crossfade, Duration.zero);
+      });
+
+      testWidgets('로드 중에도 뷰를 poster 아래에 붙여 두고 제스처는 막는다', (tester) async {
+        final gate = Completer<void>();
+        ModelSourceRegistry.install(_RecordingModelSource(gate: gate));
+
+        await _pump(tester, const {
+          'src': 'char.glb',
+          'poster': 'char.png',
+          'height': 100,
+          'interactive': true,
+        });
+        await tester.pump();
+
+        expect(find.byKey(const Key('model-view')), findsOneWidget);
+        expect(_posterOpacity(tester), 1);
+        final ignore = tester.widget<IgnorePointer>(
+          find
+              .ancestor(
+                of: find.byKey(const Key('model-view')),
+                matching: find.byType(IgnorePointer),
+              )
+              .first,
+        );
+        expect(ignore.ignoring, isTrue);
+
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(_posterOpacity(tester), 0);
       });
 
       testWidgets('interactive가 false면 모델 뷰의 제스처를 부모로 넘긴다', (tester) async {

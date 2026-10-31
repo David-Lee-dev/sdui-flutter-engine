@@ -4,7 +4,6 @@ import 'package:flutter/widgets.dart';
 import 'package:sdui_engine/src/contract/model_source.dart';
 
 import '../../../log/engine_log.dart';
-import '../../../media/loading_image.dart';
 import '../../../media/model_source_registry.dart';
 import '../../../util/props_resolver.dart';
 import '../../contract/action_sink.dart';
@@ -218,7 +217,9 @@ class _ModelViewState extends State<_ModelView> {
         await controller.dispose();
         return;
       }
-      _controller = controller;
+      // Mount the view (under the poster) before initialize: a renderer that
+      // loads inside its view, such as a webview, completes from there.
+      setState(() => _controller = controller);
       controller.addListener(_onPlayback);
       await controller.initialize();
       if (!_isCurrent(generation)) return;
@@ -339,15 +340,28 @@ class _ModelViewState extends State<_ModelView> {
           );
     final controller = _controller;
     final ready = _phase == _Phase.ready && controller != null;
-    final content = loadingImageTransition(
-      loaded: ready,
-      placeholder: placeholder,
-      image: ready
-          ? IgnorePointer(
-              ignoring: !widget.interactive,
+    // The view stays mounted from controller creation on — swapping it in on
+    // ready would recreate a platform view — and the poster fades out above.
+    final content = Stack(
+      fit: StackFit.expand,
+      children: [
+        if (controller != null)
+          KeyedSubtree(
+            key: ObjectKey(controller),
+            child: IgnorePointer(
+              ignoring: !(ready && widget.interactive),
               child: controller.buildView(),
-            )
-          : const SizedBox.shrink(),
+            ),
+          ),
+        IgnorePointer(
+          child: AnimatedOpacity(
+            opacity: ready ? 0 : 1,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            child: placeholder,
+          ),
+        ),
+      ],
     );
     final width = widget.width;
     final height = widget.height;

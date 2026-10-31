@@ -37,7 +37,7 @@ final class ModelRequest {
 /// The animation surface the engine's `model` widget drives — the whole
 /// coupling between the engine and whatever renderer the app installs.
 abstract class SduiModelController {
-  /// Loads the model; must complete before [clips] and [buildView] are used.
+  /// Loads the model; must complete before [clips] and [play] are used.
   Future<void> initialize();
 
   /// Animation clip names the loaded model carries (empty for a static model).
@@ -64,6 +64,11 @@ abstract class SduiModelController {
   ModelPlayback get playback;
 
   /// The rendered model surface, unsized — the engine sizes and clips it.
+  ///
+  /// The engine mounts this view as soon as the controller exists, before
+  /// and during [initialize], hidden under the poster — so a renderer that
+  /// loads inside its view (a webview) can complete [initialize] from there.
+  /// It stays mounted across the ready transition.
   Widget buildView();
 
   Future<void> dispose();
