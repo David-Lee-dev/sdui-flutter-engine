@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Behavior change (`_scope._skeleton` too):** a load that finishes inside
+  the 300 ms grace fades the content in again (as in 0.16): the presence swap
+  runs from the never-painted skeleton, whose size the slot leaves for the
+  content's, and the skeleton stays unpainted. `_presence: false` still swaps
+  at once. This reverts the 0.17.0 instant show.
+- **Behavior change:** derived bones (`_skeleton: true`) turn every text,
+  `rich_text`, image and icon into a bone, literal ones included (a static
+  label is a text bone, a static icon a square of its `size`, a static image
+  a box of its literal `width` and `height`). Frames keep their literal
+  props as before. An image without a literal `width` and `height` now fails
+  to compile even when its `src` is literal.
+- A derived input or action box keeps the widget's literal `radius` and
+  `shape`.
+
 ## 0.17.0
 
 - Node `_skeleton` (`_requires: [skeleton_v2]`): a node shows bones while the

@@ -42,7 +42,7 @@ Timers are cancelled on disposal. Updating the lifecycle list cancels old schedu
 
 ## Skeletons
 
-A skeleton shows while a scope's first `mount` actions run. It is held invisible for a 300 ms grace (its space is reserved), then painted with a shimmer. A load that finishes inside the grace shows the content at once; a later one swaps the skeleton for the content as a presence swap (`_presence` on the node tunes it, `false` swaps at once). If the mount actions have not finished after 8 s, the content shows anyway in its current state and a warning is logged; the requests are not cancelled and a late response updates the content in place. `remount`, reseeds and later loads never show the skeleton again.
+A skeleton shows while a scope's first `mount` actions run. It is held invisible for a 300 ms grace (its space is reserved), then painted with a shimmer. When the load finishes the skeleton swaps for the content as a presence swap (`_presence` on the node tunes it, `false` swaps at once): the content fades in while the slot's size goes from the skeleton's to the content's. A load inside the grace swaps the same way, so the content still fades in; the never-painted skeleton stays unpainted. If the mount actions have not finished after 8 s, the content shows anyway in its current state and a warning is logged; the requests are not cancelled and a late response updates the content in place. `remount`, reseeds and later loads never show the skeleton again.
 
 `_scope._skeleton` draws one tree for the whole scope. Since 0.17.0 (`_requires: [skeleton_v2]`) a node may instead carry its own `_skeleton`: the frames around it show at once and only that node shows bones. The nearest enclosing scope with a `mount` hook gates it (a scope without mount hooks passes through; a nested scope with mount hooks gates the node skeletons below it). A node built after the load, or without such a scope, shows its content directly. A scope with both `_scope._skeleton` and node skeletons below fails to compile, and so does a node `_skeleton` on a node with its own mount hooks (use `_scope._skeleton` there).
 
@@ -60,7 +60,7 @@ _children:
       _type: column
       _skeleton: true                     # derive the bones of this column
       _children:
-        - { _type: text, value: 내 적립, style: { font_size: 16 } }
+        - { _type: text, value: 내 적립, style: { font_size: 16 } }   # a text bone too
         - { _type: text, value: '${user.point}', style: { font_size: 28 }, _skeleton: { width: 120 } }
   - _if: '${banner != null}'              # bones while loading, collapses if absent
     _skeleton: { _type: skeleton, height: 72, radius: 14 }
@@ -76,10 +76,10 @@ _children:
 | --- | --- |
 | a map with `_type` | that tree |
 | `true` | derived from the node (below) |
-| `{ width }` | the derived bone of a bound text, image or icon, with that width |
+| `{ width }` | the derived bone of a text, image or icon, with that width |
 | `true` or `{ count, tree }` on a `_loop` node | `count` rows (default 3) of `tree` (default: derived from the row) in a copy of the loop's `_wrap`; lazy and sliver wraps (`list`, `grid`, `sliver_list`, `sliver_grid`) fail to compile, and an interactive wrap (`reorderable`, `dismissible`, `swipe`, `spin_grid`, `auto_scroll`) becomes a plain column (a row with `scroll_direction: horizontal`) keeping only `spacing`, `main_axis_alignment`, `cross_axis_alignment` and `padding` |
 
-Derived bones never read data: frames keep their literal props, every reserved key (`_on`, `_motion`, `_morph`, `_scope`, …) is dropped, and a text, image or icon with literal values stays as it is. A text or `rich_text` with any binding becomes one `skeleton` `of: text` with its literal `style` and `max_lines` (so `'${a}/1000원'` is one bone). A bound `image` becomes a box of its literal `width` and `height` (a circle under `clip_oval`, its literal `radius` otherwise); a bound icon name becomes a square of its `size` (24 by default). An input or action widget (`toggle`, `checkbox`, `text_field`, `slider`, `page_view`, `refresh_indicator`, `dismissible`, `scratch_card`, `video`, …) becomes one box of its literal `width` and `height`, children and all. A bound `color`, `gradient`, `opacity` or `semantics_label` is dropped. Compilation fails, naming the node, for any other bound prop, a bound image or an input or action widget without a literal size, and a nested `_if`, `_loop`, `cond` or `switch` without its own `_skeleton` (whose bones are then used).
+Derived bones never read data: frames (layout, padding, decoration, spacing, alignment) keep their literal props, every reserved key (`_on`, `_motion`, `_morph`, `_scope`, …) is dropped, and every display leaf becomes a bone, literal or bound. A text or `rich_text` becomes one `skeleton` `of: text` with its literal `style` and `max_lines` (so `내 적립` and `'${a}/1000원'` are one bone each). An `image` becomes a box of its literal `width` and `height` (a circle under `clip_oval`, its literal `radius` otherwise); an `icon` becomes a square of its `size` (24 by default). An input or action widget (`toggle`, `checkbox`, `text_field`, `slider`, `page_view`, `refresh_indicator`, `dismissible`, `scratch_card`, `video`, …) becomes one box of its literal `width` and `height`, children and all, keeping a literal `radius` and `shape`. A bound `color`, `gradient`, `opacity` or `semantics_label` is dropped. Compilation fails, naming the node, for any other bound prop, an image or an input or action widget without a literal size, and a nested `_if`, `_loop`, `cond` or `switch` without its own `_skeleton` (whose bones are then used).
 
 A node `_skeleton` sits outside the node's `_if` and `_loop`, so an `_if` that turns out false after the load collapses the bones to nothing. It is a box: it fails to compile on a parent-data node (`expanded`, `flexible`, `positioned`, `positioned_fill`, `spacer`) and in a sliver position; on an app-registered widget it is skipped with a warning. The bones of one scope share one shimmer phase, which runs only while some bones are on stage.
 

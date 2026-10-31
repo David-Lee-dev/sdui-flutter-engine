@@ -192,7 +192,7 @@ void main() {
   });
 
   group('derived bones (_skeleton: true)', () {
-    test('keep frames and static text, one text bone per bound text', () {
+    test('keep frames, one text bone per text, literal or bound', () {
       final bones = _bones(const {
         '_type': 'container',
         'padding': 20,
@@ -228,8 +228,11 @@ void main() {
       final column = bones.children.single as PlainDirective;
       expect(column.props, {'spacing': 8});
       final [label, value] = column.children.cast<PlainDirective>();
-      expect(label.type, 'text');
-      expect(label.props['value'], '내 적립');
+      expect(label.type, 'skeleton');
+      expect(label.props, {
+        'of': 'text',
+        'style': {'font_size': 16},
+      });
       expect(value.type, 'skeleton');
       expect(value.props, {
         'of': 'text',
@@ -239,7 +242,7 @@ void main() {
       expect(value.roots, isEmpty);
     });
 
-    test('turn a bound image into a box bone, a circle in clip_oval', () {
+    test('turn an image into a box bone, a circle in clip_oval', () {
       final bones = _bones(const {
         '_type': 'row',
         '_skeleton': true,
@@ -260,9 +263,15 @@ void main() {
             'height': 60,
             'radius': 12,
           },
+          {
+            '_type': 'image',
+            'src': 'assets/logo.png',
+            'width': 32,
+            'height': 16,
+          },
         ],
       });
-      final [oval, banner] = bones.children.cast<PlainDirective>();
+      final [oval, banner, logo] = bones.children.cast<PlainDirective>();
       expect((oval.children.single as PlainDirective).props, {
         'width': 40,
         'height': 40,
@@ -270,9 +279,11 @@ void main() {
       });
       expect(banner.type, 'skeleton');
       expect(banner.props, {'width': 120, 'height': 60, 'radius': 12});
+      expect(logo.type, 'skeleton');
+      expect(logo.props, {'width': 32, 'height': 16});
     });
 
-    test('turn a bound icon into a square bone of its size', () {
+    test('turn an icon into a square bone of its size', () {
       final bones = _bones(const {
         '_type': 'row',
         '_skeleton': true,
@@ -280,13 +291,17 @@ void main() {
           {'_type': 'icon', 'name': r'${user.icon}'},
           {'_type': 'icon', 'name': r'${user.icon}', 'size': 16},
           {'_type': 'icon', 'name': 'star', 'color': r'${user.c}'},
+          {'_type': 'icon', 'name': 'star', 'size': 20},
         ],
       });
-      final [plain, sized, fixed] = bones.children.cast<PlainDirective>();
+      final [plain, sized, fixed, fixedSized] = bones.children
+          .cast<PlainDirective>();
       expect(plain.props, {'width': 24, 'height': 24});
       expect(sized.props, {'width': 16, 'height': 16});
-      expect(fixed.type, 'icon');
-      expect(fixed.props, {'name': 'star'});
+      expect(fixed.type, 'skeleton');
+      expect(fixed.props, {'width': 24, 'height': 24});
+      expect(fixedSized.type, 'skeleton');
+      expect(fixedSized.props, {'width': 20, 'height': 20});
     });
 
     test('use a nested node _skeleton for that node', () {
@@ -332,16 +347,27 @@ void main() {
       );
     });
 
-    test('refuse a bound image without a literal size', () {
-      expect(
-        () => _bones(const {
-          '_type': 'image',
-          'src': r'${user.a}',
-          'width': 40,
-          '_skeleton': true,
-        }),
-        _fails('literal "width" and "height"'),
-      );
+    test('refuse an image without a literal size', () {
+      for (final src in const [r'${user.a}', 'assets/logo.png']) {
+        expect(
+          () => _bones({
+            '_type': 'image',
+            'src': src,
+            'width': 40,
+            '_skeleton': true,
+          }),
+          _fails('literal "width" and "height"'),
+        );
+      }
+    });
+
+    test('width override applies to a literal text', () {
+      final bone = _bones(const {
+        '_type': 'text',
+        'value': '내 적립',
+        '_skeleton': {'width': 60},
+      });
+      expect(bone.props, {'of': 'text', 'width': 60});
     });
 
     test('refuse nested control flow without its own _skeleton', () {
@@ -415,6 +441,40 @@ void main() {
         expect(bone.props, {'width': width, 'height': height});
         expect(bone.children, isEmpty);
       }
+    });
+
+    test('keep the literal radius and shape of an input or action box', () {
+      final bones = _bones(const {
+        '_type': 'column',
+        '_skeleton': true,
+        '_children': [
+          {
+            '_type': 'text_field',
+            'bind': 'user',
+            'width': 200,
+            'height': 48,
+            'radius': 12,
+          },
+          {
+            '_type': 'checkbox',
+            'bind': 'user',
+            'width': 24,
+            'height': 24,
+            'shape': 'circle',
+          },
+          {
+            '_type': 'toggle',
+            'bind': 'user',
+            'width': 52,
+            'height': 32,
+            'radius': r'${user.r}',
+          },
+        ],
+      });
+      final [field, check, toggle] = bones.children.cast<PlainDirective>();
+      expect(field.props, {'width': 200, 'height': 48, 'radius': 12});
+      expect(check.props, {'width': 24, 'height': 24, 'shape': 'circle'});
+      expect(toggle.props, {'width': 52, 'height': 32});
     });
 
     test('refuse an input or action widget without a literal size', () {

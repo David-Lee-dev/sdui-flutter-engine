@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
@@ -225,21 +226,63 @@ void main() {
       await openAndSettle(tester);
     });
 
-    testWidgets('a load inside the grace shows the content at once', (
-      tester,
-    ) async {
+    /// The layers painting at a partial opacity, as a crossfade does.
+    List<OpacityLayer> partialOpacityLayers(WidgetTester tester) => [
+      for (final layer in tester.layers)
+        if (layer is OpacityLayer && layer.alpha! > 0 && layer.alpha! < 255)
+          layer,
+    ];
+
+    /// Checks a swap from never-painted bones: the content fades in while
+    /// the bones stay unpainted and the slot grows from the bone size to
+    /// the content's.
+    Future<void> expectFadeIn(WidgetTester tester) async {
+      final slot = find.byType(SkeletonScope);
+      await openAndSettle(tester);
+      expect(find.text('ready true'), findsOneWidget);
+      expect(find.byType(ShaderMask), findsOneWidget);
+      expect(bonesShown(), isFalse);
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(partialOpacityLayers(tester), isNotEmpty);
+      final mid = tester.getSize(slot);
+      expect(mid.width, greaterThan(80));
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(ShaderMask), findsNothing);
+      expect(partialOpacityLayers(tester), isEmpty);
+      final end = tester.getSize(slot);
+      expect(end, tester.getSize(find.text('ready true')));
+      expect(mid.width, lessThan(end.width));
+    }
+
+    testWidgets('a load inside the grace fades the content in from the '
+        'unpainted bones', (tester) async {
       await tester.pumpWidget(_app(_section(column([boned(_content)]))));
       await tester.pump(const Duration(milliseconds: 100));
 
-      await openAndSettle(tester);
-      expect(find.text('ready true'), findsOneWidget);
-      expect(find.byType(ShaderMask), findsNothing);
-      expect(find.byType(FadeTransition), findsNothing);
+      await expectFadeIn(tester);
     });
 
-    testWidgets('a legacy _scope._skeleton load inside the grace shows the '
-        'content at once', (tester) async {
+    testWidgets('a legacy _scope._skeleton load inside the grace fades the '
+        'content in from the unpainted bones', (tester) async {
       await tester.pumpWidget(_app(_section(_content, skeleton: bone)));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await expectFadeIn(tester);
+    });
+
+    testWidgets('_presence: false shows a load inside the grace at once', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _app(
+          _section(
+            column([
+              {..._content, '_skeleton': bone, '_presence': false},
+            ]),
+          ),
+        ),
+      );
       await tester.pump(const Duration(milliseconds: 100));
 
       await openAndSettle(tester);

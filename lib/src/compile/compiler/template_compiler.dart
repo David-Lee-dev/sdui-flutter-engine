@@ -1198,7 +1198,7 @@ final class TemplateCompiler {
         throw InvalidTemplateException(
           node.path,
           '"_skeleton": {"width"} applies only to a node that becomes one '
-          'bone (a bound text, image or icon).',
+          'bone (a text, image or icon).',
         );
       }
       return UiNode(
@@ -1302,12 +1302,12 @@ final class TemplateCompiler {
   }
 
   /// Derives the bones of [node] without reading data: frames keep their
-  /// literal props, a bound text, image or icon becomes one `skeleton`, an
-  /// input or action widget becomes one box, and every reserved key is
-  /// dropped.
+  /// literal props, every text, image or icon (literal or bound) becomes one
+  /// `skeleton`, an input or action widget becomes one box, and every
+  /// reserved key is dropped.
   ///
-  /// Nothing is guessed: a bound prop that is not paint-only, a bound image
-  /// or an input or action widget without a literal size, and control flow
+  /// Nothing is guessed: a bound prop that is not paint-only, an image or
+  /// an input or action widget without a literal size, and control flow
   /// without its own `_skeleton` fail.
   static UiNode _deriveBones(UiNode node, {bool inOval = false}) {
     if (node.type == _condType || node.type == _switchType) {
@@ -1331,12 +1331,16 @@ final class TemplateCompiler {
       }
       return UiNode(
         type: 'skeleton',
-        props: {'width': width, 'height': height},
+        props: {
+          'width': width,
+          'height': height,
+          for (final key in const ['radius', 'shape'])
+            if (!_isBound(node.props[key])) key: ?node.props[key],
+        },
         path: node.path,
       );
     }
-    final bound = _isBound(node.props);
-    if (bound && (node.type == 'text' || node.type == 'rich_text')) {
+    if (node.type == 'text' || node.type == 'rich_text') {
       return UiNode(
         type: 'skeleton',
         props: {
@@ -1349,14 +1353,13 @@ final class TemplateCompiler {
         path: node.path,
       );
     }
-    if (bound && node.type == 'image') {
+    if (node.type == 'image') {
       final width = node.props['width'];
       final height = node.props['height'];
       if (width == null || height == null || _isBound([width, height])) {
         throw InvalidTemplateException(
           node.path,
-          'a bound "image" needs a literal "width" and "height" for its '
-          'bone.',
+          'an "image" needs a literal "width" and "height" for its bone.',
         );
       }
       return UiNode(
@@ -1372,7 +1375,7 @@ final class TemplateCompiler {
         path: node.path,
       );
     }
-    if (node.type == 'icon' && _isBound(node.props['name'])) {
+    if (node.type == 'icon') {
       final size = _literalProps({
         'size': node.props['size'] ?? 24,
       }, node.path)['size'];

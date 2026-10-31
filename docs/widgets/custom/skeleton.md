@@ -54,6 +54,7 @@ _on:
 ## Pitfalls & related
 
 - A text bone (`of: text`) without `width` fills the parent's width, or takes 80 px when the width is unbounded, and draws `max_lines` lines. A frame that sizes to its content, or a text that wraps to more or fewer lines, can then change size when the content replaces the bone; set `width` on the bone and `max_lines` on the text it stands for.
+- A derived `_skeleton: true` turns every text, image and icon into a bone, literal or bound, and keeps only the frames around them; see [Lifecycle](../../lifecycle.md).
 - Use only the documented positional child form; `_slots` are rejected for this specification kind.
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).

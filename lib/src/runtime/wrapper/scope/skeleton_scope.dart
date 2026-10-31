@@ -16,8 +16,9 @@ enum _Phase { holding, showing, done }
 /// reserving space so slower sibling scopes cannot reflow shared layouts. When
 /// the load finishes the slot swaps the skeleton for the content as a
 /// presence swap ([presence]): the size goes from the skeleton's to the
-/// content's while one crossfades into the other. A content already loaded at
-/// mount, or loaded inside the grace, shows at once.
+/// content's while one crossfades into the other. A load inside the grace
+/// swaps the same way from the never-painted skeleton, so the content fades
+/// in. A content already loaded at mount shows at once.
 class SkeletonScope extends StatefulWidget {
   const SkeletonScope({
     super.key,
@@ -69,9 +70,6 @@ class _SkeletonScopeState extends State<SkeletonScope> {
   void _handleLoading() {
     if (widget.loading.value || _phase == _Phase.done) return;
     _graceTimer?.cancel();
-    // Bones never painted: the content takes the slot at once instead of
-    // animating from the reserved size.
-    if (_phase == _Phase.holding) PresenceGroup.settleFrame(context);
     setState(() => _phase = _Phase.done);
   }
 
