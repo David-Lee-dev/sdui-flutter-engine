@@ -108,9 +108,9 @@ class _MotionWrapperState extends State<MotionWrapper>
   /// mount so the child's subtree is never reparented.
   late final bool _isolate;
 
-  /// The presence slot this layer registered with, if any.
+  /// The presence slot this layer registered with, if any; it changes when
+  /// the layer moves to another slot.
   PresenceHandle? _presence;
-  bool _registered = false;
 
   static const _restPlan = MotionPlan(duration: Duration.zero);
 
@@ -157,9 +157,10 @@ class _MotionWrapperState extends State<MotionWrapper>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_registered) {
-      _registered = true;
-      _presence = PresenceScope.handleOf(context)?..add(this);
+    final presence = PresenceScope.handleOf(context);
+    if (!identical(presence, _presence)) {
+      _presence?.remove(this);
+      _presence = presence?..add(this);
     }
     _reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     if (_reduce) {
