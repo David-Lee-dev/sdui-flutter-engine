@@ -88,8 +88,31 @@ enum ParentDataOutput {
 /// parent data.
 typedef PassesChild = bool Function(Map<String, Object?> props);
 
-/// The built-in `container`, which passes its single child through.
-bool containerPassesChild(Map<String, Object?> props) => true;
+/// The built-in `container` props each of which makes Flutter's `Container`
+/// build a widget between itself and its child (`Align`, `Padding`,
+/// `ColoredBox`, `DecoratedBox`, `ConstrainedBox`, `Transform`, ...).
+/// `container_widget_test.dart` checks this against every prop the builder
+/// reads.
+const Set<String> containerWrapperProps = {
+  'decoration',
+  'width',
+  'height',
+  'padding',
+  'margin',
+  'alignment',
+  'constraints',
+  'color',
+  'foreground_decoration',
+  'transform',
+};
+
+/// The built-in `container`: Flutter's `Container` returns its child itself
+/// when none of [containerWrapperProps] is set and it does not clip. A bound
+/// value may resolve to anything, so only an absent or literal `null` prop
+/// (and an absent or literal `none` clip) passes the child through.
+bool containerPassesChild(Map<String, Object?> props) =>
+    containerWrapperProps.every((prop) => props[prop] == null) &&
+    (props['clip_behavior'] ?? 'none') == 'none';
 
 /// The built-in `visibility`: Flutter's `Visibility` returns its child itself
 /// unless it maintains state or size. A bound flag may turn on, so only an

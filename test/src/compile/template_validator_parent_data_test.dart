@@ -101,6 +101,90 @@ void main() {
         _rejected,
       );
     });
+
+    test('indexed_stack > positioned', () {
+      expect(() => _validate(_parent('indexed_stack', _positioned)), _rejected);
+    });
+
+    test('indexed_stack > positioned_fill', () {
+      expect(
+        () => _validate(
+          _parent('indexed_stack', {
+            '_type': 'positioned_fill',
+            '_child': _text,
+          }),
+        ),
+        _rejected,
+      );
+    });
+  });
+
+  group('자식과의 사이에 위젯을 넣는 container 는 parent data 를 넘기지 않는다', () {
+    for (final props in <Map<String, Object?>>[
+      {'padding': 8},
+      {'margin': 8},
+      {'color': '#ff0000'},
+      {'width': 10},
+      {'height': 10},
+      {'alignment': 'center'},
+      {
+        'constraints': {'max_width': 100},
+      },
+      {
+        'decoration': {'color': '#00ff00'},
+      },
+      {
+        'foreground_decoration': {'color': '#80000000'},
+      },
+      {
+        'transform': {
+          'scale': [-1, 1],
+        },
+      },
+      {
+        'decoration': {'color': '#00ff00'},
+        'clip_behavior': 'hard_edge',
+      },
+      {'padding': r'${items}'},
+      {'clip_behavior': r'${items}'},
+    ]) {
+      test('column > container($props) > expanded', () {
+        expect(
+          () => _validate(
+            _parent('column', {
+              '_type': 'container',
+              ...props,
+              '_child': _expanded,
+            }),
+          ),
+          _rejected,
+        );
+      });
+
+      test('stack > container($props) > positioned', () {
+        expect(
+          () => _validate(
+            _parent('stack', {
+              '_type': 'container',
+              ...props,
+              '_child': _positioned,
+            }),
+          ),
+          _rejected,
+        );
+      });
+    }
+
+    test('clip_behavior: none 과 transform_alignment 만 있으면 넘긴다', () {
+      _validate(
+        _parent('column', {
+          '_type': 'container',
+          'clip_behavior': 'none',
+          'transform_alignment': 'center',
+          '_child': _expanded,
+        }),
+      );
+    });
   });
 
   group('부모가 받는 parent data 의 자식은 허용', () {
@@ -113,10 +197,6 @@ void main() {
       'flex > spacer': _parent('flex', {'_type': 'spacer'}),
       'serpentine_row > expanded': _parent('serpentine_row', _expanded),
       'stack > positioned': _parent('stack', _positioned),
-      'indexed_stack > positioned_fill': _parent('indexed_stack', {
-        '_type': 'positioned_fill',
-        '_child': _text,
-      }),
       'column > 내장 container > expanded': _parent('column', {
         '_type': 'container',
         '_child': _expanded,

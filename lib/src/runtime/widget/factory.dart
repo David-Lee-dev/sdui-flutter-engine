@@ -205,10 +205,7 @@ final class WidgetFactory {
     'sized_overflow_box': EagerSpec(SizedOverflowBoxWidget.build),
     'transform': EagerSpec(TransformWidget.build),
     'baseline': EagerSpec(BaselineWidget.build),
-    'indexed_stack': EagerSpec(
-      IndexedStackWidget.build,
-      childParentData: ParentDataKind.stack,
-    ),
+    'indexed_stack': EagerSpec(IndexedStackWidget.build),
     'flex': EagerSpec(FlexWidget.build, childParentData: ParentDataKind.flex),
     'list_body': EagerSpec(ListBodyWidget.build),
     'overflow_bar': EagerSpec(OverflowBarWidget.build),

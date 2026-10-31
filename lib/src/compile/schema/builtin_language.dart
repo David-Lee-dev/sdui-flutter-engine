@@ -59,7 +59,7 @@ abstract final class BuiltinLanguage {
   'ignore_pointer': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'image': WidgetSchema(kind: WidgetKind.slot, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'image_filtered': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
-  'indexed_stack': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box, childParentData: ParentDataKind.stack),
+  'indexed_stack': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'layout_builder': WidgetSchema(kind: WidgetKind.builder, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'interactive_viewer': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'intrinsic_height': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),

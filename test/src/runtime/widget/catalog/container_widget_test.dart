@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/runtime/util/adaptive_radius.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/primitive/container_widget.dart';
@@ -179,6 +180,77 @@ void main() {
             .transform!
             .getTranslation();
         expect([t.x, t.y], [16, -8]);
+      });
+    });
+
+    group('containerPassesChild 는 builder 가 자식을 그대로 돌려줄 때만 참이다', () {
+      const cases = <(String, Object?)>[
+        ('decoration', {'color': '#00ff00'}),
+        ('width', 10),
+        ('height', 10),
+        ('padding', 8),
+        ('margin', 8),
+        ('alignment', 'center'),
+        ('constraints', {'max_width': 100}),
+        ('color', '#ff0000'),
+        ('foreground_decoration', {'color': '#80000000'}),
+        (
+          'transform',
+          {
+            'scale': [-1, 1],
+          },
+        ),
+        ('transform_alignment', 'center'),
+        ('clip_behavior', 'none'),
+        ('clip_behavior', 'hard_edge'),
+      ];
+
+      Future<void> pumpInColumn(
+        WidgetTester tester,
+        Map<String, Object?> props,
+      ) => tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: EngineMetrics(
+            scale: 1,
+            child: Column(
+              children: [
+                Builder(
+                  builder: (context) => ContainerWidget.build(context, props, [
+                    const Expanded(child: SizedBox()),
+                  ]),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      testWidgets('사례가 builder 가 읽는 prop 을 모두 다룬다', (tester) async {
+        final props = _RecordingMap({});
+        await pumpInColumn(tester, props);
+        expect(props.reads, {for (final (prop, _) in cases) prop});
+      });
+
+      testWidgets('prop 이 없으면 넘기고 column > container > expanded 가 놓인다', (
+        tester,
+      ) async {
+        await pumpInColumn(tester, const {});
+        expect(tester.takeException(), isNull);
+        expect(containerPassesChild(const {}), isTrue);
+      });
+
+      for (final (prop, value) in cases) {
+        testWidgets('$prop: $value', (tester) async {
+          await pumpInColumn(tester, {prop: value});
+          final wraps = tester.takeException() != null;
+          expect(containerPassesChild({prop: value}), !wraps);
+        });
+      }
+
+      test('바인딩된 값은 넘기지 않는다', () {
+        expect(containerPassesChild(const {'padding': r'${p}'}), isFalse);
+        expect(containerPassesChild(const {'clip_behavior': r'${c}'}), isFalse);
       });
     });
   });

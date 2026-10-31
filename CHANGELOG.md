@@ -43,16 +43,22 @@
   place (under the same name) does not.
 - `WidgetSpec.childParentData` (a `ParentDataKind`, default `none`): the
   parent data a widget takes on its children. The built-in `column`, `row`,
-  `flex` and `serpentine_row` take `flex`; `stack` and `indexed_stack` take
-  `stack`; every other widget takes none. A `_loop` item takes what the
-  widget its `_wrap` names (`column`, `row`, `wrap`, `serpentine`,
-  `serpentine_row`, `auto_scroll`) takes; the other strategies take none.
+  `flex` and `serpentine_row` take `flex`; `stack` takes `stack`; every
+  other widget takes none (`indexed_stack` included: Flutter's
+  `IndexedStack` puts a widget between itself and each child). A `_loop`
+  item takes what the widget its `_wrap` names (`column`, `row`, `wrap`,
+  `serpentine`, `serpentine_row`, `auto_scroll`) takes; the other
+  strategies take none.
 - Only the built-in `container` and `visibility` hand a single child's
-  parent data to their parent: `container` always, `visibility` only when
-  `maintain_state` and `maintain_size` are absent or literal `false` (a
-  bound value counts as on). An app widget registered under either name is
-  an ordinary node of its declared kind: `_motion`, `_on` and `_skeleton`
-  on it are checked against its own declaration, not its child's.
+  parent data to their parent: `container` only when it is bare (none of
+  `decoration`, `width`, `height`, `padding`, `margin`, `alignment`,
+  `constraints`, `color`, `foreground_decoration` or `transform` is set
+  and `clip_behavior` is absent or `none`; a bound value counts as set),
+  `visibility` only when `maintain_state` and `maintain_size` are absent or
+  literal `false` (a bound value counts as on). An app widget registered
+  under either name is an ordinary node of its declared kind: `_motion`,
+  `_on` and `_skeleton` on it are checked against its own declaration, not
+  its child's.
 - **New compile errors:** `_motion` or `_on` on an app widget declared as
   parent data (a replaced built-in included), or on a bare `container`
   around parent data, at any depth (put it on a node inside); `_skeleton` on
@@ -64,11 +70,12 @@
   now checked like other nodes except for bindings and action names.
 - **New compile errors:** a parent-data node whose parent does not take its
   kind: `expanded` / `flexible` / `spacer` outside a flex, `positioned` /
-  `positioned_fill` outside a stack, at the template root or in a slot,
-  under a `visibility` that maintains state or size, and in a `_loop`
-  whose `_wrap` takes none (`list`, ...). These crashed at mount time with
-  "Incorrect use of ParentDataWidget". A `cond` or `switch` is checked per
-  branch, and a scope, morph or skeleton is transparent.
+  `positioned_fill` outside a stack (`indexed_stack` included), at the
+  template root or in a slot, under a styled `container` (`padding`,
+  `color`, ...) or a `visibility` that maintains state or size, and in a
+  `_loop` whose `_wrap` takes none (`list`, ...). These crashed at mount
+  time with "Incorrect use of ParentDataWidget". A `cond` or `switch` is
+  checked per branch, and a scope, morph or skeleton is transparent.
 - **Behavior change:** an app widget that declares no `childParentData`
   takes none, so an `expanded`, `positioned`, ... child under it is now a
   compile error, also when the app widget replaces a built-in such as

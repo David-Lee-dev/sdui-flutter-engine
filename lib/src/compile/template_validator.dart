@@ -337,7 +337,7 @@ final class TemplateValidator {
     if (carried == ParentDataKind.none || carried == accepts) return;
     final place = switch (carried) {
       ParentDataKind.flex => 'row/column/flex',
-      ParentDataKind.stack => 'stack/indexed_stack',
+      ParentDataKind.stack => 'stack',
       ParentDataKind.none => '',
     };
     throw InvalidTemplateException(
