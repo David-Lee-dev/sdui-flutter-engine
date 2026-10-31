@@ -8,6 +8,7 @@ import '../../../media/model_source_registry.dart';
 import '../../../util/props_resolver.dart';
 import '../../contract/action_sink.dart';
 import '../primitive/image_widget.dart';
+import 'model_camera_rig.dart';
 
 /// `model` — Renders a policy-backed 3D model driven by a state → clip table.
 ///
@@ -33,8 +34,10 @@ import '../primitive/image_widget.dart';
 /// - `state_key` (`any`, default `null`) — re-enters `state` whenever this value changes, so the same state can replay (e.g. bind a tap counter).
 /// - `states` (`map`, default `{}`) — state name → `{ clip, loop, next }`. `clip` names an animation in the model; `loop` (default `false`) repeats it; `next` is the state entered when a non-looping clip ends.
 /// - `crossfade_ms` (`integer`, default `200`) — blend time between clips in milliseconds.
-/// - `interactive` (`flag`, default `false`) — lets the view handle camera gestures; when false, gestures pass through to ancestors.
-/// - `auto_rotate` (`flag`, default `false`) — slowly orbits the camera.
+/// - `controls` (`map`, default `null`) — how gestures move the camera: `{ rotate, pitch, zoom, sensitivity, inertia, return_ms }`. `rotate` is none | horizontal | vertical | free (default free); `pitch` is `[min, max]` degrees (default `[-60, 60]`); `zoom` is `[min, max]` pinch magnification (no pinch when absent); `sensitivity` multiplies half a degree per pixel (default 1); `inertia` keeps a fling turning (default true); `return_ms` eases back to `camera` after release (stays put when absent). Without it, gestures pass through to ancestors.
+/// - `interactive` (`flag`, default `false`) — shorthand for `controls: { rotate: free }` when `controls` is absent.
+/// - `camera` (`map`, default `{}`) — the resting camera `{ yaw, pitch, zoom, duration_ms }`: degrees around (0 = front, positive toward the model's right), degrees above the horizon, magnification (1 frames the whole model); changes ease over `duration_ms` (default 300).
+/// - `auto_rotate` (`number` or `flag`, default `0`) — degrees per second the camera orbits on its own (`true` is 30); pauses while the user drags.
 /// - `on_state_end` (`map`, default `{}`) — state name → action dispatched when that state's non-looping clip ends.
 /// - `on_ready` (`text`, default `null`) — action dispatched once the model is ready for the current `src`.
 /// - `on_error` (`text`, default `null`) — action dispatched once if the model fails to load for the current `src`.
@@ -59,6 +62,7 @@ final class ModelWidget {
     if ((src == null || src.isEmpty) && (poster == null || poster.isEmpty)) {
       return const SizedBox.shrink();
     }
+    final (camera, cameraDuration) = parseModelCamera(props['camera']);
     return _ModelView(
       src: src == null || src.isEmpty ? null : src,
       poster: poster == null || poster.isEmpty ? null : poster,
@@ -72,8 +76,13 @@ final class ModelWidget {
       crossfade: Duration(
         milliseconds: PropsResolver.integer(props['crossfade_ms']) ?? 200,
       ),
-      interactive: PropsResolver.flag(props['interactive']) ?? false,
-      autoRotate: PropsResolver.flag(props['auto_rotate']) ?? false,
+      controls: ModelControls.parse(
+        props['controls'],
+        interactive: PropsResolver.flag(props['interactive']) ?? false,
+      ),
+      camera: camera,
+      cameraDuration: cameraDuration,
+      autoRotate: parseAutoRotate(props['auto_rotate']),
       onStateEnd: _actionsOf(props['on_state_end']),
       onReady: PropsResolver.text(props['on_ready']),
       onError: PropsResolver.text(props['on_error']),
@@ -135,7 +144,9 @@ class _ModelView extends StatefulWidget {
     required this.stateKey,
     required this.states,
     required this.crossfade,
-    required this.interactive,
+    required this.controls,
+    required this.camera,
+    required this.cameraDuration,
     required this.autoRotate,
     required this.onStateEnd,
     required this.onReady,
@@ -153,8 +164,10 @@ class _ModelView extends StatefulWidget {
   final Object? stateKey;
   final Map<String, _ModelStateEntry> states;
   final Duration crossfade;
-  final bool interactive;
-  final bool autoRotate;
+  final ModelControls controls;
+  final ModelCamera camera;
+  final Duration cameraDuration;
+  final double autoRotate;
   final Map<String, String> onStateEnd;
   final String? onReady;
   final String? onError;
@@ -164,8 +177,10 @@ class _ModelView extends StatefulWidget {
   State<_ModelView> createState() => _ModelViewState();
 }
 
-class _ModelViewState extends State<_ModelView> {
+class _ModelViewState extends State<_ModelView>
+    with SingleTickerProviderStateMixin {
   SduiModelController? _controller;
+  late final ModelCameraRig _rig;
   _Phase _phase = _Phase.loading;
   int _generation = 0;
 
@@ -181,6 +196,13 @@ class _ModelViewState extends State<_ModelView> {
   @override
   void initState() {
     super.initState();
+    _rig = ModelCameraRig(
+      vsync: this,
+      rest: widget.camera,
+      controls: widget.controls,
+      autoRotate: widget.autoRotate,
+      onChanged: (camera) => _controller?.setCamera(camera),
+    );
     _load();
   }
 
@@ -206,17 +228,12 @@ class _ModelViewState extends State<_ModelView> {
 
   Future<void> _create(ModelSource source, String src, int generation) async {
     try {
-      final controller = await source.controllerFor(
-        ModelRequest(
-          src: src,
-          interactive: widget.interactive,
-          autoRotate: widget.autoRotate,
-        ),
-      );
+      final controller = await source.controllerFor(ModelRequest(src: src));
       if (!_isCurrent(generation)) {
         await controller.dispose();
         return;
       }
+      controller.setCamera(_rig.camera);
       // Mount the view (under the poster) before initialize: a renderer that
       // loads inside its view, such as a webview, completes from there.
       setState(() => _controller = controller);
@@ -297,9 +314,14 @@ class _ModelViewState extends State<_ModelView> {
   @override
   void didUpdateWidget(_ModelView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.src != widget.src ||
-        oldWidget.interactive != widget.interactive ||
+    if (oldWidget.controls != widget.controls ||
         oldWidget.autoRotate != widget.autoRotate) {
+      _rig.update(controls: widget.controls, autoRotate: widget.autoRotate);
+    }
+    if (oldWidget.camera != widget.camera) {
+      _rig.setRest(widget.camera, widget.cameraDuration);
+    }
+    if (oldWidget.src != widget.src) {
       _load();
       return;
     }
@@ -324,6 +346,7 @@ class _ModelViewState extends State<_ModelView> {
   @override
   void dispose() {
     _disposeController();
+    _rig.dispose();
     super.dispose();
   }
 
@@ -342,16 +365,15 @@ class _ModelViewState extends State<_ModelView> {
     final ready = _phase == _Phase.ready && controller != null;
     // The view stays mounted from controller creation on — swapping it in on
     // ready would recreate a platform view — and the poster fades out above.
-    final content = Stack(
+    // It never takes pointers: gestures go to the rig, which moves the camera
+    // the same way for every renderer.
+    final view = Stack(
       fit: StackFit.expand,
       children: [
         if (controller != null)
           KeyedSubtree(
             key: ObjectKey(controller),
-            child: IgnorePointer(
-              ignoring: !(ready && widget.interactive),
-              child: controller.buildView(),
-            ),
+            child: IgnorePointer(child: controller.buildView()),
           ),
         IgnorePointer(
           child: AnimatedOpacity(
@@ -362,6 +384,12 @@ class _ModelViewState extends State<_ModelView> {
           ),
         ),
       ],
+    );
+    final content = ModelGestureLayer(
+      rig: _rig,
+      controls: widget.controls,
+      enabled: ready,
+      child: view,
     );
     final width = widget.width;
     final height = widget.height;

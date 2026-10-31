@@ -180,6 +180,10 @@ final class WebModelController implements SduiModelController {
   List<String> _clips = const [];
   ModelPlayback _playback = const ModelPlayback();
   bool _disposed = false;
+  ModelCamera _camera = const ModelCamera();
+  bool _pageReady = false;
+  bool _placing = false;
+  bool _placeAgain = false;
 
   @override
   Future<void> initialize() => _ready.future.timeout(_source.loadTimeout);
@@ -215,6 +219,37 @@ final class WebModelController implements SduiModelController {
   }
 
   @override
+  void setCamera(ModelCamera camera) {
+    _camera = camera;
+    unawaited(_place());
+  }
+
+  /// Sends [_camera] to the page. Calls arrive every frame while the camera
+  /// moves; while one is crossing the bridge, later ones collapse into a
+  /// single follow-up with the latest camera.
+  Future<void> _place() async {
+    final web = _web;
+    if (web == null || !_pageReady || _disposed) return;
+    if (_placing) {
+      _placeAgain = true;
+      return;
+    }
+    _placing = true;
+    try {
+      do {
+        _placeAgain = false;
+        final camera = _camera;
+        final zoom = camera.zoom > 0 ? camera.zoom : 1;
+        await web.evaluateJavascript(
+          source: 'sduiCamera(${camera.yaw}, ${camera.pitch}, $zoom)',
+        );
+      } while (_placeAgain && !_disposed);
+    } finally {
+      _placing = false;
+    }
+  }
+
+  @override
   void addListener(VoidCallback listener) => _listeners.add(listener);
 
   @override
@@ -227,15 +262,7 @@ final class WebModelController implements SduiModelController {
 
   Widget _webView() => InAppWebView(
     initialUrlRequest: URLRequest(
-      url: WebUri(
-        _source.page
-            .pageUrl(
-              src: _request.src,
-              interactive: _request.interactive,
-              autoRotate: _request.autoRotate,
-            )
-            .toString(),
-      ),
+      url: WebUri(_source.page.pageUrl(src: _request.src).toString()),
     ),
     initialSettings: _source.settings(),
     onWebViewCreated: _attach,
@@ -282,6 +309,8 @@ final class WebModelController implements SduiModelController {
         _clips = clips is List
             ? List.unmodifiable(clips.whereType<String>())
             : const [];
+        _pageReady = true;
+        unawaited(_place());
         _mark('ready');
         debugPrint('[sdui_model_viewer] ${stats.summary()}, clips: $_clips');
         if (!_ready.isCompleted) _ready.complete();

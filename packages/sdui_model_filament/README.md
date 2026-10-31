@@ -16,9 +16,9 @@ Sdui.initialize(
 
 - Renders natively into a Flutter `Texture` (Metal on iOS), so the view clips,
   transforms, fades and screenshots like any widget.
-- `interactive: true` rotates the model on a horizontal drag through Flutter's
-  gesture arena: a vertical drag still scrolls the page. `auto_rotate` spins
-  it from a Flutter ticker.
+- The engine owns gestures and auto-rotation (`camera`, `controls`,
+  `auto_rotate`); `setCamera` orbits Filament's camera around the model,
+  collapsing per-frame calls while one is in flight.
 - Model bytes come from `ModelBytesCache` (`sdui_model_support`): `src`
   resolution and prefetch match `sdui_model_viewer`.
 - Clips play with `crossfade`; Filament reports no end event, so a

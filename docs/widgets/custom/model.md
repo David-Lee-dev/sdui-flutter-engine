@@ -16,8 +16,10 @@ Renders a policy-backed 3D model driven by a state → clip table.
 | `state_key` | any | — | `null` | Yes | re-enters `state` whenever this value changes, so the same state can replay (e.g. bind a tap counter). |
 | `states` | map | — | `{}` | Yes | state name → `{ clip, loop, next }`. `clip` names an animation in the model; `loop` (default `false`) repeats it; `next` is the state entered when a non-looping clip ends. |
 | `crossfade_ms` | `integer` | — | `200` | Yes | blend time between clips in milliseconds. The first clip after a load starts without a blend. |
-| `interactive` | `flag` | — | `false` | Yes | lets the view handle camera gestures (orbit, zoom); when false, gestures pass through to ancestors. |
-| `auto_rotate` | `flag` | — | `false` | Yes | slowly orbits the camera. |
+| `controls` | map | — | `null` | Yes | how gestures move the camera; see [Camera and gestures](#camera-and-gestures). Without it, gestures pass through to ancestors. |
+| `interactive` | `flag` | — | `false` | Yes | shorthand for `controls: { rotate: free }` when `controls` is absent. |
+| `camera` | map | — | `{}` | Yes | the resting camera `{ yaw, pitch, zoom, duration_ms }`; see [Camera and gestures](#camera-and-gestures). |
+| `auto_rotate` | `number` or `flag` | — | `0` | Yes | degrees per second the camera orbits on its own; `true` is 30. Pauses while the user drags. |
 | `on_state_end` | map | — | `{}` | Yes | state name → action dispatched when that state's non-looping clip ends. The event payload is `{ state }`. |
 | `on_ready` | `text` | — | `null` | Yes | action dispatched once the model is ready for the current `src`. |
 | `on_error` | `text` | — | `null` | Yes | action dispatched once if the model fails to load for the current `src`. |
@@ -33,12 +35,41 @@ This widget produces the **box** layout protocol and takes no children. See [Con
 
 The engine ships no renderer. The app installs one through `Sdui.initialize(modelSource: ...)` — a webview `<model-viewer>`, Filament, SceneKit, or anything that implements `ModelSource`:
 
-- `ModelSource.controllerFor(ModelRequest(src, interactive, autoRotate))` returns an unloaded `SduiModelController`.
+- `ModelSource.controllerFor(ModelRequest(src))` returns an unloaded `SduiModelController`.
 - The widget calls `initialize()`, reads `clips`, and drives `play(clip, loop:, crossfade:)`.
+- The widget calls `setCamera(ModelCamera(yaw, pitch, zoom))` right after creation and on every frame the camera moves. The renderer's view never receives pointers; the engine handles gestures, so every renderer moves the same way for the same template.
 - A non-looping clip holds its last frame and advances `ModelPlayback.completions`; the engine detects a clip end by that counter.
 - `ModelSource.warmUp()` runs once in the background after boot, so a renderer can do its expensive first-time setup (such as creating a webview) before the first `model` mounts.
 
-Without an installed source, `model` renders `poster` only. A `src` or `interactive`/`auto_rotate` change disposes and replaces the controller; a `state` change reuses it.
+Without an installed source, `model` renders `poster` only. A `src` change disposes and replaces the controller; `state`, `camera`, `controls` and `auto_rotate` changes reuse it.
+
+## Camera and gestures
+
+The camera orbits the model's centre. The engine computes it each frame from the resting `camera`, accumulated `auto_rotate`, and the user's gesture offset, and hands it to the renderer.
+
+`camera`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `yaw` | `0` | degrees around the vertical axis; 0 faces the model's front, positive moves the camera toward the model's right. |
+| `pitch` | `0` | degrees above the horizon; positive looks down on the model. |
+| `zoom` | `1` | magnification; 1 frames the whole model, 2 is twice as close. |
+| `duration_ms` | `300` | how long a change to `camera` takes to ease in. |
+
+Bind `camera` to state to turn the model from an action, e.g. `camera: { yaw: '${facing}' }` with a `set` that changes `facing`.
+
+`controls`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `rotate` | `free` | `none`, `horizontal`, `vertical` or `free`: which drag axes turn the camera. |
+| `pitch` | `[-60, 60]` | pitch limits in degrees for vertical dragging. |
+| `zoom` | none | `[min, max]` pinch magnification; without it pinch is off. |
+| `sensitivity` | `1` | multiplies the base rate of half a degree per logical pixel. |
+| `inertia` | `true` | a fling keeps the camera turning and slowing down. |
+| `return_ms` | none | after release, ease back to `camera` over this many milliseconds; without it the camera stays where it was left. |
+
+Gestures go through Flutter's gesture arena. `rotate: horizontal` claims only horizontal drags, so an enclosing scroll view still scrolls vertically over the model. `free`, `vertical` and any `zoom` claim drags in their directions over the model, so use them where the model is not inside a scroll view in that direction. Taps are never claimed, so `_on: tap` on the model or an ancestor still fires.
 
 ## Animation never blocks a flow
 
@@ -78,10 +109,21 @@ _on:
 
 `state_key: '${taps}'` lets every tap replay `jump`, even while `mood` already is `jump`.
 
+A model in a scrolling feed that turns sideways, springs back, and spins slowly:
+
+```yaml
+_type: model
+src: /assets/egg.glb
+height: 200
+camera: { pitch: 15 }
+controls: { rotate: horizontal, return_ms: 400 }
+auto_rotate: 20
+```
+
 ## Pitfalls & related
 
 - Keep one or two models per screen: renderer views are heavy, and webview-backed renderers cost memory per instance.
-- With `interactive: true` the view consumes drags, so it fights a parent scroll view; keep it false inside scrollables.
+- Inside a vertical scroll view, use `controls: { rotate: horizontal }` so vertical drags keep scrolling.
 - Keep `poster` the same framing as the model's first frame so the swap from poster to model is not noticeable.
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
 - See [Media](../../media.md) for the image and video policies, and return to the [widget catalog](../README.md).

@@ -7,9 +7,15 @@
   `state` (or `state_key`, to replay the same state) plays that clip with a
   `crossfade_ms` blend, `next` follows a finished non-looping clip, and
   `on_state_end` dispatches per state. `poster` shows until the model is
-  ready and replaces it on failure. `interactive: false` (default) passes
-  gestures to ancestors. See docs/widgets/custom/model.md.
-- Added the `ModelSource` / `SduiModelController` contract and the optional
+  ready and replaces it on failure. The engine owns the camera: `camera`
+  (yaw, pitch, zoom, eased changes), `controls` (rotate axes, pitch limits,
+  pinch zoom, sensitivity, inertia, `return_ms`), `auto_rotate` (degrees per
+  second) and the `interactive` shorthand turn into one `ModelCamera` per
+  frame, so every renderer moves the same way. Without `controls`, gestures
+  pass to ancestors. See docs/widgets/custom/model.md.
+- Added the `ModelSource` / `SduiModelController` / `ModelCamera` contract
+  (renderers implement `setCamera`; their views never take pointers) and the
+  optional
   `Sdui.initialize(modelSource:)` / `Engine.initialize(modelSource:)` seam.
   The package ships no renderer; without a source `model` renders its
   poster, and non-looping states end at once so flows never wait on

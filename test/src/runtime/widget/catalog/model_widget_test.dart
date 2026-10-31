@@ -29,6 +29,7 @@ final class _FakeController implements SduiModelController {
   @override
   final List<String> clips = const ['Idle', 'Jump', 'Wave'];
   final plays = <_Play>[];
+  final cameras = <ModelCamera>[];
   final _listeners = <VoidCallback>[];
   bool disposed = false;
   String? _clip;
@@ -60,6 +61,9 @@ final class _FakeController implements SduiModelController {
 
   @override
   Future<void> stop() async {}
+
+  @override
+  void setCamera(ModelCamera camera) => cameras.add(camera);
 
   @override
   void addListener(VoidCallback listener) => _listeners.add(listener);
@@ -236,12 +240,18 @@ void main() {
         expect(_posterOpacity(tester), 0);
       });
 
-      testWidgets('interactive가 false면 모델 뷰의 제스처를 부모로 넘긴다', (tester) async {
-        ModelSourceRegistry.install(_RecordingModelSource());
+      testWidgets('렌더러 뷰는 포인터를 받지 않고 요청에는 src만 싣는다', (tester) async {
+        final source = _RecordingModelSource();
+        ModelSourceRegistry.install(source);
 
-        await _pump(tester, const {'src': 'char.glb', 'height': 100});
+        await _pump(tester, const {
+          'src': 'char.glb',
+          'height': 100,
+          'interactive': true,
+        });
         await tester.pumpAndSettle();
 
+        expect(source.requests.single.src, 'char.glb');
         final ignore = tester.widget<IgnorePointer>(
           find
               .ancestor(
@@ -251,31 +261,6 @@ void main() {
               .first,
         );
         expect(ignore.ignoring, isTrue);
-      });
-
-      testWidgets('interactive와 auto_rotate를 요청에 실어 보낸다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
-
-        await _pump(tester, const {
-          'src': 'char.glb',
-          'height': 100,
-          'interactive': true,
-          'auto_rotate': true,
-        });
-        await tester.pumpAndSettle();
-
-        expect(source.requests.single.interactive, isTrue);
-        expect(source.requests.single.autoRotate, isTrue);
-        final ignore = tester.widget<IgnorePointer>(
-          find
-              .ancestor(
-                of: find.byKey(const Key('model-view')),
-                matching: find.byType(IgnorePointer),
-              )
-              .first,
-        );
-        expect(ignore.ignoring, isFalse);
       });
     });
 
@@ -452,6 +437,239 @@ void main() {
         expect(source.controllers.single.clips, isNot(contains('Dance')));
         expect(source.controllers.single.plays, isEmpty);
         expect(sink.calls.map((c) => c.$1), ['danced']);
+      });
+    });
+
+    group('camera', () {
+      ModelCamera last(_RecordingModelSource source) =>
+          source.controllers.single.cameras.last;
+
+      Future<_RecordingModelSource> ready(
+        WidgetTester tester,
+        Map<String, Object?> props, {
+        bool settle = true,
+      }) async {
+        final source = _RecordingModelSource();
+        ModelSourceRegistry.install(source);
+        await _pump(tester, {
+          'src': 'char.glb',
+          'width': 200,
+          'height': 200,
+          ...props,
+        });
+        if (settle) {
+          await tester.pumpAndSettle();
+        } else {
+          await tester.pump();
+        }
+        return source;
+      }
+
+      final view = find.byKey(const Key('model-view'));
+
+      testWidgets('만들자마자 camera를 보낸다 (없으면 정면, 배율 1)', (tester) async {
+        final plain = await ready(tester, const {});
+        expect(plain.controllers.single.cameras.first, const ModelCamera());
+
+        await tester.pumpWidget(const SizedBox());
+        final framed = await ready(tester, const {
+          'camera': {'yaw': 30, 'pitch': 15, 'zoom': 1.2},
+        });
+        expect(
+          framed.controllers.single.cameras.first,
+          const ModelCamera(yaw: 30, pitch: 15, zoom: 1.2),
+        );
+      });
+
+      testWidgets('controls가 없으면 드래그해도 카메라가 그대로다', (tester) async {
+        final source = await ready(tester, const {});
+
+        await tester.drag(view, const Offset(100, 50));
+        await tester.pumpAndSettle();
+
+        expect(last(source), const ModelCamera());
+      });
+
+      testWidgets('horizontal은 가로 드래그로 돌고 세로 드래그는 부모 스크롤로 간다', (tester) async {
+        final source = _RecordingModelSource();
+        ModelSourceRegistry.install(source);
+        final scroll = ScrollController();
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: ListView(
+              controller: scroll,
+              children: [
+                Builder(
+                  builder: (context) => ModelWidget.build(
+                    context,
+                    const {
+                      'src': 'char.glb',
+                      'height': 200,
+                      'controls': {'rotate': 'horizontal', 'inertia': false},
+                    },
+                    const [],
+                    null,
+                  ),
+                ),
+                const SizedBox(height: 2000),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.drag(view, const Offset(100, 0));
+        await tester.pumpAndSettle();
+        final turned = last(source);
+        // Dragging right turns the front to the right: the camera moves left.
+        expect(turned.yaw, lessThan(-30));
+        expect(turned.pitch, 0);
+
+        await tester.drag(view, const Offset(0, -100));
+        await tester.pumpAndSettle();
+        expect(scroll.offset, greaterThan(0));
+        expect(last(source), turned);
+      });
+
+      testWidgets('free는 세로 드래그로 기울고 pitch 범위에서 멈춘다', (tester) async {
+        final source = await ready(tester, const {
+          'controls': {
+            'rotate': 'free',
+            'pitch': [-10, 20],
+            'inertia': false,
+          },
+        });
+
+        await tester.drag(view, const Offset(0, 30));
+        await tester.pumpAndSettle();
+        expect(last(source).pitch, greaterThan(0));
+
+        await tester.drag(view, const Offset(0, 400));
+        await tester.pumpAndSettle();
+        expect(last(source).pitch, 20);
+
+        await tester.drag(view, const Offset(0, -800));
+        await tester.pumpAndSettle();
+        expect(last(source).pitch, -10);
+      });
+
+      testWidgets('interactive: true는 free 회전의 줄임말이다', (tester) async {
+        final source = await ready(tester, const {'interactive': true});
+
+        await tester.drag(view, const Offset(60, 60));
+        await tester.pumpAndSettle();
+
+        expect(last(source).yaw, lessThan(0));
+        expect(last(source).pitch, greaterThan(0));
+      });
+
+      testWidgets('return_ms가 있으면 놓은 뒤 camera로 돌아온다', (tester) async {
+        final source = await ready(tester, const {
+          'camera': {'yaw': 10},
+          'controls': {'rotate': 'horizontal', 'return_ms': 300},
+        });
+
+        await tester.drag(view, const Offset(100, 0));
+        await tester.pump();
+        expect(last(source).yaw, lessThan(0));
+
+        await tester.pumpAndSettle();
+        expect(last(source).yaw, 10);
+      });
+
+      testWidgets('inertia면 던진 뒤에도 잠시 더 돌고, 끄면 바로 멈춘다', (tester) async {
+        final coasting = await ready(tester, const {
+          'controls': {'rotate': 'horizontal'},
+        });
+        await tester.fling(view, const Offset(100, 0), 1000);
+        await tester.pump();
+        final released = last(coasting).yaw;
+        await tester.pumpAndSettle();
+        expect(last(coasting).yaw, lessThan(released));
+
+        await tester.pumpWidget(const SizedBox());
+        final stopped = await ready(tester, const {
+          'controls': {'rotate': 'horizontal', 'inertia': false},
+        });
+        await tester.fling(view, const Offset(100, 0), 1000);
+        await tester.pump();
+        final atRelease = last(stopped).yaw;
+        await tester.pumpAndSettle();
+        expect(last(stopped).yaw, atRelease);
+      });
+
+      testWidgets('zoom 범위 안에서 핀치로 확대한다', (tester) async {
+        final source = await ready(tester, const {
+          'controls': {
+            'rotate': 'free',
+            'zoom': [0.5, 2],
+            'inertia': false,
+          },
+        });
+        final center = tester.getCenter(view);
+
+        final a = await tester.startGesture(center - const Offset(20, 0));
+        final b = await tester.startGesture(
+          center + const Offset(20, 0),
+          pointer: 2,
+        );
+        await tester.pump();
+        await a.moveBy(const Offset(-40, 0));
+        await b.moveBy(const Offset(40, 0));
+        await tester.pump();
+        await a.moveBy(const Offset(-200, 0));
+        await b.moveBy(const Offset(200, 0));
+        await tester.pump();
+        await a.up();
+        await b.up();
+        await tester.pumpAndSettle();
+
+        expect(last(source).zoom, 2);
+      });
+
+      testWidgets('auto_rotate는 초당 그 각도만큼 돈다 (true는 30)', (tester) async {
+        // A running auto-rotation never settles.
+        final source = await ready(tester, const {
+          'auto_rotate': 90,
+        }, settle: false);
+        await tester.pump(const Duration(milliseconds: 100));
+        final start = last(source).yaw;
+
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(last(source).yaw - start, closeTo(90, 2));
+        await tester.pumpWidget(const SizedBox());
+
+        final flagged = await ready(tester, const {
+          'auto_rotate': true,
+        }, settle: false);
+        await tester.pump(const Duration(milliseconds: 100));
+        final from = last(flagged).yaw;
+        await tester.pump(const Duration(seconds: 1));
+        expect(last(flagged).yaw - from, closeTo(30, 2));
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('camera가 바뀌면 duration_ms 동안 옮겨 간다', (tester) async {
+        final source = await ready(tester, const {
+          'camera': {'yaw': 0, 'duration_ms': 400},
+        });
+
+        await _pump(tester, const {
+          'src': 'char.glb',
+          'width': 200,
+          'height': 200,
+          'camera': {'yaw': 90, 'duration_ms': 400},
+        });
+        await tester.pump(const Duration(milliseconds: 200));
+        final halfway = last(source).yaw;
+        expect(halfway, greaterThan(0));
+        expect(halfway, lessThan(90));
+
+        await tester.pumpAndSettle();
+        expect(last(source).yaw, 90);
       });
     });
 

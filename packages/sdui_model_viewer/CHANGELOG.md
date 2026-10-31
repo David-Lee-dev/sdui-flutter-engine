@@ -11,3 +11,5 @@
   painting it with app RSS and frame times for measurement.
 - `ModelBytesCache` and the measurement types move to `sdui_model_support`
   (re-exported here).
+- The page has no camera controls of its own: `setCamera` sets
+  `<model-viewer>`'s `cameraOrbit`, and the engine handles gestures.

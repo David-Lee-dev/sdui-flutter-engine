@@ -7,12 +7,11 @@ void main() {
   // The Filament engine is native; these cover the Dart surface the `model`
   // widget sees before a viewer exists.
   Future<FilamentModelController> controller({
-    bool interactive = false,
     bool debugOverlay = false,
   }) async =>
       await FilamentModelSource(
             debugOverlay: debugOverlay,
-          ).controllerFor(ModelRequest(src: '/a.glb', interactive: interactive))
+          ).controllerFor(const ModelRequest(src: '/a.glb'))
           as FilamentModelController;
 
   testWidgets('뷰어가 생기기 전에도 뷰를 그린다', (tester) async {
@@ -28,31 +27,16 @@ void main() {
     await model.dispose();
   });
 
-  testWidgets('interactive면 가로 드래그만 잡아 세로 스크롤은 부모로 간다', (tester) async {
-    final model = await controller(interactive: true);
-    var scrolled = 0.0;
+  testWidgets('뷰는 제스처를 잡지 않고, 로드 전 카메라 변경은 보관만 한다', (tester) async {
+    final model = await controller();
 
     await tester.pumpWidget(
-      Directionality(
-        textDirection: TextDirection.ltr,
-        child: NotificationListener<ScrollUpdateNotification>(
-          onNotification: (n) {
-            scrolled += n.scrollDelta ?? 0;
-            return false;
-          },
-          child: ListView(
-            children: [
-              SizedBox(height: 200, child: model.buildView()),
-              const SizedBox(height: 2000),
-            ],
-          ),
-        ),
-      ),
+      SizedBox(width: 300, height: 200, child: model.buildView()),
     );
+    model.setCamera(const ModelCamera(yaw: 45, pitch: 10, zoom: 1.5));
+    await tester.pump();
 
-    expect(find.byType(GestureDetector), findsWidgets);
-    await tester.drag(find.byType(SizedBox).first, const Offset(0, -100));
-    expect(scrolled, greaterThan(0));
+    expect(find.byType(GestureDetector), findsNothing);
     await model.dispose();
   });
 

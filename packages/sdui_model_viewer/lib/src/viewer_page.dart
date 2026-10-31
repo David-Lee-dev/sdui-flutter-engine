@@ -29,19 +29,8 @@ final class ViewerPage {
       'packages/sdui_model_viewer/assets/model-viewer-umd.min.js';
 
   /// The page URL that renders [src].
-  Uri pageUrl({
-    required String src,
-    bool interactive = false,
-    bool autoRotate = false,
-  }) => origin
-      .resolve('index.html')
-      .replace(
-        queryParameters: {
-          'src': src,
-          if (interactive) 'interactive': '1',
-          if (autoRotate) 'rotate': '1',
-        },
-      );
+  Uri pageUrl({required String src}) =>
+      origin.resolve('index.html').replace(queryParameters: {'src': src});
 
   /// Loads the bundled viewer script once.
   Future<Uint8List> script() => _script ??= () async {
@@ -79,7 +68,9 @@ final class ViewerPage {
 /// The viewer page: one full-bleed transparent `<model-viewer>` configured
 /// from the query string, bridged to Dart through `flutter_inappwebview`
 /// handlers (`sduiReady`, `sduiError`, `sduiFinished`, `sduiPlaying`) and
-/// driven by `sduiPlay(clip, loop, crossfadeMs)` / `sduiStop()`.
+/// driven by `sduiPlay(clip, loop, crossfadeMs)`, `sduiStop()` and
+/// `sduiCamera(yaw, pitch, zoom)`. The page has no camera controls of its
+/// own: the engine handles gestures and places the camera.
 @visibleForTesting
 const viewerHtml = '''<!doctype html>
 <html>
@@ -93,12 +84,11 @@ const viewerHtml = '''<!doctype html>
 <script src="model-viewer.js"></script>
 </head>
 <body>
-<model-viewer id="m" interaction-prompt="none" shadow-intensity="1" exposure="1"></model-viewer>
+<model-viewer id="m" interaction-prompt="none" shadow-intensity="1" exposure="1"
+  min-camera-orbit="auto 0deg 1%" max-camera-orbit="auto 180deg 10000%"></model-viewer>
 <script>
   const m = document.getElementById('m');
   const q = new URLSearchParams(location.search);
-  if (q.get('interactive') === '1') m.setAttribute('camera-controls', '');
-  if (q.get('rotate') === '1') m.setAttribute('auto-rotate', '');
   const send = (name, ...args) => window.flutter_inappwebview.callHandler(name, ...args);
   m.addEventListener('load', () => send('sduiReady', m.availableAnimations));
   m.addEventListener('error', (e) => send('sduiError', String((e.detail && e.detail.type) || 'error')));
@@ -111,6 +101,11 @@ const viewerHtml = '''<!doctype html>
     m.play({ repetitions: loop ? Infinity : 1, pingpong: false });
   };
   window.sduiStop = () => m.pause();
+  // 105% is model-viewer's framed radius; zoom divides it.
+  window.sduiCamera = (yaw, pitch, zoom) => {
+    m.cameraOrbit = yaw + 'deg ' + (90 - pitch) + 'deg ' + (105 / zoom) + '%';
+    m.jumpCameraToGoal();
+  };
   const start = () => {
     const src = q.get('src');
     if (src) m.src = 'model?src=' + encodeURIComponent(src);
