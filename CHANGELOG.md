@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0
 
 - Node `_skeleton` (`_requires: [skeleton_v2]`): a node shows bones while the
   nearest enclosing scope with a `mount` hook loads, and the frames around it
