@@ -16,17 +16,19 @@ void main() {
   DriverRegistry.ensureRegistered();
 
   group('BuiltinLanguage parity', () {
-    test('widget schemas: same types, same kind and protocols', () {
+    test('widget schemas: same types, same kind, protocols and parent data', () {
       final runtime = <String, String>{};
       for (final type in WidgetFactory.types()) {
         final schema = WidgetFactory.schemaOf(type)!;
         runtime[type] =
-            '${schema.kind.name}/${schema.produces.name}/${schema.childProtocol?.name}';
+            '${schema.kind.name}/${schema.produces.name}/${schema.childProtocol?.name}'
+            '/${schema.parentData.name}/${schema.childParentData.name}';
       }
       final declared = BuiltinLanguage.widgets.map(
         (type, schema) => MapEntry(
           type,
-          '${schema.kind.name}/${schema.produces.name}/${schema.childProtocol?.name}',
+          '${schema.kind.name}/${schema.produces.name}/${schema.childProtocol?.name}'
+          '/${schema.parentData.name}/${schema.childParentData.name}',
         ),
       );
       expect(runtime, declared);

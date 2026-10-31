@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
 import 'package:sdui_engine/src/compile/template_validator.dart';
@@ -105,7 +106,7 @@ void main() {
         'app_flex',
         EagerSpec(
           (context, props, children) => const Expanded(child: Text('app')),
-          parentData: true,
+          parentData: ParentDataKind.flex,
         ),
       );
       final root = TemplateCompiler.buildRoot(

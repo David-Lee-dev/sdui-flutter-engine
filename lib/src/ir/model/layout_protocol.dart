@@ -49,6 +49,25 @@ LayoutProtocol? _bodiesProduce(
   return first;
 }
 
+/// The parent data a widget's output carries, and the parent data a parent
+/// takes on its children: a child carrying [flex] belongs directly in a
+/// flex (`Expanded`, `Flexible`, `Spacer`), one carrying [stack] directly
+/// in a stack (`Positioned`).
+enum ParentDataKind { none, flex, stack }
+
+/// The registered widget a `_loop._wrap` strategy lays its items in, whose
+/// accepted parent data the items get; `null` for a strategy that lays them
+/// in a widget of its own, which takes none.
+String? loopWrapWidget(String wrap) => switch (wrap) {
+  'column' ||
+  'row' ||
+  'wrap' ||
+  'serpentine' ||
+  'serpentine_row' ||
+  'auto_scroll' => wrap,
+  _ => null,
+};
+
 /// What parent data a widget or directive builds, for the wrappers the
 /// engine puts around it.
 enum ParentDataOutput {
@@ -64,14 +83,31 @@ enum ParentDataOutput {
   opaque,
 }
 
+/// Decides from a node's compiled props whether its widget passes its single
+/// child through: it builds no render object of its own around that child's
+/// parent data.
+typedef PassesChild = bool Function(Map<String, Object?> props);
+
+/// The built-in `container`, which passes its single child through.
+bool containerPassesChild(Map<String, Object?> props) => true;
+
+/// The built-in `visibility`: Flutter's `Visibility` returns its child itself
+/// unless it maintains state or size. A bound flag may turn on, so only an
+/// absent or literal `false` one passes the child through.
+bool visibilityPassesChild(Map<String, Object?> props) =>
+    _off(props['maintain_state']) && _off(props['maintain_size']);
+
+bool _off(Object? flag) => flag == null || flag == false;
+
 /// The child [node] hands to its parent, when its widget type passes its
-/// single child through ([passesChild]): it builds no render object of its
-/// own around that child's parent data.
+/// single child through by [passesChild] (`null`: never).
 Directive? passThrough(
   PlainDirective node,
-  bool Function(String type) passesChild,
+  PassesChild? Function(String type) passesChild,
 ) => switch (node) {
-  PlainDirective(children: [final child]) when passesChild(node.type) => child,
+  PlainDirective(children: [final child])
+      when passesChild(node.type)?.call(node.props) ?? false =>
+    child,
   _ => null,
 };
 
@@ -83,7 +119,7 @@ Directive? passThrough(
 ParentDataOutput parentDataOf(
   Directive directive,
   ParentDataOutput Function(String type) widget,
-  bool Function(String type) passesChild,
+  PassesChild? Function(String type) passesChild,
 ) => switch (directive) {
   PlainDirective node => switch (passThrough(node, passesChild)) {
     final child?
@@ -115,7 +151,7 @@ ParentDataOutput parentDataOf(
 ParentDataOutput _bodiesParentData(
   List<Directive> bodies,
   ParentDataOutput Function(String type) widget,
-  bool Function(String type) passesChild,
+  PassesChild? Function(String type) passesChild,
 ) {
   var output = ParentDataOutput.none;
   for (final body in bodies) {

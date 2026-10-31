@@ -65,7 +65,7 @@ export 'src/presentation/typography.dart' show SduiTypography;
 export 'src/compile/schema/builtin_language.dart' show BuiltinLanguage;
 export 'src/compile/schema/language_catalog.dart' show LanguageCatalog;
 export 'src/compile/schema/widget_schema.dart' show WidgetSchema, WidgetKind;
-export 'src/ir/model/layout_protocol.dart' show LayoutProtocol;
+export 'src/ir/model/layout_protocol.dart' show LayoutProtocol, ParentDataKind;
 export 'src/ir/model/page_transition.dart'
     show PageTransitionContentTiming, PageTransitionSpec;
 export 'src/runtime/widget/contract/action_sink.dart'

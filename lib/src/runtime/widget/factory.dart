@@ -130,17 +130,32 @@ final class WidgetFactory {
     'anchor_scope': EagerSpec(AnchorScopeWidget.build),
     'text': EagerSpec(TextWidget.build),
     'rich_text': EagerSpec(RichTextWidget.build),
-    'container': _container,
-    'column': EagerSpec(ColumnWidget.build),
-    'row': EagerSpec(RowWidget.build),
+    'container': EagerSpec(ContainerWidget.build),
+    'column': EagerSpec(
+      ColumnWidget.build,
+      childParentData: ParentDataKind.flex,
+    ),
+    'row': EagerSpec(RowWidget.build, childParentData: ParentDataKind.flex),
     'sizedbox': EagerSpec(SizedBoxWidget.build),
     'padding': EagerSpec(PaddingWidget.build),
     'center': EagerSpec(CenterWidget.build),
     'align': EagerSpec(AlignWidget.build),
-    'stack': EagerSpec(StackWidget.build),
-    'positioned': EagerSpec(PositionedWidget.build, parentData: true),
-    'expanded': EagerSpec(ExpandedWidget.build, parentData: true),
-    'flexible': EagerSpec(FlexibleWidget.build, parentData: true),
+    'stack': EagerSpec(
+      StackWidget.build,
+      childParentData: ParentDataKind.stack,
+    ),
+    'positioned': EagerSpec(
+      PositionedWidget.build,
+      parentData: ParentDataKind.stack,
+    ),
+    'expanded': EagerSpec(
+      ExpandedWidget.build,
+      parentData: ParentDataKind.flex,
+    ),
+    'flexible': EagerSpec(
+      FlexibleWidget.build,
+      parentData: ParentDataKind.flex,
+    ),
     'absorb_pointer': EagerSpec(AbsorbPointerWidget.build),
     'backdrop_filter': EagerSpec(BackdropFilterWidget.build),
     'badge': EagerSpec(BadgeWidget.build),
@@ -152,7 +167,7 @@ final class WidgetFactory {
     'tooltip': EagerSpec(TooltipWidget.build),
     'unconstrained_box': EagerSpec(UnconstrainedBoxWidget.build),
     'wrap': EagerSpec(WrapWidget.build),
-    'spacer': EagerSpec(SpacerWidget.build, parentData: true),
+    'spacer': EagerSpec(SpacerWidget.build, parentData: ParentDataKind.flex),
     'aspect_ratio': EagerSpec(AspectRatioWidget.build),
     'clip_rrect': EagerSpec(ClipRRectWidget.build),
     'clip_rect': EagerSpec(ClipRectWidget.build),
@@ -160,7 +175,10 @@ final class WidgetFactory {
     'decorated_box': EagerSpec(DecoratedBoxWidget.build),
     'speech_balloon': EagerSpec(SpeechBalloonWidget.build),
     'serpentine': EagerSpec(SerpentineWidget.build),
-    'serpentine_row': EagerSpec(SerpentineRowWidget.build),
+    'serpentine_row': EagerSpec(
+      SerpentineRowWidget.build,
+      childParentData: ParentDataKind.flex,
+    ),
     'shape': EagerSpec(ShapeWidget.build),
     'semantics': EagerSpec(SemanticsWidget.build),
     'spin_grid': ActionSpec(SpinGridWidget.build),
@@ -169,7 +187,10 @@ final class WidgetFactory {
     'skeleton': EagerSpec(SkeletonWidget.build),
     'rotated_box': EagerSpec(RotatedBoxWidget.build),
     'visibility': EagerSpec(VisibilityWidget.build),
-    'positioned_fill': EagerSpec(PositionedFillWidget.build, parentData: true),
+    'positioned_fill': EagerSpec(
+      PositionedFillWidget.build,
+      parentData: ParentDataKind.stack,
+    ),
     'image': SlotSpec(ImageWidget.build),
     'icon': EagerSpec(IconWidget.build),
     'interactive_viewer': EagerSpec(InteractiveViewerWidget.build),
@@ -184,8 +205,11 @@ final class WidgetFactory {
     'sized_overflow_box': EagerSpec(SizedOverflowBoxWidget.build),
     'transform': EagerSpec(TransformWidget.build),
     'baseline': EagerSpec(BaselineWidget.build),
-    'indexed_stack': EagerSpec(IndexedStackWidget.build),
-    'flex': EagerSpec(FlexWidget.build),
+    'indexed_stack': EagerSpec(
+      IndexedStackWidget.build,
+      childParentData: ParentDataKind.stack,
+    ),
+    'flex': EagerSpec(FlexWidget.build, childParentData: ParentDataKind.flex),
     'list_body': EagerSpec(ListBodyWidget.build),
     'overflow_bar': EagerSpec(OverflowBarWidget.build),
     'safe_area': EagerSpec(SafeAreaWidget.build),
@@ -267,10 +291,6 @@ final class WidgetFactory {
     'layout_builder': BuilderSpec(LayoutBuilderWidget.build),
   };
 
-  /// The engine's own `container`, which with a single child hands that
-  /// child's parent data to its parent.
-  static const WidgetSpec _container = EagerSpec(ContainerWidget.build);
-
   static final Map<String, WidgetSpec> _specs = _buildSpecs();
 
   static Map<String, WidgetSpec> _buildSpecs() {
@@ -294,16 +314,26 @@ final class WidgetFactory {
 
   /// The schema of [spec] registered as [type]. Only the engine's own
   /// parent-data builders let the engine decorate their child, and only its
-  /// own `container` passes its child through; an app implementation, a
-  /// replacement included, does neither.
-  static WidgetSchema _schemaOf(String type, WidgetSpec spec) => WidgetSchema(
-    kind: _kindOf(spec),
-    produces: spec.produces,
-    childProtocol: spec.childProtocol,
-    parentData: spec.parentData,
-    decoratesChild: spec.parentData && identical(spec, _builtins[type]),
-    passesChild: identical(spec, _container),
-  );
+  /// own pass-through builders pass their child through; an app
+  /// implementation, a replacement included, does neither.
+  static WidgetSchema _schemaOf(String type, WidgetSpec spec) {
+    final builtin = identical(spec, _builtins[type]);
+    return WidgetSchema(
+      kind: _kindOf(spec),
+      produces: spec.produces,
+      childProtocol: spec.childProtocol,
+      parentData: spec.parentData,
+      childParentData: spec.childParentData,
+      decoratesChild: spec.parentData != ParentDataKind.none && builtin,
+      passesChild: builtin ? _passesChild[type] : null,
+    );
+  }
+
+  /// The engine's own builders that pass their single child through.
+  static const Map<String, PassesChild> _passesChild = {
+    'container': containerPassesChild,
+    'visibility': visibilityPassesChild,
+  };
 
   static WidgetKind _kindOf(WidgetSpec spec) => switch (spec) {
     EagerSpec() => WidgetKind.eager,

@@ -73,23 +73,31 @@ final class TemplateValidator {
     LanguageCatalog? catalog,
   }) {
     // Root data is writable through the root scope. An engine root is mounted
-    // under a box parent, so a bare sliver is structurally invalid.
-    TemplateValidator._(
-      catalog ?? LanguageCatalog.fromRegistries(),
-    )._walk(root, declared, declared, const {}, LayoutProtocol.box);
+    // under a box parent that takes no parent data, so a bare sliver or
+    // parent-data root is structurally invalid.
+    TemplateValidator._(catalog ?? LanguageCatalog.fromRegistries())._walk(
+      root,
+      declared,
+      declared,
+      const {},
+      LayoutProtocol.box,
+      ParentDataKind.none,
+    );
   }
 
   /// Validates one directive within its lexical environment.
   ///
   /// [declared] controls reads, [writable] controls direct bindings, [actions]
-  /// contains visible named actions, and [expected] is the parent's required
-  /// layout protocol. Frame variables are readable but not writable.
+  /// contains visible named actions, [expected] is the parent's required
+  /// layout protocol and [accepts] the parent data it takes on its children.
+  /// Frame variables are readable but not writable.
   void _walk(
     Directive directive,
     Set<String> declared,
     Set<String> writable,
     Set<String> actions,
     LayoutProtocol? expected,
+    ParentDataKind accepts,
   ) {
     switch (directive) {
       case PlainDirective node:
@@ -103,6 +111,7 @@ final class TemplateValidator {
         }
         // The produced render protocol must satisfy the parent contract.
         _checkProtocol(node.path, '"${node.type}"', schema.produces, expected);
+        _checkParentData(node.path, node.type, schema.parentData, accepts);
         _checkChildShape(schema, node);
         // Bound inputs write directly, so their keys must be validated before a
         // user interaction can throw outside node isolation.
@@ -138,13 +147,31 @@ final class TemplateValidator {
             : {...ownDeclared, ...node.provides};
         // A null child protocol permits widgets with mixed child protocols.
         final childExpected = schema.childProtocol;
+        // A node passing its child through hands it its own parent's place.
+        final childAccepts = passThrough(node, _passesChild) == null
+            ? schema.childParentData
+            : accepts;
         final intrinsic = _intrinsicTypes.contains(node.type);
         if (intrinsic) _intrinsicDepth++;
         for (final child in node.children) {
-          _walk(child, childDeclared, writable, actions, childExpected);
+          _walk(
+            child,
+            childDeclared,
+            writable,
+            actions,
+            childExpected,
+            childAccepts,
+          );
         }
         for (final slot in node.slots.values) {
-          _walk(slot, childDeclared, writable, actions, childExpected);
+          _walk(
+            slot,
+            childDeclared,
+            writable,
+            actions,
+            childExpected,
+            childAccepts,
+          );
         }
         if (intrinsic) _intrinsicDepth--;
       case ConditionDirective cond:
@@ -152,21 +179,21 @@ final class TemplateValidator {
         // possible rendered branch.
         _check(cond.roots, declared, cond.path);
         for (final branch in cond.branches) {
-          _walk(branch.body, declared, writable, actions, expected);
+          _walk(branch.body, declared, writable, actions, expected, accepts);
         }
         final fallback = cond.fallback;
         if (fallback != null) {
-          _walk(fallback, declared, writable, actions, expected);
+          _walk(fallback, declared, writable, actions, expected, accepts);
         }
         _checkBodiesAgree(cond.path, cond);
       case SwitchDirective sw:
         _check(sw.roots, declared, sw.path);
         for (final branch in sw.cases) {
-          _walk(branch.branch, declared, writable, actions, expected);
+          _walk(branch.branch, declared, writable, actions, expected, accepts);
         }
         final fallback = sw.fallback;
         if (fallback != null) {
-          _walk(fallback, declared, writable, actions, expected);
+          _walk(fallback, declared, writable, actions, expected, accepts);
         }
         _checkBodiesAgree(sw.path, sw);
       case LoopDirective loop:
@@ -179,7 +206,8 @@ final class TemplateValidator {
           );
         }
         // The container must match its parent; repeated items always use the box
-        // protocol inside the selected container.
+        // protocol inside the selected container, and take the parent data of
+        // the widget it lays them in.
         _checkProtocol(
           loop.path,
           '_loop._wrap "${loop.wrap}"',
@@ -188,12 +216,14 @@ final class TemplateValidator {
         );
         _check(loop.roots, declared, loop.path);
         // Loop frame variables are readable only within the repeated child.
+        final wrapWidget = loopWrapWidget(loop.wrap);
         _walk(
           loop.child,
           {...declared, loop.as, loop.index},
           writable,
           actions,
           LayoutProtocol.box,
+          _catalog.widgets[wrapWidget]?.childParentData ?? ParentDataKind.none,
         );
       case MorphDirective morph:
         _check(morph.roots, declared, morph.path);
@@ -204,6 +234,7 @@ final class TemplateValidator {
           writable,
           actions,
           expected,
+          accepts,
         );
       case ScopeDirective scope:
         final bones = scope.skeleton;
@@ -212,7 +243,14 @@ final class TemplateValidator {
           // Legacy bones are walked for their structure only; their
           // bindings stay unchecked.
           _unbound++;
-          _walk(bones, declared, writable, actions, LayoutProtocol.box);
+          _walk(
+            bones,
+            declared,
+            writable,
+            actions,
+            LayoutProtocol.box,
+            accepts,
+          );
           _unbound--;
         }
         // Scope state and actions extend the child's lexical environment.
@@ -227,6 +265,7 @@ final class TemplateValidator {
           {...writable, ...stateKeys},
           {...actions, ...scope.actions.keys},
           expected, // A scope is transparent to the parent's layout protocol.
+          accepts,
         );
       case SkeletonDirective skeleton:
         _checkSkeletonPlacement(
@@ -235,8 +274,22 @@ final class TemplateValidator {
           skeleton.bones,
           expected,
         );
-        _walk(skeleton.bones, declared, writable, actions, LayoutProtocol.box);
-        _walk(skeleton.child, declared, writable, actions, LayoutProtocol.box);
+        _walk(
+          skeleton.bones,
+          declared,
+          writable,
+          actions,
+          LayoutProtocol.box,
+          accepts,
+        );
+        _walk(
+          skeleton.child,
+          declared,
+          writable,
+          actions,
+          LayoutProtocol.box,
+          accepts,
+        );
     }
   }
 
@@ -264,8 +317,39 @@ final class TemplateValidator {
   ParentDataOutput _parentDataOf(Directive directive) => parentDataOf(
     directive,
     (type) => _catalog.widgets[type]?.parentDataOutput ?? ParentDataOutput.none,
-    (type) => _catalog.widgets[type]?.passesChild ?? false,
+    _passesChild,
   );
+
+  /// Whether the widget type passes its single child through, by the
+  /// registered declaration.
+  PassesChild? _passesChild(String type) => _catalog.widgets[type]?.passesChild;
+
+  /// Verifies that the parent data [carried] by a `type` node at [path] is
+  /// one its parent [accepts]: Flutter asserts on a mismatch while mounting
+  /// and misplaces the child in release. An app parent that declares
+  /// nothing takes none.
+  void _checkParentData(
+    String path,
+    String type,
+    ParentDataKind carried,
+    ParentDataKind accepts,
+  ) {
+    if (carried == ParentDataKind.none || carried == accepts) return;
+    final place = switch (carried) {
+      ParentDataKind.flex => 'row/column/flex',
+      ParentDataKind.stack => 'stack/indexed_stack',
+      ParentDataKind.none => '',
+    };
+    throw InvalidTemplateException(
+      path,
+      'parent data mismatch: "$type" carries ${carried.name} parent data but '
+      'its parent takes ${accepts == ParentDataKind.none ? 'none' : '${accepts.name} parent data'} '
+      '— put it directly in a $place (a misplaced parent-data widget '
+      'crashes at mount time), or, if its parent is an app widget that lays '
+      'it in one, declare childParentData: ParentDataKind.${carried.name} on '
+      'that widget spec.',
+    );
+  }
 
   /// Verifies that every body of [directive] (a cond or switch) builds one
   /// layout protocol: the place it sits in takes only one, even under a

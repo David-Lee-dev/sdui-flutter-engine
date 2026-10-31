@@ -10,24 +10,34 @@ import 'child_builder.dart';
 ///
 /// [produces] identifies the node's own protocol. A null [childProtocol] opts
 /// out of uniform child validation for widgets with mixed child roles.
-/// [parentData] declares that the widget's output is parent data
-/// (`Expanded`, `Positioned`, ...) and so must stay the direct widget of its
-/// parent: the engine places it in place and wraps nothing around it. The
-/// engine cannot see inside an app widget (a replacement of a built-in
-/// included), so a template cannot put `_motion`, `_on` or `_skeleton` on an
-/// app widget declared so.
+/// [parentData] declares the parent data the widget's output carries
+/// (`Expanded` carries [ParentDataKind.flex], `Positioned`
+/// [ParentDataKind.stack]); such an output must stay the direct widget of a
+/// parent taking that kind: the engine places it in place and wraps nothing
+/// around it. The engine cannot see inside an app widget (a replacement of a
+/// built-in included), so a template cannot put `_motion`, `_on` or
+/// `_skeleton` on an app widget declared so.
+///
+/// [childParentData] declares the parent data the widget takes on its
+/// children: a child carrying another kind is a compile error. A widget
+/// that lays its children in a flex or stack declares [ParentDataKind.flex]
+/// or [ParentDataKind.stack]; left at none, it takes no `expanded`,
+/// `positioned`, ... child.
 sealed class WidgetSpec {
   const WidgetSpec({
     this.produces = LayoutProtocol.box,
     this.childProtocol = LayoutProtocol.box,
-    this.parentData = false,
+    this.parentData = ParentDataKind.none,
+    this.childParentData = ParentDataKind.none,
   });
 
   final LayoutProtocol produces;
 
   final LayoutProtocol? childProtocol;
 
-  final bool parentData;
+  final ParentDataKind parentData;
+
+  final ParentDataKind childParentData;
 }
 
 /// Builds a widget from resolved props and positional children.
@@ -45,6 +55,7 @@ final class EagerSpec extends WidgetSpec {
     super.produces,
     super.childProtocol,
     super.parentData,
+    super.childParentData,
   });
 
   final EagerBuild build;
@@ -65,6 +76,7 @@ final class SlotSpec extends WidgetSpec {
     super.produces,
     super.childProtocol,
     super.parentData,
+    super.childParentData,
   });
 
   final SlotBuild build;
@@ -86,6 +98,7 @@ final class BuilderSpec extends WidgetSpec {
     super.produces,
     super.childProtocol,
     super.parentData,
+    super.childParentData,
   });
 
   final BuilderBuild build;
@@ -108,6 +121,7 @@ final class BoundSpec extends WidgetSpec {
     super.produces,
     super.childProtocol,
     super.parentData,
+    super.childParentData,
   });
 
   final BoundBuild build;
@@ -129,6 +143,7 @@ final class ActionSpec extends WidgetSpec {
     super.produces,
     super.childProtocol,
     super.parentData,
+    super.childParentData,
   });
 
   final ActionBuild build;

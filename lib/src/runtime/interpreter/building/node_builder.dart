@@ -155,8 +155,8 @@ final class NodeBuilder {
 
   /// Whether the widget type passes its single child through, by the
   /// registered declaration.
-  static bool _passesChild(String type) =>
-      WidgetFactory.schemaOf(type)?.passesChild ?? false;
+  static PassesChild? _passesChild(String type) =>
+      WidgetFactory.schemaOf(type)?.passesChild;
 
   /// Whether [node] passes an in-place output through to its parent.
   static bool _handsOnInPlace(PlainDirective node) {

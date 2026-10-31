@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/invalid_template_exception.dart';
 import 'package:sdui_engine/src/compile/schema/builtin_language.dart';
@@ -205,7 +206,11 @@ void main() {
         schema.decoratesChild,
         reason: type,
       );
-      expect(schema.decoratesChild, schema.parentData, reason: type);
+      expect(
+        schema.decoratesChild,
+        schema.parentData != ParentDataKind.none,
+        reason: type,
+      );
     }
   });
 
@@ -215,7 +220,7 @@ void main() {
         'expanded',
         EagerSpec(
           (context, props, children) => const _OpaqueExpanded(),
-          parentData: true,
+          parentData: ParentDataKind.flex,
         ),
       ),
     );
@@ -249,33 +254,42 @@ void main() {
     });
   });
 
-  test('내장 container 만 자식의 parent data 를 넘긴다고 선언한다 (compile schema 와 같다)', () {
-    final declared = {
-      for (final MapEntry(:key, :value) in BuiltinLanguage.widgets.entries)
-        if (value.passesChild) key,
-    };
+  test(
+    '내장 container 와 visibility 만 자식의 parent data 를 넘긴다고 선언한다 (compile schema 와 같다)',
+    () {
+      final declared = {
+        for (final MapEntry(:key, :value) in BuiltinLanguage.widgets.entries)
+          key: ?value.passesChild,
+      };
 
-    expect(declared, {'container'});
-    for (final MapEntry(key: type, value: schema)
-        in BuiltinLanguage.widgets.entries) {
-      expect(
-        WidgetFactory.schemaOf(type)!.passesChild,
-        schema.passesChild,
-        reason: type,
-      );
-    }
-  });
+      expect(declared, {
+        'container': containerPassesChild,
+        'visibility': visibilityPassesChild,
+      });
+      for (final MapEntry(key: type, value: schema)
+          in BuiltinLanguage.widgets.entries) {
+        expect(
+          WidgetFactory.schemaOf(type)!.passesChild,
+          same(schema.passesChild),
+          reason: type,
+        );
+      }
+    },
+  );
 
   group('자식의 parent data 를 넘기는지는 등록된 구현이 정한다', () {
     setUp(
       () => WidgetFactory.register(
         'container',
-        EagerSpec((context, props, children) => Row(children: children)),
+        EagerSpec(
+          (context, props, children) => Row(children: children),
+          childParentData: ParentDataKind.flex,
+        ),
       ),
     );
 
     test('다시 등록한 container 는 자식을 넘기지 않는다', () {
-      expect(WidgetFactory.schemaOf('container')!.passesChild, isFalse);
+      expect(WidgetFactory.schemaOf('container')!.passesChild, isNull);
     });
 
     test('다시 등록한 container > expanded 의 `_motion` 은 허용', () {

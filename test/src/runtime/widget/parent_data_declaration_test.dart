@@ -6,6 +6,7 @@ import 'package:sdui_engine/src/compile/schema/builtin_language.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
 import 'package:sdui_engine/src/compile/template_validator.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
@@ -52,13 +53,14 @@ Widget _host(Widget child) => Directionality(
   ),
 );
 
-void _registerOpaque({required bool parentData}) => WidgetFactory.register(
-  'opaque_expanded',
-  EagerSpec(
-    (context, props, children) => const _OpaqueExpanded(),
-    parentData: parentData,
-  ),
-);
+void _registerOpaque({required ParentDataKind parentData}) =>
+    WidgetFactory.register(
+      'opaque_expanded',
+      EagerSpec(
+        (context, props, children) => const _OpaqueExpanded(),
+        parentData: parentData,
+      ),
+    );
 
 void main() {
   tearDown(WidgetFactory.reset);
@@ -66,15 +68,15 @@ void main() {
   test('내장 parent-data 위젯은 spec 과 compile schema 가 같이 선언한다', () {
     final declared = {
       for (final MapEntry(:key, :value) in BuiltinLanguage.widgets.entries)
-        if (value.parentData) key,
+        if (value.parentData != ParentDataKind.none) key: value.parentData,
     };
 
     expect(declared, {
-      'expanded',
-      'flexible',
-      'positioned',
-      'positioned_fill',
-      'spacer',
+      'expanded': ParentDataKind.flex,
+      'flexible': ParentDataKind.flex,
+      'positioned': ParentDataKind.stack,
+      'positioned_fill': ParentDataKind.stack,
+      'spacer': ParentDataKind.flex,
     });
     for (final type in BuiltinLanguage.widgets.keys) {
       expect(
@@ -86,14 +88,23 @@ void main() {
   });
 
   test('선언하지 않은 spec 은 parent data 가 아니다', () {
-    _registerOpaque(parentData: false);
+    WidgetFactory.register(
+      'opaque_expanded',
+      EagerSpec((context, props, children) => const _OpaqueExpanded()),
+    );
 
-    expect(WidgetFactory.specFor('opaque_expanded')!.parentData, isFalse);
-    expect(WidgetFactory.schemaOf('opaque_expanded')!.parentData, isFalse);
+    expect(
+      WidgetFactory.specFor('opaque_expanded')!.parentData,
+      ParentDataKind.none,
+    );
+    expect(
+      WidgetFactory.schemaOf('opaque_expanded')!.parentData,
+      ParentDataKind.none,
+    );
   });
 
   group('parent data 로 선언한 앱 위젯', () {
-    setUp(() => _registerOpaque(parentData: true));
+    setUp(() => _registerOpaque(parentData: ParentDataKind.flex));
 
     final decorations = <String, Object?>{
       '_motion': {'type': 'fade'},
@@ -249,8 +260,78 @@ void main() {
     });
   });
 
+  group('maintain_* 없는 visibility 는 자식의 parent data 를 넘긴다', () {
+    const text = {'_type': 'text', 'value': 'x'};
+    final layouts = <String, (Map<String, Object?>, Map<String, Object?>)>{
+      'row > visibility > expanded': (
+        {'_type': 'row'},
+        {'_type': 'expanded', '_child': text},
+      ),
+      'stack > visibility > positioned': (
+        {'_type': 'stack', 'fit': 'expand'},
+        {'_type': 'positioned', 'left': 0, 'top': 0, '_child': text},
+      ),
+      'row > visibility > expanded(_motion)': (
+        {'_type': 'row'},
+        {
+          '_type': 'expanded',
+          '_motion': {'type': 'fade'},
+          '_child': text,
+        },
+      ),
+    };
+
+    for (final MapEntry(key: name, value: (parent, child)) in layouts.entries) {
+      testWidgets('`_if` 의 presence 에서 $name 을 띄우고 내린다', (tester) async {
+        final key = GlobalKey<ScopeState>();
+        final root = _compile({
+          ...parent,
+          '_children': [
+            {
+              '_type': 'visibility',
+              'visible': r'${shown}',
+              '_if': r'${show}',
+              '_child': child,
+            },
+          ],
+        });
+        TemplateValidator.validate(root, {'show', 'shown'});
+        await tester.pumpWidget(
+          _host(
+            Scope(
+              key: key,
+              config: const ScopeConfig(state: {'show': true, 'shown': true}),
+              child: NodeBuilder.build(root),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('x'), findsOneWidget);
+
+        key.currentState!.set('shown', false);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('x'), findsNothing);
+
+        key.currentState!.set('shown', true);
+        await tester.pumpAndSettle();
+        key.currentState!.set('show', false);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('x'), findsNothing);
+
+        key.currentState!.set('show', true);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('x'), findsOneWidget);
+      });
+    }
+  });
+
   test('선언하지 않은 앱 위젯의 `_motion` 은 그대로 허용', () {
-    _registerOpaque(parentData: false);
+    _registerOpaque(parentData: ParentDataKind.none);
 
     _validate(
       _column({
