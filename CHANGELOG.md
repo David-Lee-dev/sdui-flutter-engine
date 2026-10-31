@@ -15,9 +15,15 @@
   of failing with "Incorrect use of ParentDataWidget".
 - Fix: a `_scope._skeleton` on a bare `container` around parent data is
   skipped with a warning (tag `scope`) and shows the content.
+- **Behavior change:** whether a node or scope `_skeleton` can hold a node
+  follows the node's declared output only: an app widget not declared as
+  parent data, alone or inside a bare `container`, now keeps its bones (a
+  node `_skeleton` on it used to be skipped with a warning).
 - Fix: a skeleton follows a load notifier its scope replaces, and a keyed
   node `_skeleton` moved to another loading scope follows that scope's load
-  and shimmer; the old scope stops its shimmer.
+  and shimmer; the old scope stops its shimmer. The shimmer runs while bones
+  paint it, through their exit, and a settled node moved into a loading
+  scope starts none.
 - Fix: when the mount hooks are replaced while a load is pending, the
   skeleton waits for the new hooks, not the replaced ones.
 - Fix: a leaving slot gives its focus nodes back their focus and traversal
@@ -31,13 +37,18 @@
   parent data (`Expanded`, `Positioned`, ...) declares it so the engine
   places it in place and wraps nothing around it. The built-in
   `expanded`, `flexible`, `positioned`, `positioned_fill` and `spacer`
-  declare it.
+  declare it. Only these built-in builders let `_motion` and `_on` go on
+  their child; an app widget registered in their place (under the same
+  name) does not.
 - **New compile errors:** `_motion` or `_on` on an app widget declared as
-  parent data, or on a bare `container` around parent data (put it on a
-  node inside); `_skeleton` on such an app widget; a node `_skeleton` whose
-  bones' root is parent data; `_scope._skeleton` in a sliver position, on a
-  parent-data node, or with bones whose root is parent data or a sliver.
-  `_scope._skeleton` bones are still not checked for bindings.
+  parent data (a replaced built-in included), or on a bare `container`
+  around parent data, at any depth (put it on a node inside); `_skeleton` on
+  such an app widget; a node `_skeleton` whose bones' root is parent data,
+  a bare `container` around it included; `_scope._skeleton` in a sliver
+  position, on a parent-data node, or with bones that misplace a box,
+  sliver or parent-data node anywhere inside; a `cond` or `switch` whose
+  branches build both box and sliver nodes. `_scope._skeleton` bones are
+  now checked like other nodes except for bindings and action names.
 
 ## 0.17.3
 
