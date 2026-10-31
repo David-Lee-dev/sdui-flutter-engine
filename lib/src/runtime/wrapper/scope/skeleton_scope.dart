@@ -194,7 +194,7 @@ class _SlideTransform extends GradientTransform {
 }
 
 /// Gives the node skeletons below a scope its loading state and one shimmer
-/// phase, which runs only while the scope loads and some slot holds bones.
+/// phase, which runs only while the scope loads and some bones paint it.
 class LoadingScope extends StatefulWidget {
   const LoadingScope({super.key, required this.loading, required this.child});
 
@@ -207,10 +207,7 @@ class LoadingScope extends StatefulWidget {
 
 class _LoadingScopeState extends State<LoadingScope>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _shimmer = AnimationController(
-    vsync: this,
-    duration: _Shimmer.period,
-  );
+  late final _shimmer = _SharedShimmer(vsync: this, onPainters: _sync);
 
   @override
   void initState() {
@@ -228,21 +225,9 @@ class _LoadingScopeState extends State<LoadingScope>
     _sync();
   }
 
-  /// The slots below that hold bones.
-  int _slots = 0;
-
-  void _retain() {
-    _slots++;
-    _sync();
-  }
-
-  void _release() {
-    _slots--;
-    _sync();
-  }
-
   void _sync() {
-    if (!widget.loading.value || _slots == 0) {
+    if (!mounted) return;
+    if (!widget.loading.value || _shimmer.painters == 0) {
       _shimmer.stop();
     } else if (!_shimmer.isAnimating) {
       _shimmer.repeat();
@@ -260,24 +245,46 @@ class _LoadingScopeState extends State<LoadingScope>
   Widget build(BuildContext context) => _LoadingLayer(
     loading: widget.loading,
     shimmer: _shimmer,
-    owner: this,
     child: widget.child,
   );
+}
+
+/// The shimmer phase a [LoadingScope] shares. Its listeners are the bones
+/// painting it, so [onPainters] learns when bones come on stage and when
+/// the last ones leave, an exit included; a settled slot paints none.
+class _SharedShimmer extends AnimationController {
+  _SharedShimmer({required super.vsync, required this.onPainters})
+    : super(duration: _Shimmer.period);
+
+  final VoidCallback onPainters;
+
+  /// How many bone trees paint this phase now.
+  int painters = 0;
+
+  @override
+  void didRegisterListener() {
+    super.didRegisterListener();
+    painters++;
+    onPainters();
+  }
+
+  @override
+  void didUnregisterListener() {
+    super.didUnregisterListener();
+    painters--;
+    onPainters();
+  }
 }
 
 class _LoadingLayer extends InheritedWidget {
   const _LoadingLayer({
     required this.loading,
     required this.shimmer,
-    required this.owner,
     required super.child,
   });
 
   final ValueListenable<bool> loading;
   final Animation<double> shimmer;
-
-  /// Counts the slots holding bones, which run the [shimmer].
-  final _LoadingScopeState owner;
 
   @override
   bool updateShouldNotify(_LoadingLayer oldWidget) =>
@@ -327,9 +334,6 @@ class _SkeletonSlotState extends State<SkeletonSlot> {
   /// replaces its load or the slot moves.
   _LoadingLayer? _layer;
 
-  /// The loading scope whose shimmer this slot's bones keep running.
-  _LoadingScopeState? _retained;
-
   /// What a slot moved out of every loading scope follows: nothing loads.
   static final _loaded = ValueNotifier(false);
 
@@ -348,18 +352,8 @@ class _SkeletonSlotState extends State<SkeletonSlot> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final layer = context.dependOnInheritedWidgetOfExactType<_LoadingLayer>();
-    final wrapped = _wrapped ??= _wraps(layer);
+    _wrapped ??= _wraps(layer);
     _layer = layer;
-    final owner = wrapped ? layer?.owner : null;
-    if (identical(owner, _retained)) return;
-    if (_retained?.mounted ?? false) _retained!._release();
-    _retained = owner?.._retain();
-  }
-
-  @override
-  void dispose() {
-    if (_retained?.mounted ?? false) _retained!._release();
-    super.dispose();
   }
 
   @override
