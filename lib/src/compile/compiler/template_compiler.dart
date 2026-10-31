@@ -36,15 +36,23 @@ final class TemplateCompiler {
     '_motion',
     '_provides',
     '_presence',
+    '_skeleton',
   };
 
-  static const _condAllowedKeys = {'_if', '_loop', '_scope', '_presence'};
+  static const _condAllowedKeys = {
+    '_if',
+    '_loop',
+    '_scope',
+    '_presence',
+    '_skeleton',
+  };
   static const _switchAllowedKeys = {
     '_value',
     '_if',
     '_loop',
     '_scope',
     '_presence',
+    '_skeleton',
   };
 
   static const _knownEvents = InteractionEvents.all;
@@ -89,6 +97,8 @@ final class TemplateCompiler {
     'motion_start_v1',
     // 0.16.0: `_presence` and `_motion` `on: enter|exit|both`.
     'presence_v1',
+    // 0.17.0: node `_skeleton` and the `skeleton` `of: text` bone.
+    'skeleton_v2',
   };
 
   /// Builds the directive tree for a template root.
@@ -135,7 +145,7 @@ final class TemplateCompiler {
   /// Builds the directive tree rooted at [node].
   ///
   /// Structural wrappers are applied from the node outward as morph, scope,
-  /// condition, and loop boundaries. Throws [InvalidTemplateException] when a
+  /// condition, loop and skeleton boundaries. Throws [InvalidTemplateException] when a
   /// marker, control-flow branch, or embedded expression is invalid.
   static Directive buildDirectiveTree(UiNode node) {
     Directive directive;
@@ -177,11 +187,12 @@ final class TemplateCompiler {
       );
     }
     // This order defines lexical visibility and execution order: morph is the
-    // innermost boundary and loop is the outermost boundary.
+    // innermost boundary and skeleton is the outermost boundary.
     directive = _wrapMorph(node, directive);
     directive = _wrapScope(node, directive);
     directive = _wrapIf(node, directive);
     directive = _wrapLoop(node, directive);
+    directive = _wrapSkeleton(node, directive);
     return directive;
   }
 
@@ -633,16 +644,48 @@ final class TemplateCompiler {
         ),
       );
     }
+    final lifecycle = _compileLifecycle(config['_lifecycle'], node.path);
+    final gatesNodes = _hasMountHook(lifecycle) && _hasNodeSkeleton(child);
+    if (skeleton != null && gatesNodes) {
+      throw InvalidTemplateException(
+        node.path,
+        'both "_scope._skeleton" and a node "_skeleton" below wait for this '
+        "scope's mount hooks; keep one of them.",
+      );
+    }
     return ScopeDirective(
       config: ScopeConfig.fromRaw(config),
       child: child,
       skeleton: skeleton,
+      tracksLoading: gatesNodes,
       path: node.path,
       actions: _compileActions(config['_action'], node.path),
-      lifecycle: _compileLifecycle(config['_lifecycle'], node.path),
+      lifecycle: lifecycle,
       presence: _parsePresence(node),
     );
   }
+
+  static bool _hasMountHook(List<LifecycleHook> lifecycle) =>
+      lifecycle.any((hook) => hook.trigger == LifecycleTrigger.mount);
+
+  /// Whether [directive] holds a node `_skeleton` that the scope around it
+  /// gates; a nested scope with mount hooks gates its own.
+  static bool _hasNodeSkeleton(Directive directive) => switch (directive) {
+    SkeletonDirective() => true,
+    ScopeDirective scope =>
+      !_hasMountHook(scope.lifecycle) && _hasNodeSkeleton(scope.child),
+    PlainDirective node =>
+      node.children.any(_hasNodeSkeleton) ||
+          node.slots.values.any(_hasNodeSkeleton),
+    ConditionDirective cond =>
+      cond.branches.any((branch) => _hasNodeSkeleton(branch.body)) ||
+          (cond.fallback != null && _hasNodeSkeleton(cond.fallback!)),
+    SwitchDirective sw =>
+      sw.cases.any((branch) => _hasNodeSkeleton(branch.branch)) ||
+          (sw.fallback != null && _hasNodeSkeleton(sw.fallback!)),
+    LoopDirective loop => _hasNodeSkeleton(loop.child),
+    MorphDirective morph => _hasNodeSkeleton(morph.child),
+  };
 
   static List<LifecycleHook> _compileLifecycle(Object? raw, String path) {
     if (raw == null) return const [];
@@ -1081,4 +1124,265 @@ final class TemplateCompiler {
     }
     return (wrap, params);
   }
+
+  /// Builds the node `_skeleton` around [child]: its bones show while the
+  /// nearest scope with mount hooks loads.
+  ///
+  /// A node with its own mount hooks would wait for the scope around it, so
+  /// it fails; its scope takes `_scope._skeleton` instead.
+  static Directive _wrapSkeleton(UiNode node, Directive child) {
+    if (!node.reserved.containsKey('_skeleton')) return child;
+    final scope = node.reserved['_scope'];
+    final lifecycle = scope is Map ? scope['_lifecycle'] : null;
+    if (lifecycle is List &&
+        lifecycle.any((hook) => hook is Map && hook['on'] == 'mount')) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" on a node with its own mount hooks would wait for the '
+        'scope around it; use "_scope._skeleton" for this scope.',
+      );
+    }
+    return SkeletonDirective(
+      bones: buildDirectiveTree(_boneTree(node)),
+      child: child,
+      path: node.path,
+      presence: _parsePresence(node),
+    );
+  }
+
+  /// Loop strategies that build items lazily or as slivers, which a skeleton
+  /// slot cannot hold.
+  static const _lazyWraps = {'list', 'grid', 'sliver_list', 'sliver_grid'};
+
+  /// Props whose binding only paints; derived bones drop them.
+  static const _paintOnlyKeys = {
+    'color',
+    'gradient',
+    'opacity',
+    'semantics_label',
+  };
+
+  /// The bone tree of [node]'s `_skeleton`: `true` derives it, `{width}`
+  /// derives one leaf bone of that width, a map with `_type` is the tree,
+  /// and a `_loop` node repeats a row (`true` or `{count, tree}`).
+  static UiNode _boneTree(UiNode node) {
+    final raw = node.reserved['_skeleton'];
+    final path = '${node.path}/_skeleton';
+    if (node.reserved.containsKey('_loop')) return _loopBones(node, raw, path);
+    if (raw == true) return _deriveBones(node);
+    if (raw is Map && raw.containsKey('_type')) {
+      return TemplateParser.buildUiTree(raw.cast(), path: path);
+    }
+    if (raw is Map && raw.length == 1 && raw['width'] is num) {
+      final leaf = _deriveBones(node);
+      if (leaf.type != 'skeleton') {
+        throw InvalidTemplateException(
+          node.path,
+          '"_skeleton": {"width"} applies only to a node that becomes one '
+          'bone (a bound text, image or icon).',
+        );
+      }
+      return UiNode(
+        type: leaf.type,
+        props: {...leaf.props, 'width': raw['width']},
+        path: leaf.path,
+      );
+    }
+    throw InvalidTemplateException(
+      node.path,
+      '"_skeleton" must be true, {width}, a bone tree with "_type", or '
+      '{count, tree} on a "_loop" node.',
+    );
+  }
+
+  /// Repeats a bone row `count` times (3 by default) in a literal loop with
+  /// the node's `_wrap`; the row is `tree` or derived from the node.
+  static UiNode _loopBones(UiNode node, Object? raw, String path) {
+    final loop = node.reserved['_loop'] as Map;
+    final wrap = loop['_wrap'] ?? 'column';
+    final wrapType = wrap is Map ? wrap['_type'] : wrap;
+    if (_lazyWraps.contains(wrapType)) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" does not support a lazy or sliver loop '
+        '("_wrap": $wrapType); put it on the node around the list.',
+      );
+    }
+    final Object? count;
+    final UiNode row;
+    if (raw == true) {
+      count = 3;
+      row = _deriveBones(node);
+    } else if (raw is Map &&
+        raw.isNotEmpty &&
+        raw.keys.every(const {'count', 'tree'}.contains)) {
+      count = raw['count'] ?? 3;
+      final tree = raw['tree'];
+      if (tree != null && (tree is! Map || !tree.containsKey('_type'))) {
+        throw InvalidTemplateException(
+          node.path,
+          '"_skeleton" "tree" must be a bone tree with "_type".',
+        );
+      }
+      row = tree == null
+          ? _deriveBones(node)
+          : TemplateParser.buildUiTree(
+              tree.cast<String, Object?>(),
+              path: '$path/tree',
+            );
+    } else {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" on a "_loop" node must be true or {count, tree}.',
+      );
+    }
+    if (count is! int || count < 1) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" "count" must be a positive integer.',
+      );
+    }
+    final index = loop['_index'] ?? 'index';
+    return UiNode(
+      type: row.type,
+      props: row.props,
+      reserved: {
+        ...row.reserved,
+        '_loop': {
+          '_in': [for (var i = 0; i < count; i++) i],
+          '_as': loop['_as'] ?? 'item',
+          '_index': index,
+          '_key': '\${$index}',
+          '_wrap': wrap,
+        },
+      },
+      children: row.children,
+      slots: row.slots,
+      path: row.path,
+    );
+  }
+
+  /// Derives the bones of [node] without reading data: frames keep their
+  /// literal props, a bound text, image or icon becomes one `skeleton`, and
+  /// every reserved key is dropped.
+  ///
+  /// Nothing is guessed: a bound prop that is not paint-only, a bound image
+  /// without a literal size, and control flow without its own `_skeleton`
+  /// fail.
+  static UiNode _deriveBones(UiNode node, {bool inOval = false}) {
+    if (node.type == _condType || node.type == _switchType) {
+      throw InvalidTemplateException(
+        node.path,
+        '"${node.type}" picks a branch from data; give "_skeleton" a bone '
+        'tree.',
+      );
+    }
+    final bound = _isBound(node.props);
+    if (bound && (node.type == 'text' || node.type == 'rich_text')) {
+      return UiNode(
+        type: 'skeleton',
+        props: {
+          'of': 'text',
+          ..._literalProps({
+            'style': ?node.props['style'],
+            'max_lines': ?node.props['max_lines'],
+          }, node.path),
+        },
+        path: node.path,
+      );
+    }
+    if (bound && node.type == 'image') {
+      final width = node.props['width'];
+      final height = node.props['height'];
+      if (width == null || height == null || _isBound([width, height])) {
+        throw InvalidTemplateException(
+          node.path,
+          'a bound "image" needs a literal "width" and "height" for its '
+          'bone.',
+        );
+      }
+      return UiNode(
+        type: 'skeleton',
+        props: {
+          'width': width,
+          'height': height,
+          if (inOval)
+            'shape': 'circle'
+          else
+            ..._literalProps({'radius': ?node.props['radius']}, node.path),
+        },
+        path: node.path,
+      );
+    }
+    if (node.type == 'icon' && _isBound(node.props['name'])) {
+      final size = _literalProps({
+        'size': node.props['size'] ?? 24,
+      }, node.path)['size'];
+      return UiNode(
+        type: 'skeleton',
+        props: {'width': size, 'height': size},
+        path: node.path,
+      );
+    }
+    final oval = node.type == 'clip_oval';
+    return UiNode(
+      type: node.type,
+      props: _literalProps(node.props, node.path),
+      children: [
+        for (final child in node.children) _childBones(child, inOval: oval),
+      ],
+      slots: {
+        for (final entry in node.slots.entries)
+          entry.key: _childBones(entry.value, inOval: oval),
+      },
+      path: node.path,
+    );
+  }
+
+  static UiNode _childBones(UiNode node, {required bool inOval}) {
+    if (node.reserved.containsKey('_skeleton')) return _boneTree(node);
+    if (node.reserved.containsKey('_if') ||
+        node.reserved.containsKey('_loop') ||
+        node.type == _condType ||
+        node.type == _switchType) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_if", "_loop", cond and switch pick from data; this node needs its '
+        'own "_skeleton" inside a derived "_skeleton".',
+      );
+    }
+    return _deriveBones(node, inOval: inOval);
+  }
+
+  /// Keeps the literal entries of [props], drops bound paint-only entries
+  /// and fails on any other bound entry.
+  static Map<String, Object?> _literalProps(
+    Map<String, Object?> props,
+    String path, [
+    String prefix = '',
+  ]) {
+    final kept = <String, Object?>{};
+    for (final MapEntry(:key, :value) in props.entries) {
+      if (!_isBound(value)) {
+        kept[key] = value;
+      } else if (value is Map) {
+        final nested = _literalProps(value.cast(), path, '$prefix$key.');
+        if (nested.isNotEmpty) kept[key] = nested;
+      } else if (!_paintOnlyKeys.contains(key)) {
+        throw InvalidTemplateException(
+          path,
+          '"$prefix$key" is bound, so derived bones cannot size it; make it '
+          'literal or give "_skeleton" a bone tree.',
+        );
+      }
+    }
+    return kept;
+  }
+
+  static bool _isBound(Object? value) => switch (value) {
+    String text => text.contains(r'${'),
+    Map map => map.values.any(_isBound),
+    List list => list.any(_isBound),
+    _ => false,
+  };
 }

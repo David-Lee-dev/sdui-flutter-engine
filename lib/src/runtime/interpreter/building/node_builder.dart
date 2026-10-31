@@ -22,6 +22,7 @@ import '../../wrapper/scope/bound_builder.dart';
 import '../../wrapper/scope/morph_scope.dart';
 import '../../wrapper/scope/press_scope.dart';
 import '../../wrapper/scope/scope.dart';
+import '../../wrapper/scope/skeleton_scope.dart';
 import 'observer/loop_observer.dart';
 import 'observer/condition_observer.dart';
 import 'observer/plain_observer.dart';
@@ -61,23 +62,21 @@ final class NodeBuilder {
         actions: scope.actions,
         lifecycle: scope.lifecycle,
         skeleton: scope.skeleton == null ? null : build(scope.skeleton!),
+        tracksLoading: scope.tracksLoading,
         presence: scope.presence,
         child: scope.lifecycle.isEmpty
             ? build(scope.child)
             : _isolated(scope.child),
       ),
+      SkeletonDirective skeleton => SkeletonSlot(
+        bones: build(skeleton.bones),
+        boxed: presenceMode(skeleton.child) == PresenceMode.box,
+        path: skeleton.path,
+        presence: skeleton.presence,
+        child: build(skeleton.child),
+      ),
     };
   }
-
-  /// Widget types whose widget is parent data and so must stay the direct
-  /// widget of its parent.
-  static const _parentData = {
-    'expanded',
-    'flexible',
-    'positioned',
-    'positioned_fill',
-    'spacer',
-  };
 
   /// How a presence slot can hold what [directive] builds: in a box, in
   /// place (a parent-data widget), or not at all (`null`: a sliver, or a
@@ -86,7 +85,7 @@ final class NodeBuilder {
   /// data, so it is placed in place too.
   static PresenceMode? presenceMode(Directive directive) => switch (directive) {
     PlainDirective node
-        when _parentData.contains(node.type) ||
+        when parentDataTypes.contains(node.type) ||
             !WidgetFactory.isBuiltin(node.type) =>
       _sliver(node.type) ? null : PresenceMode.inPlace,
     PlainDirective node =>
@@ -104,6 +103,7 @@ final class NodeBuilder {
     LoopDirective loop => _sliver(loop.wrap) ? null : PresenceMode.box,
     MorphDirective morph => presenceMode(morph.child),
     ScopeDirective scope => presenceMode(scope.child),
+    SkeletonDirective skeleton => presenceMode(skeleton.child),
   };
 
   /// Whether the widget type (or loop wrap of the same name) is a sliver.

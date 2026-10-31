@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 
 import '../../../util/props_resolver.dart';
@@ -20,11 +22,19 @@ import '../../../util/props_resolver.dart';
 /// ```
 ///
 /// Props:
+/// - `of` (`text`, default `null`) — `text` draws the bone of a text: as tall
+///   as a text with the same `style` and `max_lines`, one bar per line, the
+///   last of several lines at 60 % width.
 /// - `width` (`size`, default `null`) — bone width; null lets the parent size it
-///   (e.g. inside `expanded`). Ignored for `circle` (diameter = `height`).
+///   (e.g. inside `expanded`). Ignored for `circle` (diameter = `height`). A
+///   text bone without it fills the parent, or takes 80 when unbounded.
 /// - `height` (`size`, default `16`) — bone height (and circle diameter).
+///   Ignored for a text bone.
 /// - `radius` (`size`, default `8`) — corner radius for the `rect` shape.
 /// - `shape` (`text`, default `rect`) — `rect` | `circle` | `pill`.
+/// - `style` (`textStyle`, default `null`) — the text style a text bone stands
+///   for.
+/// - `max_lines` (`integer`, default `1`) — the lines a text bone stands for.
 /// - `color` (`color`, default base grey) — fill; irrelevant under the shimmer
 ///   mask, kept for standalone/degraded use.
 ///
@@ -40,6 +50,9 @@ final class SkeletonWidget {
     Map<String, Object?> props,
     List<Widget> children,
   ) {
+    if (PropsResolver.text(props['of']) == 'text') {
+      return _textBone(context, props);
+    }
     final height = PropsResolver.size(context, props['height']) ?? 16;
     final shape = PropsResolver.text(props['shape']) ?? 'rect';
     final color = PropsResolver.color(props['color']) ?? _base;
@@ -60,6 +73,58 @@ final class SkeletonWidget {
       width: boxWidth,
       height: height,
       decoration: BoxDecoration(color: color, borderRadius: radius),
+    );
+  }
+
+  /// Lays out `max_lines` lines in the text's own resolved style and text
+  /// scale, so the bone box is exactly as tall as the text, then draws one
+  /// bar of about the glyph height per line.
+  static Widget _textBone(BuildContext context, Map<String, Object?> props) {
+    final defaults = DefaultTextStyle.of(context);
+    final style = defaults.style.merge(
+      PropsResolver.textStyle(context, props['style']),
+    );
+    final scaler = MediaQuery.textScalerOf(context);
+    final lines = math.max(1, PropsResolver.integer(props['max_lines']) ?? 1);
+    final painter = TextPainter(
+      text: TextSpan(text: List.filled(lines, '가').join('\n'), style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      textHeightBehavior: defaults.textHeightBehavior,
+      maxLines: lines,
+    )..layout();
+    final line = painter.height / lines;
+    painter.dispose();
+    final bar = math.min(line, scaler.scale(style.fontSize ?? 14) * 0.75);
+    final color = PropsResolver.color(props['color']) ?? _base;
+
+    final bars = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < lines; i++)
+          SizedBox(
+            height: line,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FractionallySizedBox(
+                widthFactor: lines > 1 && i == lines - 1 ? 0.6 : 1,
+                child: Container(
+                  height: bar,
+                  decoration: BoxDecoration(
+                    color: color,
+                    borderRadius: BorderRadius.circular(bar / 4),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+    final width = PropsResolver.size(context, props['width']);
+    if (width != null) return SizedBox(width: width, child: bars);
+    return LimitedBox(
+      maxWidth: 80,
+      child: SizedBox(width: double.infinity, child: bars),
     );
   }
 }

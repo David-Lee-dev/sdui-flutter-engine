@@ -52,6 +52,7 @@ class Scope extends StatefulWidget {
     this.actions = const {},
     this.lifecycle = const [],
     this.skeleton,
+    this.tracksLoading = false,
     this.presence = const PresenceConfig(),
   });
 
@@ -60,6 +61,7 @@ class Scope extends StatefulWidget {
       actions = const {},
       lifecycle = const [],
       skeleton = null,
+      tracksLoading = false,
       presence = const PresenceConfig();
 
   final ScopeConfig config;
@@ -70,6 +72,10 @@ class Scope extends StatefulWidget {
 
   /// Placeholder displayed while this scope's mount actions are completing.
   final Widget? skeleton;
+
+  /// Whether the mount actions gate the node skeletons below: [child] then
+  /// sees this scope's loading state through a [LoadingScope].
+  final bool tracksLoading;
 
   /// How [skeleton] swaps to [child].
   final PresenceConfig presence;
@@ -129,7 +135,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
     _env = ScopeEnvironment(seed, scheduler: FlutterCommitScheduler());
     _host = ActionHost(actions: widget.actions, env: _env);
     _loading = ValueNotifier(
-      widget.skeleton != null &&
+      _gatesMount &&
           widget.lifecycle.any(
             (hook) => hook.trigger == LifecycleTrigger.mount,
           ),
@@ -141,12 +147,15 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
             onMountSettled: () => _loading.value = false,
           )
           ..hooks = widget.lifecycle
-          ..deferMountForSkeleton = widget.skeleton != null;
+          ..deferMountForSkeleton = _gatesMount;
     if (widget.lifecycle.isNotEmpty) {
       WidgetsBinding.instance.addObserver(this);
       _observerRegistered = true;
     }
   }
+
+  /// Whether a skeleton waits for this scope's mount actions.
+  bool get _gatesMount => widget.skeleton != null || widget.tracksLoading;
 
   @override
   void didChangeDependencies() {
@@ -184,7 +193,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
     if (!identical(widget.lifecycle, oldWidget.lifecycle)) {
       _lifecycle
         ..hooks = widget.lifecycle
-        ..deferMountForSkeleton = widget.skeleton != null;
+        ..deferMountForSkeleton = _gatesMount;
       if (widget.lifecycle.isNotEmpty && !_observerRegistered) {
         WidgetsBinding.instance.addObserver(this);
         _observerRegistered = true;
@@ -234,14 +243,16 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final child = widget.skeleton == null
-        ? widget.child
-        : SkeletonScope(
+    final child = widget.skeleton != null
+        ? SkeletonScope(
             loading: _loading,
             skeleton: widget.skeleton!,
             presence: widget.presence,
             child: widget.child,
-          );
+          )
+        : widget.tracksLoading
+        ? LoadingScope(loading: _loading, child: widget.child)
+        : widget.child;
     return _ScopeLayer(
       env: _env,
       child: _ActionLayer(host: _host, child: child),

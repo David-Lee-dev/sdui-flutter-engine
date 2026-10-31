@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- Node `_skeleton` (`_requires: [skeleton_v2]`): a node shows bones while the
+  nearest enclosing scope with a `mount` hook loads, and the frames around it
+  show at once. The value is a bone tree (`_type`), `true` (bones derived at
+  compile time: frames keep literal props, each bound text, image or icon
+  becomes one bone, bound paint props are dropped, anything else bound fails
+  to compile), `{width}` for one derived leaf, or `true` / `{count, tree}` on a
+  `_loop` node (3 rows by default, in a copy of the loop's `_wrap`; lazy and
+  sliver wraps fail). The bones sit outside the node's `_if`, so an `_if` that
+  is false after the load collapses them. Only scopes with a skeleton below
+  wait for their mount actions; every other scope dispatches them as before.
+  The bones of one scope share one shimmer phase. A scope with both
+  `_scope._skeleton` and node skeletons below fails to compile.
+- `skeleton` `of: text` with `style` and `max_lines`: a bone as tall as the
+  text it stands for, one bar per line, the last of several at 60 % width.
+- **Behavior change (`_scope._skeleton` too):** a load that finishes inside
+  the 300 ms grace now shows the content at once instead of animating from the
+  reserved skeleton size.
+- **Behavior change (`_scope._skeleton` too):** mount actions hold a skeleton
+  for at most 8 s. Then the content shows in its current state and a warning
+  is logged (tag `scope`); requests are not cancelled and a late response
+  updates the content in place.
+
 ## 0.16.1
 
 - Fix: a binding inside a `_scope` under a presence slot no longer stops

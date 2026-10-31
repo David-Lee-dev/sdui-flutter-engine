@@ -164,12 +164,34 @@ final class LifecycleRunner {
           break;
       }
     }
-    if (mountFutures.isNotEmpty) {
-      Future.wait(mountFutures).then((_) {
-        if (_isMounted()) _onMountSettled();
-      });
+    if (mountFutures.isEmpty) return;
+    // A hung mount flow must not keep the skeleton forever: the watchdog
+    // settles it, and a late response still updates the content in place.
+    var settled = false;
+    void settle() {
+      if (settled) return;
+      settled = true;
+      if (_isMounted()) _onMountSettled();
     }
+
+    final watchdog = Timer(mountWatchdog, () {
+      if (settled || !_isMounted()) return;
+      EngineLog.warn(
+        'mount hooks did not settle within '
+        '${mountWatchdog.inSeconds} s; showing the content',
+        tag: 'scope',
+      );
+      settle();
+    });
+    _timers.add(watchdog);
+    Future.wait(mountFutures).then((_) {
+      watchdog.cancel();
+      settle();
+    });
   }
+
+  /// How long mount flows may hold the skeleton before it gives way.
+  static const mountWatchdog = Duration(seconds: 8);
 
   void _fire(LifecycleHook hook) {
     if (suspended) return;

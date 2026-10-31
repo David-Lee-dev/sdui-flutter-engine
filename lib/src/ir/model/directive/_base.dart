@@ -12,6 +12,7 @@ part 'condition_directive.dart';
 part 'loop_directive.dart';
 part 'morph_directive.dart';
 part 'scope_directive.dart';
+part 'skeleton_directive.dart';
 part 'switch_directive.dart';
 
 /// Represents one rendering stage in the compiled directive tree.

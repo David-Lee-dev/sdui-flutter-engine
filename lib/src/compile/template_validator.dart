@@ -210,8 +210,41 @@ final class TemplateValidator {
           {...actions, ...scope.actions.keys},
           expected, // A scope is transparent to the parent's layout protocol.
         );
+      case SkeletonDirective skeleton:
+        // The slot holds the bones or the node in a box, so a parent-data
+        // or sliver node cannot sit in it.
+        if (_parentData(skeleton.child)) {
+          throw InvalidTemplateException(
+            skeleton.path,
+            '"_skeleton" on a parent-data node (${parentDataTypes.join(", ")}) '
+            'would move it out of its parent; put "_skeleton" on its child.',
+          );
+        }
+        _checkProtocol(
+          skeleton.path,
+          '"_skeleton"',
+          LayoutProtocol.box,
+          expected,
+        );
+        _walk(skeleton.bones, declared, writable, actions, LayoutProtocol.box);
+        _walk(skeleton.child, declared, writable, actions, LayoutProtocol.box);
     }
   }
+
+  /// Whether [directive] can build a parent-data widget.
+  static bool _parentData(Directive directive) => switch (directive) {
+    PlainDirective node => parentDataTypes.contains(node.type),
+    ConditionDirective cond =>
+      cond.branches.any((branch) => _parentData(branch.body)) ||
+          (cond.fallback != null && _parentData(cond.fallback!)),
+    SwitchDirective sw =>
+      sw.cases.any((branch) => _parentData(branch.branch)) ||
+          (sw.fallback != null && _parentData(sw.fallback!)),
+    MorphDirective morph => _parentData(morph.child),
+    ScopeDirective scope => _parentData(scope.child),
+    SkeletonDirective skeleton => _parentData(skeleton.child),
+    LoopDirective() => false,
+  };
 
   /// Verifies that [produced] satisfies the parent's [expected] layout protocol.
   ///

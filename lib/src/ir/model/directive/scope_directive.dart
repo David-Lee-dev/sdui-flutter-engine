@@ -12,6 +12,7 @@ final class ScopeDirective extends Directive {
     this.actions = const {},
     this.lifecycle = const [],
     this.skeleton,
+    this.tracksLoading = false,
     this.presence = const PresenceConfig(),
   });
 
@@ -20,6 +21,10 @@ final class ScopeDirective extends Directive {
 
   /// Placeholder subtree displayed while mount actions are completing.
   final Directive? skeleton;
+
+  /// Whether the mount hooks gate the node `_skeleton`s below, up to the
+  /// next scope with mount hooks.
+  final bool tracksLoading;
 
   /// Dispatches named [actions] at this scope's lifecycle boundaries.
   final List<LifecycleHook> lifecycle;
