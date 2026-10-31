@@ -167,6 +167,20 @@ class _SwipeLayoutState extends State<_SwipeLayout> {
     _resumeTimer = Timer(widget.resumeDelay, _startAutoplay);
   }
 
+  // A deactivated layout may never return to the tree (or be unmounted, if
+  // the frame that removed it failed), so autoplay stops until it is back.
+  @override
+  void deactivate() {
+    _pauseAutoplay();
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _startAutoplay();
+  }
+
   @override
   void dispose() {
     _autoTimer?.cancel();
