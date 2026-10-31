@@ -393,12 +393,15 @@ class _PresenceGroupState extends State<PresenceGroup>
   static void _holdFocus(_Entry e) {
     final held = e._held;
     if (held == null || e.present) return;
+    var live = false;
     for (final (node, _, _) in held) {
       if (node.context?.mounted != true) continue;
+      live = true;
       node
         ..canRequestFocus = false
         ..skipTraversal = true;
     }
+    if (!live) return;
     WidgetsBinding.instance.addPostFrameCallback((_) => _holdFocus(e));
   }
 
@@ -480,6 +483,7 @@ class _PresenceGroupState extends State<PresenceGroup>
     _tickerMode?.removeListener(_onTickerMode);
     for (final e in _entries) {
       e._controller?.dispose();
+      e._held = null;
     }
     super.dispose();
   }
