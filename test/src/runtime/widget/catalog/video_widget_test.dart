@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/contract/video_source.dart';
@@ -8,9 +10,15 @@ import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
 
 /// Pure fake — the contract no longer forces a plugin type into tests.
 final class _FakeController implements SduiVideoController {
-  _FakeController({this.fail = false});
+  _FakeController({this.fail = false, this.gated});
 
   final bool fail;
+
+  /// The setup call that waits on [gate] before returning.
+  final String? gated;
+  final gate = Completer<void>();
+  final calls = <String>[];
+  bool disposed = false;
   bool? looping;
   double? volume;
   int playCalls = 0;
@@ -22,14 +30,24 @@ final class _FakeController implements SduiVideoController {
   }
 
   @override
-  Future<void> setLooping(bool looping) async => this.looping = looping;
+  Future<void> setLooping(bool looping) async {
+    calls.add('setLooping');
+    this.looping = looping;
+    if (gated == 'setLooping') await gate.future;
+  }
 
   @override
-  Future<void> setVolume(double volume) async => this.volume = volume;
+  Future<void> setVolume(double volume) async {
+    calls.add('setVolume');
+    this.volume = volume;
+    if (gated == 'setVolume') await gate.future;
+  }
 
   @override
   Future<void> play() async {
+    calls.add('play');
     playCalls++;
+    if (gated == 'play') await gate.future;
     _playing = true;
   }
 
@@ -55,20 +73,26 @@ final class _FakeController implements SduiVideoController {
   Widget buildView() => const SizedBox.expand();
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async => disposed = true;
 }
 
 final class _RecordingVideoSource implements VideoSource {
-  _RecordingVideoSource({this.fail = false});
+  _RecordingVideoSource({this.fail = false, this.gated});
 
   final bool fail;
+
+  /// Gates the first controller's setup call of this name.
+  final String? gated;
   final requests = <VideoRequest>[];
   final controllers = <_FakeController>[];
 
   @override
   Future<SduiVideoController> controllerFor(VideoRequest request) async {
     requests.add(request);
-    final controller = _FakeController(fail: fail);
+    final controller = _FakeController(
+      fail: fail,
+      gated: controllers.isEmpty ? gated : null,
+    );
     controllers.add(controller);
     return controller;
   }
@@ -315,6 +339,60 @@ void main() {
         await _pump(tester, const {'src': 'clip.mp4'}, dispatch: sink);
 
         expect(sink.calls, isEmpty);
+        expect(tester.takeException(), isNull);
+      });
+    });
+
+    group('setup superseded mid-way', () {
+      tearDown(VideoSourceRegistry.reset);
+
+      for (final stage in ['setLooping', 'setVolume', 'play']) {
+        testWidgets('removal during $stage stops the setup', (tester) async {
+          final source = _RecordingVideoSource(gated: stage);
+          VideoSourceRegistry.install(source);
+          final sink = _Sink();
+          await _pump(tester, const {
+            'src': 'old.mp4',
+            'on_ready': 'ready',
+          }, dispatch: sink);
+          final old = source.controllers.single;
+          expect(old.calls.last, stage);
+          final before = List<String>.of(old.calls);
+
+          await tester.pumpWidget(const SizedBox());
+          expect(old.disposed, isTrue);
+          old.gate.complete();
+          await tester.pump();
+
+          expect(old.calls, before);
+          expect(sink.calls, isEmpty);
+          expect(tester.takeException(), isNull);
+        });
+      }
+
+      testWidgets('a src change during setLooping stops the old setup', (
+        tester,
+      ) async {
+        final source = _RecordingVideoSource(gated: 'setLooping');
+        VideoSourceRegistry.install(source);
+        final sink = _Sink();
+        await _pump(tester, const {
+          'src': 'old.mp4',
+          'on_ready': 'ready',
+        }, dispatch: sink);
+        final old = source.controllers.single;
+
+        await _pump(tester, const {
+          'src': 'new.mp4',
+          'on_ready': 'ready',
+        }, dispatch: sink);
+        old.gate.complete();
+        await tester.pump();
+
+        expect(old.calls, ['setLooping']);
+        expect(old.disposed, isTrue);
+        expect(source.controllers.last.playCalls, 1);
+        expect(sink.calls, ['ready']);
         expect(tester.takeException(), isNull);
       });
     });

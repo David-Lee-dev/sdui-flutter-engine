@@ -197,7 +197,9 @@ class _VideoViewState extends State<_VideoView> {
       await controller.initialize();
       if (!mounted || generation != _generation) return;
       await controller.setLooping(widget.loop);
+      if (!mounted || generation != _generation) return;
       await controller.setVolume(widget.muted ? 0 : 1);
+      if (!mounted || generation != _generation) return;
       if (widget.autoplay) await controller.play();
       if (!mounted || generation != _generation) return;
       setState(() => _initialized = true);
