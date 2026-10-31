@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.5
 
 - Fix: a modal closed before its first frame (a `_background` open followed
   by `close` in the same action) now closes. The open completes with the
