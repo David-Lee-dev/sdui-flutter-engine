@@ -264,6 +264,7 @@ final class TemplateValidator {
   ParentDataOutput _parentDataOf(Directive directive) => parentDataOf(
     directive,
     (type) => _catalog.widgets[type]?.parentDataOutput ?? ParentDataOutput.none,
+    (type) => _catalog.widgets[type]?.passesChild ?? false,
   );
 
   /// Verifies that every body of [directive] (a cond or switch) builds one

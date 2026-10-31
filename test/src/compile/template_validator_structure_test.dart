@@ -249,6 +249,63 @@ void main() {
     });
   });
 
+  test('내장 container 만 자식의 parent data 를 넘긴다고 선언한다 (compile schema 와 같다)', () {
+    final declared = {
+      for (final MapEntry(:key, :value) in BuiltinLanguage.widgets.entries)
+        if (value.passesChild) key,
+    };
+
+    expect(declared, {'container'});
+    for (final MapEntry(key: type, value: schema)
+        in BuiltinLanguage.widgets.entries) {
+      expect(
+        WidgetFactory.schemaOf(type)!.passesChild,
+        schema.passesChild,
+        reason: type,
+      );
+    }
+  });
+
+  group('자식의 parent data 를 넘기는지는 등록된 구현이 정한다', () {
+    setUp(
+      () => WidgetFactory.register(
+        'container',
+        EagerSpec((context, props, children) => Row(children: children)),
+      ),
+    );
+
+    test('다시 등록한 container 는 자식을 넘기지 않는다', () {
+      expect(WidgetFactory.schemaOf('container')!.passesChild, isFalse);
+    });
+
+    test('다시 등록한 container > expanded 의 `_motion` 은 허용', () {
+      _validate(
+        _column({
+          '_type': 'container',
+          '_motion': {'type': 'fade'},
+          '_child': _expanded,
+        }),
+      );
+    });
+
+    test('다시 등록한 container > expanded 의 `_on` 은 허용', () {
+      _validate(
+        _column({
+          '_type': 'container',
+          '_on': {'tap': 'noop'},
+          '_child': _expanded,
+        }),
+      );
+    });
+
+    test('node `_skeleton` bones 의 뿌리가 다시 등록한 container > expanded 면 허용', () {
+      _validate({
+        '_type': 'sizedbox',
+        '_skeleton': {'_type': 'container', '_child': _expanded},
+      });
+    });
+  });
+
   test('내장 expanded 의 `_motion` 은 그대로 허용', () {
     _validate(
       _column({

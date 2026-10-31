@@ -150,12 +150,17 @@ final class NodeBuilder {
     directive,
     (type) =>
         WidgetFactory.schemaOf(type)?.parentDataOutput ?? ParentDataOutput.none,
+    _passesChild,
   );
 
-  /// Whether [node] is a bare `container` that hands an in-place output to
-  /// its parent.
+  /// Whether the widget type passes its single child through, by the
+  /// registered declaration.
+  static bool _passesChild(String type) =>
+      WidgetFactory.schemaOf(type)?.passesChild ?? false;
+
+  /// Whether [node] passes an in-place output through to its parent.
   static bool _handsOnInPlace(PlainDirective node) {
-    final child = passThrough(node);
+    final child = passThrough(node, _passesChild);
     return child != null && presenceMode(child) == PresenceMode.inPlace;
   }
 

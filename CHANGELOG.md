@@ -40,6 +40,10 @@
   declare it. Only these built-in builders let `_motion` and `_on` go on
   their child; an app widget registered in their place (under the same
   name) does not.
+- Only the built-in `container` hands a single child's parent data to its
+  parent. An app widget registered as `container` is an ordinary node of
+  its declared kind: `_motion`, `_on` and `_skeleton` on it are checked
+  against its own declaration, not its child's.
 - **New compile errors:** `_motion` or `_on` on an app widget declared as
   parent data (a replaced built-in included), or on a bare `container`
   around parent data, at any depth (put it on a node inside); `_skeleton` on

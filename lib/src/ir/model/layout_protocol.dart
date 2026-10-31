@@ -64,47 +64,62 @@ enum ParentDataOutput {
   opaque,
 }
 
-/// The child a bare `container` hands to its parent: with a single child it
-/// builds no render object of its own around that child's parent data.
-Directive? passThrough(PlainDirective node) => switch (node) {
-  PlainDirective(type: 'container', children: [final child]) => child,
+/// The child [node] hands to its parent, when its widget type passes its
+/// single child through ([passesChild]): it builds no render object of its
+/// own around that child's parent data.
+Directive? passThrough(
+  PlainDirective node,
+  bool Function(String type) passesChild,
+) => switch (node) {
+  PlainDirective(children: [final child]) when passesChild(node.type) => child,
   _ => null,
 };
 
 /// The parent data [directive] builds, with each widget type's own
-/// declaration given by [widget]. A bare `container` around parent data
-/// hides it; a cond or switch builds the most hidden of its bodies'; a
-/// morph, scope or skeleton builds its child's; a loop builds none.
+/// declaration given by [widget] and whether it passes its child through by
+/// [passesChild]. A pass-through node around parent data hides it; a cond
+/// or switch builds the most hidden of its bodies'; a morph, scope or
+/// skeleton builds its child's; a loop builds none.
 ParentDataOutput parentDataOf(
   Directive directive,
   ParentDataOutput Function(String type) widget,
+  bool Function(String type) passesChild,
 ) => switch (directive) {
-  PlainDirective node => switch (passThrough(node)) {
-    final child? when parentDataOf(child, widget) != ParentDataOutput.none =>
+  PlainDirective node => switch (passThrough(node, passesChild)) {
+    final child?
+        when parentDataOf(child, widget, passesChild) !=
+            ParentDataOutput.none =>
       ParentDataOutput.opaque,
     _ => widget(node.type),
   },
-  ConditionDirective cond => _bodiesParentData([
-    for (final branch in cond.branches) branch.body,
-    ?cond.fallback,
-  ], widget),
-  SwitchDirective sw => _bodiesParentData([
-    for (final branch in sw.cases) branch.branch,
-    ?sw.fallback,
-  ], widget),
-  MorphDirective morph => parentDataOf(morph.child, widget),
-  ScopeDirective scope => parentDataOf(scope.child, widget),
-  SkeletonDirective skeleton => parentDataOf(skeleton.child, widget),
+  ConditionDirective cond => _bodiesParentData(
+    [for (final branch in cond.branches) branch.body, ?cond.fallback],
+    widget,
+    passesChild,
+  ),
+  SwitchDirective sw => _bodiesParentData(
+    [for (final branch in sw.cases) branch.branch, ?sw.fallback],
+    widget,
+    passesChild,
+  ),
+  MorphDirective morph => parentDataOf(morph.child, widget, passesChild),
+  ScopeDirective scope => parentDataOf(scope.child, widget, passesChild),
+  SkeletonDirective skeleton => parentDataOf(
+    skeleton.child,
+    widget,
+    passesChild,
+  ),
   LoopDirective() => ParentDataOutput.none,
 };
 
 ParentDataOutput _bodiesParentData(
   List<Directive> bodies,
   ParentDataOutput Function(String type) widget,
+  bool Function(String type) passesChild,
 ) {
   var output = ParentDataOutput.none;
   for (final body in bodies) {
-    final each = parentDataOf(body, widget);
+    final each = parentDataOf(body, widget, passesChild);
     if (each.index > output.index) output = each;
   }
   return output;

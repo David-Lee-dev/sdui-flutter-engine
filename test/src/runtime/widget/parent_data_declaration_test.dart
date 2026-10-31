@@ -190,6 +190,65 @@ void main() {
     });
   });
 
+  group('scope 아래 container > expanded', () {
+    Widget scoped() => _host(
+      NodeBuilder.build(
+        _compile({
+          '_type': 'column',
+          '_children': [
+            {
+              '_type': 'container',
+              '_scope': {
+                ..._noopScope,
+                '_lifecycle': [
+                  {'on': 'mount', 'action': 'noop'},
+                ],
+              },
+              '_child': {
+                '_type': 'expanded',
+                '_child': {'_type': 'text', 'value': 'x'},
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    testWidgets('내장 container 는 expanded 를 넘기고 경계 없이 놓인다', (tester) async {
+      await tester.pumpWidget(scoped());
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.byType(Expanded)).height, 400);
+      expect(
+        find.ancestor(
+          of: find.byType(Expanded),
+          matching: find.byType(RepaintBoundary),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('다시 등록한 container 는 보통 box 로 자기 경계를 갖는다', (tester) async {
+      WidgetFactory.register(
+        'container',
+        EagerSpec((context, props, children) => Row(children: children)),
+      );
+
+      await tester.pumpWidget(scoped());
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.ancestor(
+          of: find.byType(Row),
+          matching: find.byType(RepaintBoundary),
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
   test('선언하지 않은 앱 위젯의 `_motion` 은 그대로 허용', () {
     _registerOpaque(parentData: false);
 

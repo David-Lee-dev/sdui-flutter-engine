@@ -14,6 +14,7 @@ class WidgetSchema {
     this.childProtocol = LayoutProtocol.box,
     this.parentData = false,
     this.decoratesChild = false,
+    this.passesChild = false,
   });
 
   final WidgetKind kind;
@@ -29,6 +30,12 @@ class WidgetSchema {
   /// builders, which return Flutter's parent-data widget itself, do; a
   /// replacement implementation does not.
   final bool decoratesChild;
+
+  /// Whether, with a single child, the widget builds no render object of
+  /// its own around that child's parent data and so hands it to its parent.
+  /// Only the engine's own `container` does; a replacement implementation
+  /// is an ordinary node of its declared kind.
+  final bool passesChild;
 
   /// The parent data this widget's own output is.
   ParentDataOutput get parentDataOutput => !parentData

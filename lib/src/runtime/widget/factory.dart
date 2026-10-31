@@ -130,7 +130,7 @@ final class WidgetFactory {
     'anchor_scope': EagerSpec(AnchorScopeWidget.build),
     'text': EagerSpec(TextWidget.build),
     'rich_text': EagerSpec(RichTextWidget.build),
-    'container': EagerSpec(ContainerWidget.build),
+    'container': _container,
     'column': EagerSpec(ColumnWidget.build),
     'row': EagerSpec(RowWidget.build),
     'sizedbox': EagerSpec(SizedBoxWidget.build),
@@ -267,6 +267,10 @@ final class WidgetFactory {
     'layout_builder': BuilderSpec(LayoutBuilderWidget.build),
   };
 
+  /// The engine's own `container`, which with a single child hands that
+  /// child's parent data to its parent.
+  static const WidgetSpec _container = EagerSpec(ContainerWidget.build);
+
   static final Map<String, WidgetSpec> _specs = _buildSpecs();
 
   static Map<String, WidgetSpec> _buildSpecs() {
@@ -289,14 +293,16 @@ final class WidgetFactory {
   }
 
   /// The schema of [spec] registered as [type]. Only the engine's own
-  /// parent-data builders let the engine decorate their child; an app
-  /// implementation, a replacement included, does not.
+  /// parent-data builders let the engine decorate their child, and only its
+  /// own `container` passes its child through; an app implementation, a
+  /// replacement included, does neither.
   static WidgetSchema _schemaOf(String type, WidgetSpec spec) => WidgetSchema(
     kind: _kindOf(spec),
     produces: spec.produces,
     childProtocol: spec.childProtocol,
     parentData: spec.parentData,
     decoratesChild: spec.parentData && identical(spec, _builtins[type]),
+    passesChild: identical(spec, _container),
   );
 
   static WidgetKind _kindOf(WidgetSpec spec) => switch (spec) {
