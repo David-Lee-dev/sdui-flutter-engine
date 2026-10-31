@@ -140,7 +140,8 @@ void main() {
       expect(find.text('shown'), findsOneWidget);
 
       key.currentState!.set('visible', false);
-      await tester.pump();
+      // The child leaves after its presence transition.
+      await tester.pumpAndSettle();
       expect(find.text('shown'), findsNothing);
 
       key.currentState!.set('visible', true);

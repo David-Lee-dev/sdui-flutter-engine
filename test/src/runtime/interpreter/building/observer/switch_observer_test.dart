@@ -77,7 +77,8 @@ void main() {
       expect(find.text('로딩중'), findsOneWidget);
 
       key.currentState!.set('status', 'done');
-      await tester.pump();
+      // The old case leaves after its presence transition.
+      await tester.pumpAndSettle();
 
       expect(find.text('로딩중'), findsNothing);
       expect(find.text('완료'), findsOneWidget);

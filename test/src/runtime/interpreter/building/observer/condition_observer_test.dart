@@ -85,7 +85,8 @@ void main() {
       expect(find.text('A'), findsOneWidget);
 
       key.currentState!.set('score', 50);
-      await tester.pump();
+      // The old branch leaves after its presence transition.
+      await tester.pumpAndSettle();
 
       expect(find.text('A'), findsNothing);
       expect(find.text('F'), findsOneWidget);

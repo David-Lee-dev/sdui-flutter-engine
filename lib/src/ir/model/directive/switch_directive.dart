@@ -10,6 +10,7 @@ final class SwitchDirective extends Directive {
     required this.cases,
     this.fallback,
     required this.path,
+    this.presence = const PresenceConfig(),
   });
 
   /// The compiled expression whose value is compared with case labels.
@@ -26,4 +27,7 @@ final class SwitchDirective extends Directive {
 
   /// The source node's tree path for diagnostics.
   final String path;
+
+  /// How a case change enters and exits, from the node's `_presence`.
+  final PresenceConfig presence;
 }

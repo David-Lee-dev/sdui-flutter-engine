@@ -1,10 +1,10 @@
-
 import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/widgets.dart' hide Action;
 
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/ir/model/lifecycle_hook.dart';
 import '../../environment/_base.dart';
+import '../../environment/map_environment.dart';
 import '../../environment/scope/commit_scheduler.dart';
 import '../../environment/scope/json_value.dart';
 import '../../environment/scope/scope_environment.dart';
@@ -12,9 +12,11 @@ import 'package:sdui_engine/src/contract/error_observer.dart';
 import '../../engine_errors.dart';
 import '../../engine_host.dart';
 import '../../telemetry/telemetry.dart';
+import '../presence.dart';
 import 'action_host.dart';
 import 'lifecycle_runner.dart';
 import 'skeleton_scope.dart';
+import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
 
 class _ScopeLayer extends InheritedWidget {
@@ -50,13 +52,15 @@ class Scope extends StatefulWidget {
     this.actions = const {},
     this.lifecycle = const [],
     this.skeleton,
+    this.presence = const PresenceConfig(),
   });
 
   Scope.ofState(Map<String, Object?> state, {super.key, required this.child})
     : config = ScopeConfig(state: state),
       actions = const {},
       lifecycle = const [],
-      skeleton = null;
+      skeleton = null,
+      presence = const PresenceConfig();
 
   final ScopeConfig config;
 
@@ -67,6 +71,9 @@ class Scope extends StatefulWidget {
   /// Placeholder displayed while this scope's mount actions are completing.
   final Widget? skeleton;
 
+  /// How [skeleton] swaps to [child].
+  final PresenceConfig presence;
+
   final Widget child;
 
   /// Returns the nearest engine environment visible from [context].
@@ -76,12 +83,31 @@ class Scope extends StatefulWidget {
   static Widget provideEnv({required Environment env, required Widget child}) =>
       _ScopeLayer(env: env, child: child);
 
-  /// Returns the nearest action host visible from [context].
+  /// Inserts the nearest presence slot's view of the environment, so the
+  /// subtree keeps the values it last read while the slot exits.
+  static Widget retained({required Widget child}) =>
+      _RetainedLayer(child: child);
+
+  /// Returns the nearest action host visible from [context]; none while a
+  /// presence slot around [context] exits, so nothing there dispatches.
   static ActionHost? actionHost(BuildContext context) =>
-      _ActionLayer.of(context);
+      PresenceScope.exitingOf(context) ? null : _ActionLayer.of(context);
 
   @override
   ScopeState createState() => ScopeState();
+}
+
+class _RetainedLayer extends StatelessWidget {
+  const _RetainedLayer({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final outer = _ScopeLayer.of(context) ?? MapEnvironment.empty;
+    final slot = PresenceScope.handleOf(context);
+    return _ScopeLayer(env: slot?.view(outer) ?? outer, child: child);
+  }
 }
 
 /// Coordinates a [Scope] environment, action host, and lifecycle hooks.
@@ -108,13 +134,14 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
             (hook) => hook.trigger == LifecycleTrigger.mount,
           ),
     );
-    _lifecycle = LifecycleRunner(
-      host: _host,
-      isMounted: () => mounted,
-      onMountSettled: () => _loading.value = false,
-    )
-      ..hooks = widget.lifecycle
-      ..deferMountForSkeleton = widget.skeleton != null;
+    _lifecycle =
+        LifecycleRunner(
+            host: _host,
+            isMounted: () => mounted,
+            onMountSettled: () => _loading.value = false,
+          )
+          ..hooks = widget.lifecycle
+          ..deferMountForSkeleton = widget.skeleton != null;
     if (widget.lifecycle.isNotEmpty) {
       WidgetsBinding.instance.addObserver(this);
       _observerRegistered = true;
@@ -132,6 +159,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
       screenId: telemetry?.screenId,
       screenViewId: telemetry?.screenViewId,
     );
+    _lifecycle.suspended = PresenceScope.exitingOf(context);
 
     if (widget.lifecycle.isEmpty) return;
     _lifecycle.visibilityChanged(_isVisible());
@@ -210,6 +238,7 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
         : SkeletonScope(
             loading: _loading,
             skeleton: widget.skeleton!,
+            presence: widget.presence,
             child: widget.child,
           );
     return _ScopeLayer(

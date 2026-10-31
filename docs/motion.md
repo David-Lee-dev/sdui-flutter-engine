@@ -69,6 +69,18 @@ A repeating layer wraps its child in a `RepaintBoundary`, so the animation repai
 
 `_motion` atoms are time-based tweens. For a value that follows changing state with spring physics (velocity carried across retargets), use `_morph` with `_spring`; see [Control flow](control-flow.md#_spring).
 
+## Exit motions
+
+A `_motion` entry's `on` places it in the presence phases of the nearest structural directive around it (see [Presence transitions](control-flow.md#presence-transitions)). Since 0.16.0.
+
+| `on` | Behavior |
+| --- | --- |
+| `enter` (default) | As above: runs when it mounts. |
+| `exit` | Rests at its end state and plays backwards (t 1 → 0) over its `duration` when the directive removes the content; `pop_in` with `on: exit` is a pop-out. `delay` and `repeat` do not apply to the exit run. |
+| `both` | Runs as an entrance, and plays backwards from wherever it is when the content is removed. |
+
+Any other `on` value fails to compile; it must be a literal. An exit entry plays only for the nearest directive that removes content: a nested `_if` inside the removed content does not play its own exits. Engines before 0.16 ignore `on` and run every entry as an entrance, so gate templates that use it with `_requires: [presence_v1]` and the server's app-version check.
+
 ## Start gate inside a scrollable
 
 Without an ancestor `Scrollable`, a motion starts as soon as it mounts, exactly as its

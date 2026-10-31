@@ -10,6 +10,7 @@ import '../../../widget/catalog/custom/swipe_layout_widget.dart';
 import '../../../widget/catalog/custom/swipe_pane_widget.dart';
 import '../../../widget/factory.dart';
 import '../../../widget/contract/action_sink.dart';
+import '../../../wrapper/presence.dart';
 import '../../../wrapper/scope/scope.dart';
 import '../../../wrapper/scope/scope_binding.dart';
 import '../../binding/loop_resolver.dart';
@@ -205,9 +206,30 @@ class LoopObserver extends StatelessWidget {
     Map<String, Object?> p,
     List<({Map<String, Object?> frame, String key})> resolved,
   ) {
-    final children = [for (final item in resolved) _item(item)];
     final props = type == 'wrap' ? p : {'main_axis_size': 'min', ...p};
-    return WidgetFactory.build(context, type, props, children);
+    final presence = directive.presence;
+    final mode = presence.enabled
+        ? NodeBuilder.presenceMode(directive.child)
+        : null;
+    if (mode == null) {
+      final children = [for (final item in resolved) _item(item)];
+      return WidgetFactory.build(context, type, props, children);
+    }
+    return PresenceGroup.list(
+      config: presence,
+      mode: mode,
+      axis: switch (type) {
+        'row' => Axis.horizontal,
+        'wrap' => PropsResolver.axis(p['direction']) ?? Axis.horizontal,
+        _ => Axis.vertical,
+      },
+      items: [
+        for (final item in resolved)
+          (item.key, Scope.retained(child: _item(item))),
+      ],
+      builder: (children) =>
+          WidgetFactory.build(context, type, props, children),
+    );
   }
 
   static SliverGridDelegate _gridDelegate(

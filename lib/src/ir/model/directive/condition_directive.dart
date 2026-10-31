@@ -10,6 +10,7 @@ final class ConditionDirective extends Directive {
     required this.branches,
     this.fallback,
     required this.path,
+    this.presence = const PresenceConfig(),
   });
 
   /// The ordered predicate/body pairs, with the first true predicate winning.
@@ -20,6 +21,9 @@ final class ConditionDirective extends Directive {
 
   /// The source node's tree path for diagnostics.
   final String path;
+
+  /// How a branch change enters and exits, from the node's `_presence`.
+  final PresenceConfig presence;
 
   /// Returns every binding root that can affect branch selection.
   ///

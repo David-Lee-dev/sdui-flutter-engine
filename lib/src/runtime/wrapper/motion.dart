@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../log/engine_log.dart';
 import '../motion/_base.dart';
+import 'presence.dart';
 
 /// Owns the controller and lifecycle that turn a declarative [MotionPlan] into frames.
 ///
@@ -17,6 +18,10 @@ import '../motion/_base.dart';
 /// the layer draws its end state (t = 1) without running. A repeating layer
 /// isolates [child] in a [RepaintBoundary] unless [repaintBoundary] is false
 /// (a sliver child); a one-shot layer adds nothing.
+///
+/// [phase] (`on:`) places the layer in its nearest presence slot: an `enter`
+/// layer runs as above; an `exit` layer rests at its end state and plays
+/// backwards (t 1 → 0) when the slot removes its content; `both` does both.
 class MotionWrapper extends StatefulWidget {
   const MotionWrapper({
     super.key,
@@ -25,6 +30,7 @@ class MotionWrapper extends StatefulWidget {
     required this.child,
     this.path,
     this.repaintBoundary = true,
+    this.phase = MotionPhase.enter,
   });
 
   final Motion motion;
@@ -37,12 +43,16 @@ class MotionWrapper extends StatefulWidget {
   /// Whether a repeating layer may isolate [child]; false for a sliver.
   final bool repaintBoundary;
 
+  /// The presence phases this layer plays in.
+  final MotionPhase phase;
+
   @override
   State<MotionWrapper> createState() => _MotionWrapperState();
 }
 
 class _MotionWrapperState extends State<MotionWrapper>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin
+    implements PresenceMember {
   late final AnimationController _controller;
   CurvedAnimation? _curved;
   Timer? _delayTimer;
@@ -98,6 +108,10 @@ class _MotionWrapperState extends State<MotionWrapper>
   /// mount so the child's subtree is never reparented.
   late final bool _isolate;
 
+  /// The presence slot this layer registered with, if any.
+  PresenceHandle? _presence;
+  bool _registered = false;
+
   static const _restPlan = MotionPlan(duration: Duration.zero);
 
   @override
@@ -108,6 +122,7 @@ class _MotionWrapperState extends State<MotionWrapper>
     _controller = AnimationController(vsync: this, duration: _plan.duration)
       ..addStatusListener(_onStatus);
     _curved = CurvedAnimation(parent: _controller, curve: _plan.curve);
+    if (widget.phase == MotionPhase.exit) _controller.value = 1;
   }
 
   /// The motion's plan, or `null` once it failed or cannot run (a repeat
@@ -142,10 +157,19 @@ class _MotionWrapperState extends State<MotionWrapper>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_registered) {
+      _registered = true;
+      _presence = PresenceScope.handleOf(context)?..add(this);
+    }
     _reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
     if (_reduce) {
       _holdEnd();
       return;
+    }
+    if (widget.phase == MotionPhase.exit) {
+      // An exit layer has no entrance: it rests at its end state.
+      _gatePassed = true;
+      _started = true;
     }
     if (_gatePassed) return;
     _removeListeners();
@@ -315,8 +339,9 @@ class _MotionWrapperState extends State<MotionWrapper>
       }
     }
 
-    if (_plan.delay > Duration.zero) {
-      _delayTimer = Timer(_plan.delay, go);
+    final delay = _plan.delay + (_presence?.enterDelay ?? Duration.zero);
+    if (delay > Duration.zero) {
+      _delayTimer = Timer(delay, go);
     } else {
       go();
     }
@@ -384,7 +409,35 @@ class _MotionWrapperState extends State<MotionWrapper>
   }
 
   @override
+  MotionPhase get phase => widget.phase;
+
+  @override
+  bool get affectsLayout => widget.motion.affectsLayout;
+
+  @override
+  Duration playExit() {
+    if (widget.phase == MotionPhase.enter || _off || _reduce) {
+      return Duration.zero;
+    }
+    _delayTimer?.cancel();
+    _generation++;
+    _legRun = null;
+    final from = _controller.value;
+    if (from <= 0) return Duration.zero;
+    _controller.reverse(from: from);
+    return _plan.duration * from;
+  }
+
+  @override
+  void cancelExit() {
+    if (widget.phase == MotionPhase.enter || _off || _reduce) return;
+    _generation++;
+    _controller.forward();
+  }
+
+  @override
   void dispose() {
+    _presence?.remove(this);
     _removeListeners();
     _delayTimer?.cancel();
     _curved?.dispose();

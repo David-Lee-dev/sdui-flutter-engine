@@ -13,6 +13,9 @@ final class RevealMotion extends Motion {
   MotionPlan plan(MotionParams params) => MotionPlan.from(params);
 
   @override
+  bool get affectsLayout => true;
+
+  @override
   Widget frame(BuildContext context, double t, Widget child, MotionParams p) {
     final factor = t.clamp(0.0, 1.0).toDouble();
     final direction = p.text('direction');

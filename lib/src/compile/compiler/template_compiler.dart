@@ -5,6 +5,7 @@ import 'package:sdui_engine/src/ir/model/engine_spring.dart';
 import 'package:sdui_engine/src/ir/model/event_timing.dart';
 import 'package:sdui_engine/src/ir/model/lifecycle_hook.dart';
 import 'package:sdui_engine/src/ir/model/interaction_events.dart';
+import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
 import 'package:sdui_engine/src/ir/compiled_value.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
@@ -34,10 +35,17 @@ final class TemplateCompiler {
     '_on',
     '_motion',
     '_provides',
+    '_presence',
   };
 
-  static const _condAllowedKeys = {'_if', '_loop', '_scope'};
-  static const _switchAllowedKeys = {'_value', '_if', '_loop', '_scope'};
+  static const _condAllowedKeys = {'_if', '_loop', '_scope', '_presence'};
+  static const _switchAllowedKeys = {
+    '_value',
+    '_if',
+    '_loop',
+    '_scope',
+    '_presence',
+  };
 
   static const _knownEvents = InteractionEvents.all;
 
@@ -79,6 +87,8 @@ final class TemplateCompiler {
     'layout_builder_v1',
     // 0.13.0: `_motion` `start: "mount"`.
     'motion_start_v1',
+    // 0.16.0: `_presence` and `_motion` `on: enter|exit|both`.
+    'presence_v1',
   };
 
   /// Builds the directive tree for a template root.
@@ -226,6 +236,7 @@ final class TemplateCompiler {
       branches: branches,
       fallback: fallback,
       path: node.path,
+      presence: _parsePresence(node),
     );
   }
 
@@ -299,6 +310,7 @@ final class TemplateCompiler {
       cases: cases,
       fallback: fallback,
       path: node.path,
+      presence: _parsePresence(node),
     );
   }
 
@@ -628,6 +640,7 @@ final class TemplateCompiler {
       path: node.path,
       actions: _compileActions(config['_action'], node.path),
       lifecycle: _compileLifecycle(config['_lifecycle'], node.path),
+      presence: _parsePresence(node),
     );
   }
 
@@ -909,12 +922,60 @@ final class TemplateCompiler {
     if (entry is! Map) return null;
     final type = entry['type'];
     if (type is! String || type.isEmpty) return null;
+    final on = entry['on'];
+    if (on != null && !_motionPhases.contains(on)) {
+      throw InvalidTemplateException(
+        path,
+        '_motion "$type" "on" must be one of ${_motionPhases.join(", ")} '
+        '(got "$on").',
+      );
+    }
     return (
       type: type,
       params: ValueCompiler.map({
         for (final param in entry.entries)
           if (param.key != 'type') '${param.key}': param.value,
       }, path),
+    );
+  }
+
+  static const _motionPhases = {'enter', 'exit', 'both'};
+
+  static const _presenceKeys = {'space', 'order', 'duration', 'curve'};
+
+  /// Reads the node's `_presence`: `false` turns presence off, `true` or a
+  /// map keeps it on. An unknown map key is a typo and fails; a malformed
+  /// value takes its default, like a motion parameter.
+  static PresenceConfig _parsePresence(UiNode node) {
+    if (!node.reserved.containsKey('_presence')) return const PresenceConfig();
+    final raw = node.reserved['_presence'];
+    if (raw == true) return const PresenceConfig();
+    if (raw == false) return PresenceConfig.off;
+    if (raw is! Map) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_presence" must be true, false or a map.',
+      );
+    }
+    for (final key in raw.keys) {
+      if (!_presenceKeys.contains(key)) {
+        throw InvalidTemplateException(
+          node.path,
+          'unknown "_presence" key "$key" '
+          '(allowed: ${_presenceKeys.join(", ")}).',
+        );
+      }
+    }
+    final space = raw['space'];
+    final duration = raw['duration'];
+    final curve = raw['curve'];
+    return PresenceConfig(
+      space: space is bool ? space : true,
+      sequential: raw['order'] == 'sequential',
+      durationMs: duration is num && duration.isFinite && duration >= 0
+          ? duration.round()
+          : null,
+      curve: curve is String || curve is List ? curve : null,
     );
   }
 
@@ -945,6 +1006,7 @@ final class TemplateCompiler {
     return ConditionDirective(
       branches: [(predicate: _compileExpr(raw, node.path), body: child)],
       path: node.path,
+      presence: _parsePresence(node),
     );
   }
 
@@ -986,6 +1048,7 @@ final class TemplateCompiler {
       path: node.path,
       wrap: wrap,
       wrapParams: wrapParams,
+      presence: _parsePresence(node),
     );
   }
 

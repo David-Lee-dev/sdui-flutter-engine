@@ -2,6 +2,7 @@ import '../action/command.dart';
 import '../engine_spring.dart';
 import '../event_timing.dart';
 import '../lifecycle_hook.dart';
+import '../presence_config.dart';
 import '../scope_config.dart';
 import 'package:sdui_engine/src/ir/compiled_value.dart';
 import 'package:sdui_engine/src/ir/expression.dart';

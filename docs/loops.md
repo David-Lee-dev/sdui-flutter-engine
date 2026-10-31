@@ -49,6 +49,10 @@ _loop:
 
 These are the validator's complete accepted names. `box`, `data`, `event`, and `set` are not loop wrappers; they belong to other concepts.
 
+## Presence
+
+Since 0.16.0 the eager `column`, `row` and `wrap` strategies animate item changes (see [Presence transitions](control-flow.md#presence-transitions)): a new key grows in at its index along the wrapper's main axis (`wrap`: its `direction`), and a removed key plays its exit motions and collapses in its old place. A reorder of kept keys still moves them at once. `_presence` on the loop node tunes or turns this off. Every other strategy, and items whose body is a `dismissible`, change at once.
+
 ## Mutation and constraints
 
 `reorderable` and `dismissible` write a copied list back to the wrapper parameter `bind` when supplied, otherwise to `_in` only when `_in` is a bare binding such as `${items}`. Computed/path sources have no inferred write target and therefore display but do not mutate state. The target must resolve through the nearest declaring scope.

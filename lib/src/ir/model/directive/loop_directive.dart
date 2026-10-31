@@ -14,6 +14,7 @@ final class LoopDirective extends Directive {
     required this.path,
     this.wrap = 'column',
     this.wrapParams = const {},
+    this.presence = const PresenceConfig(),
   });
 
   final Object? source;
@@ -36,6 +37,10 @@ final class LoopDirective extends Directive {
 
   /// The source node's tree path for runtime diagnostics.
   final String path;
+
+  /// How inserted and removed items enter and exit, from the node's
+  /// `_presence`; only the eager column, row and wrap strategies use it.
+  final PresenceConfig presence;
 
   /// Returns the external binding roots required by the loop.
   ///

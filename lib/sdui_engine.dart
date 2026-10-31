@@ -52,6 +52,7 @@ export 'src/impl/flutter_error_observer.dart' show FlutterErrorObserver;
 export 'src/impl/ink_tap_feedback.dart' show InkTapFeedback;
 export 'src/presentation/modal_style.dart' show ModalStyle;
 export 'src/presentation/page_transition_style.dart' show PageTransitionStyle;
+export 'src/presentation/presence_style.dart' show PresenceStyle;
 export 'src/presentation/presentation.dart'
     show
         SduiLoadErrorBuilder,

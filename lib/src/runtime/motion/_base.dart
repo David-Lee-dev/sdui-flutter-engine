@@ -160,6 +160,10 @@ abstract class Motion {
   /// Builds the scheduling plan for [params].
   MotionPlan plan(MotionParams params);
 
+  /// Whether [frame] changes the child's layout size (a reveal), so a
+  /// presence slot leaves the space to this motion while it plays.
+  bool get affectsLayout => false;
+
   /// Wraps [child] with the visual state represented by progress [t].
   Widget frame(
     BuildContext context,

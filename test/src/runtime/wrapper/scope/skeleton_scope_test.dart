@@ -93,7 +93,8 @@ void main() {
     });
 
     testWidgets(
-      'skips skeleton painting and fade when loading finishes quickly',
+      'shows content at once and never paints the skeleton when loading '
+      'finishes quickly',
       (tester) async {
         final loading = ValueNotifier(true);
         addTearDown(loading.dispose);
@@ -112,8 +113,10 @@ void main() {
 
         loading.value = false;
         await tester.pump();
-
         expect(find.byKey(_childKey), findsOneWidget);
+
+        // The never-painted skeleton leaves after the presence swap.
+        await tester.pumpAndSettle();
         expect(find.byKey(_skeletonKey), findsNothing);
         expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(FadeTransition), findsNothing);

@@ -15,15 +15,16 @@ class ConditionObserver extends StatelessWidget {
   final ConditionDirective directive;
 
   Widget _resolve(Environment env) {
-    for (final branch in directive.branches) {
+    for (final (index, branch) in directive.branches.indexed) {
       if (ExpressionEvaluator.evaluateTruthy(branch.predicate, env)) {
-        return NodeBuilder.build(branch.body);
+        return _show(index, branch.body);
       }
     }
-    final fallback = directive.fallback;
-    if (fallback == null) return const SizedBox.shrink();
-    return NodeBuilder.build(fallback);
+    return _show('else', directive.fallback);
   }
+
+  Widget _show(Object key, Directive? body) =>
+      NodeBuilder.branch(directive, directive.presence, key, body);
 
   @override
   Widget build(BuildContext context) {

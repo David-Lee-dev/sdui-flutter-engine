@@ -2,7 +2,33 @@
 
 ## Unreleased
 
-Performance only; what is shown, padded and dispatched is unchanged.
+**Behavior change:** structural changes animate by default. `_if`, `cond` and
+`switch` grow inserted content into its space and collapse removed content
+(enter 300 ms `emphasized_decelerate`, exit 250 ms `emphasized_accelerate`, a
+branch swap 300 ms `emphasized` from A's size to B's). Eager `column`, `row`
+and `wrap` loops do the same per item, and a `_scope` `_skeleton` swaps to its
+content the same way (a load inside the grace also swaps, without bones). The
+first build, reduced motion, muted tickers, route changes, reseeds and hot
+reload stay instant. Turn it off per node with `_presence: false`.
+
+- `_presence: false | { space, order: parallel|sequential, duration, curve }`
+  on any node tunes the transitions of its structural directives.
+- `_motion` entries take `on: enter|exit|both` (default `enter`). An exit entry
+  plays its motion backwards when the directive removes the content.
+- Leaving content keeps its last values, takes no input or semantics, sees no
+  action host and pauses its `_scope` lifecycle hooks.
+- `SduiPresentation.presence` (`PresenceStyle`) sets the app-wide durations and
+  curves. `Motion.affectsLayout` (default `false`, `reveal` true) lets a
+  custom motion own the space.
+- Lazy and sliver loops, `swipe`, `spin_grid`, `auto_scroll`, `serpentine*`,
+  `reorderable`, `dismissible` (wrap and body), loop reorders and sliver
+  bodies of `cond`/`switch` stay instant. Parent-data bodies (`expanded`,
+  `flexible`, `positioned*`, `spacer`) play exits in place without a size
+  animation and still take input while leaving.
+- Declare `_requires: [presence_v1]` for `_presence` and `on:`. Older engines
+  play `on: exit` entries as entrances; gate by app version on the server.
+
+Performance only (the items below); what is shown, padded and dispatched is unchanged.
 
 - Reduced-motion reads (engine page transition decision, `shared_element`,
   spring `_morph`) now depend only on `MediaQuery` `disableAnimations`, so

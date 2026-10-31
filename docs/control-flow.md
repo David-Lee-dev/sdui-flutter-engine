@@ -24,7 +24,7 @@ _children:
     value: Try again
 ```
 
-The first truthy branch wins. A condition may contain only `_if`, `_loop`, and `_scope` as control-node markers; branch marker keys are stripped before the child is compiled. Every branch is validated even when inactive and must satisfy the parent's layout protocol.
+The first truthy branch wins. A condition may contain only `_if`, `_loop`, `_scope`, and `_presence` as control-node markers; branch marker keys are stripped before the child is compiled. Every branch is validated even when inactive and must satisfy the parent's layout protocol.
 
 ## `switch`
 
@@ -39,7 +39,46 @@ _children:
   - { _type: text, _default: true, value: Unknown }
 ```
 
-Matching uses the evaluator's structural equality. A switch control node allows `_value`, `_if`, `_loop`, and `_scope` only; like `cond`, it takes no widget props.
+Matching uses the evaluator's structural equality. A switch control node allows `_value`, `_if`, `_loop`, `_scope`, and `_presence` only; like `cond`, it takes no widget props.
+
+## Presence transitions
+
+Since 0.16.0 a structural change is a transition owned by the directive that made it, on by default. When `_if`, `cond`, or `switch` inserts content, its slot grows from nothing to the content's size; when it removes content, the content plays its exit motions (`_motion` entries with `on: exit` or `on: both`, see [Motion](motion.md#exit-motions)) and the slot collapses, then the content leaves. A branch change (if↔else, case A→B) shows both while the size goes from A's to B's; an output without phase motions of its own crossfades. Eager loops (`column`, `row`, `wrap`) do the same per item (see [Loops](loops.md#presence)), and a `_scope` `_skeleton` swaps to its content the same way.
+
+| Phase | Default | Curve |
+| --- | --- | --- |
+| enter | 300 ms | `emphasized_decelerate` |
+| exit | 250 ms | `emphasized_accelerate` |
+| swap | 300 ms | `emphasized` |
+
+The app sets these once with `SduiPresentation(presence: PresenceStyle(...))`. A node tunes or turns them off with `_presence`, which applies to every structural directive of that node (`_if`, `_loop`, `_scope` skeleton, `cond`, `switch`):
+
+```yaml
+- _type: cond
+  _presence: false                 # instant, as before 0.16
+- _type: container
+  _if: '${banner != null}'
+  _presence: { order: sequential, duration: 200 }
+  _motion: [pop_in, { type: fade, on: exit }]
+```
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `space` | bool | `true` | Animate the slot size. `false` keeps the exit motions but the size changes at once. |
+| `order` | `parallel` or `sequential` | `parallel` | `sequential`: exit motions finish before the slot collapses, and the slot expands before entrance motions start. |
+| `duration` | milliseconds | style | Length of every phase. |
+| `curve` | curve name or `[x1, y1, x2, y2]` | style | Curve of every phase. |
+
+An unknown `_presence` key fails to compile; a malformed value takes its default. Declare `_requires: [presence_v1]` for `_presence` and `on:`.
+
+Rules:
+
+- The first build, reduced motion (`MediaQuery.disableAnimations`) and a page whose tickers are muted (another route on top, an inactive tab) never animate: content appears and leaves at once.
+- Exits run only at the directive that removed the content. Popping or pushing a route, removing an ancestor, reseeding a template or hot reload remove content without exits.
+- Content that comes back while it exits reverses in place, on the same element and state.
+- Leaving content keeps the values it showed last (bindings do not update), takes no taps, is left out of semantics, sees no action host (its widgets cannot dispatch), and its `_scope` lifecycle hooks pause; they resume, without `remount`, if it comes back. `dispose` hooks still fire when it is removed.
+- A `reveal_*` motion in the content owns the space in its phase, so the slot does not also animate the size.
+- Sliver bodies, `dismissible` bodies and lazy loops stay instant. A parent-data body (`expanded`, `flexible`, `positioned`, `positioned_fill`, `spacer`) keeps its parent data: it plays its exit motions in place without a size animation, still takes input while it exits, and a new branch replaces it at once.
 
 ## `_morph`
 

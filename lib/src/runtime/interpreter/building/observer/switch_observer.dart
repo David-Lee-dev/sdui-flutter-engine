@@ -14,19 +14,18 @@ class SwitchObserver extends StatelessWidget {
 
   final SwitchDirective directive;
 
-  Directive? _match(Object? value) {
-    for (final branch in directive.cases) {
-      if (branch.value == value) return branch.branch;
+  (Object, Directive?) _match(Object? value) {
+    for (final (index, branch) in directive.cases.indexed) {
+      if (branch.value == value) return (index, branch.branch);
     }
-    return directive.fallback;
+    return ('default', directive.fallback);
   }
 
   Widget _resolve(Environment env) {
-    final branch = _match(
+    final (key, branch) = _match(
       ExpressionEvaluator.evaluate(directive.selector, env),
     );
-    if (branch == null) return const SizedBox.shrink();
-    return NodeBuilder.build(branch);
+    return NodeBuilder.branch(directive, directive.presence, key, branch);
   }
 
   @override

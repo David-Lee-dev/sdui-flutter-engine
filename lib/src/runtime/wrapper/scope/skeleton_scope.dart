@@ -3,15 +3,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-enum _Phase { holding, showing, revealing, done }
+import 'package:sdui_engine/src/ir/model/presence_config.dart';
+import '../presence.dart';
+
+enum _Phase { holding, showing, done }
 
 /// Bridges a scope's loading state to its content with a skeleton placeholder.
 ///
 /// The skeleton fills the slot from the first frame but is painted only after
 /// [grace]. This prevents fast loads from flashing a placeholder while still
-/// reserving space so slower sibling scopes cannot reflow shared layouts. A
-/// load that finishes during the grace shows content immediately with no fade;
-/// one that finishes afterward fades the visible skeleton out over [fade].
+/// reserving space so slower sibling scopes cannot reflow shared layouts. When
+/// the load finishes the slot swaps the skeleton for the content as a
+/// presence swap ([presence]): the size goes from the skeleton's to the
+/// content's while one crossfades into the other. A content already loaded at
+/// mount shows at once.
 class SkeletonScope extends StatefulWidget {
   const SkeletonScope({
     super.key,
@@ -19,7 +24,7 @@ class SkeletonScope extends StatefulWidget {
     required this.skeleton,
     required this.child,
     this.grace = const Duration(milliseconds: 300),
-    this.fade = const Duration(milliseconds: 250),
+    this.presence = const PresenceConfig(),
   });
 
   final ValueListenable<bool> loading;
@@ -29,26 +34,20 @@ class SkeletonScope extends StatefulWidget {
   /// The delay before an in-flight load reveals its skeleton.
   final Duration grace;
 
-  /// The skeleton fade-out duration when revealing content.
-  final Duration fade;
+  /// How the skeleton swaps to the content.
+  final PresenceConfig presence;
 
   @override
   State<SkeletonScope> createState() => _SkeletonScopeState();
 }
 
-class _SkeletonScopeState extends State<SkeletonScope>
-    with SingleTickerProviderStateMixin {
+class _SkeletonScopeState extends State<SkeletonScope> {
   late _Phase _phase;
-  late final AnimationController _fadeController;
-  late final Animation<double> _opacity;
   Timer? _graceTimer;
 
   @override
   void initState() {
     super.initState();
-    _fadeController = AnimationController(vsync: this, duration: widget.fade)
-      ..addStatusListener(_handleFadeStatus);
-    _opacity = Tween<double>(begin: 1, end: 0).animate(_fadeController);
     widget.loading.addListener(_handleLoading);
     _phase = widget.loading.value ? _Phase.holding : _Phase.done;
     if (_phase == _Phase.holding) {
@@ -62,21 +61,8 @@ class _SkeletonScopeState extends State<SkeletonScope>
   }
 
   void _handleLoading() {
-    if (widget.loading.value) return;
-    switch (_phase) {
-      case _Phase.holding:
-        _graceTimer?.cancel();
-        setState(() => _phase = _Phase.done);
-      case _Phase.showing:
-        setState(() => _phase = _Phase.revealing);
-        _fadeController.forward(from: 0);
-      case _Phase.revealing || _Phase.done:
-        return;
-    }
-  }
-
-  void _handleFadeStatus(AnimationStatus status) {
-    if (!mounted || status != AnimationStatus.completed) return;
+    if (widget.loading.value || _phase == _Phase.done) return;
+    _graceTimer?.cancel();
     setState(() => _phase = _Phase.done);
   }
 
@@ -84,7 +70,6 @@ class _SkeletonScopeState extends State<SkeletonScope>
   void dispose() {
     _graceTimer?.cancel();
     widget.loading.removeListener(_handleLoading);
-    _fadeController.dispose();
     super.dispose();
   }
 
@@ -93,25 +78,18 @@ class _SkeletonScopeState extends State<SkeletonScope>
   /// no node wires its own animation.
   Widget get _shimmered => _Shimmer(child: widget.skeleton);
 
+  // The content keeps one key from the swap on, so finishing the swap never
+  // remounts it or re-fires its entrance motion / mount lifecycle.
   @override
-  Widget build(BuildContext context) => switch (_phase) {
-    _Phase.holding => Opacity(opacity: 0, child: _shimmered),
-    _Phase.showing => _shimmered,
-    // `revealing` and `done` share one tree shape so the child stays at the same
-    // position (Stack index 0) across the transition. Returning a bare child on
-    // `done` would re-parent it out of the Stack, remounting the subtree and
-    // re-firing its entrance motion / mount lifecycle a second time.
-    _Phase.revealing || _Phase.done => Stack(
-      children: [
-        widget.child,
-        if (_phase == _Phase.revealing)
-          FadeTransition(
-            opacity: _opacity,
-            child: IgnorePointer(child: _shimmered),
-          ),
-      ],
-    ),
-  };
+  Widget build(BuildContext context) => PresenceGroup.single(
+    config: widget.presence,
+    childKey: _phase == _Phase.done ? 'content' : 'skeleton',
+    child: switch (_phase) {
+      _Phase.holding => Opacity(opacity: 0, child: _shimmered),
+      _Phase.showing => _shimmered,
+      _Phase.done => widget.child,
+    },
+  );
 }
 
 /// Sweeps an animated shimmer band across its whole subtree.

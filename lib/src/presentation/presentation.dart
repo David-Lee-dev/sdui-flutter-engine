@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import '../contract/tap_feedback.dart';
 import 'modal_style.dart';
 import 'page_transition_style.dart';
+import 'presence_style.dart';
 import 'scaling.dart';
 import 'typography.dart';
 
@@ -41,6 +42,7 @@ final class SduiPresentation {
     this.tapFeedback,
     this.modal = const ModalStyle(),
     this.transitions = const PageTransitionStyle(),
+    this.presence = const PresenceStyle(),
     this.typography = const SduiTypography(),
     this.scaling = const SduiScaling(),
     this.screenErrorBuilder,
@@ -55,6 +57,9 @@ final class SduiPresentation {
 
   final ModalStyle modal;
   final PageTransitionStyle transitions;
+
+  /// Defaults for structural enter, exit and swap transitions.
+  final PresenceStyle presence;
   final SduiTypography typography;
   final SduiScaling scaling;
 

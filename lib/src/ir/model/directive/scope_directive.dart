@@ -12,6 +12,7 @@ final class ScopeDirective extends Directive {
     this.actions = const {},
     this.lifecycle = const [],
     this.skeleton,
+    this.presence = const PresenceConfig(),
   });
 
   final ScopeConfig config;
@@ -28,4 +29,7 @@ final class ScopeDirective extends Directive {
 
   /// The source node's tree path for diagnostics.
   final String path;
+
+  /// How the [skeleton] swaps to content, from the node's `_presence`.
+  final PresenceConfig presence;
 }

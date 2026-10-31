@@ -42,6 +42,11 @@ final class LifecycleRunner {
   /// Whether mount flows await behind a skeleton (deferred awaitable path).
   bool deferMountForSkeleton = false;
 
+  /// Whether the owner's presence slot is exiting: no hook fires and
+  /// visibility changes are ignored, so leaving and coming back fires no
+  /// `remount`. Disposal still fires `dispose` hooks.
+  bool suspended = false;
+
   final List<Timer> _timers = [];
   bool _started = false;
   bool _wasObscured = false;
@@ -50,7 +55,7 @@ final class LifecycleRunner {
   /// Reacts to the owner's visibility: the first sighting starts the hooks;
   /// later obscured -> visible transitions fire `remount`.
   void visibilityChanged(bool visible) {
-    if (hooks.isEmpty) return;
+    if (hooks.isEmpty || suspended) return;
     if (!_started) {
       _started = true;
       _wasObscured = !visible;
@@ -82,13 +87,14 @@ final class LifecycleRunner {
   void reconcile() {
     _cancelTimers();
     _started = false;
-    if (hooks.isEmpty) return;
+    if (hooks.isEmpty || suspended) return;
     _started = true;
     _start();
   }
 
   /// Fires `dispose` hooks (the host must still be live) and stops timers.
   void dispose() {
+    suspended = false;
     fireByTrigger(LifecycleTrigger.dispose);
     _cancelTimers();
   }
@@ -125,7 +131,7 @@ final class LifecycleRunner {
             mountFutures.add(completer.future);
             _timers.add(
               Timer(hook.delay, () {
-                if (!_isMounted()) {
+                if (!_isMounted() || suspended) {
                   completer.complete();
                   return;
                 }
@@ -166,10 +172,11 @@ final class LifecycleRunner {
   }
 
   void _fire(LifecycleHook hook) {
+    if (suspended) return;
     if (hook.delay > Duration.zero) {
       _timers.add(
         Timer(hook.delay, () {
-          if (_isMounted()) {
+          if (_isMounted() && !suspended) {
             _host.handle(hook.action, invocation: _invocation(hook.trigger));
           }
         }),
@@ -188,15 +195,17 @@ final class LifecycleRunner {
     _timers.add(
       Timer(hook.delay, () {
         if (!_isMounted()) return;
-        EngineLog.runSilently(
-          () => _host.handle(
-            hook.action,
-            invocation: _invocation(LifecycleTrigger.interval),
-          ),
-        );
+        if (!suspended) {
+          EngineLog.runSilently(
+            () => _host.handle(
+              hook.action,
+              invocation: _invocation(LifecycleTrigger.interval),
+            ),
+          );
+        }
         _timers.add(
           Timer.periodic(every, (_) {
-            if (_isMounted()) {
+            if (_isMounted() && !suspended) {
               EngineLog.runSilently(
                 () => _host.handle(
                   hook.action,

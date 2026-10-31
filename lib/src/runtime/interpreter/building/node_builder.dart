@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
+import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import '../../log/engine_log.dart';
 import '../../environment/_base.dart';
 import '../expression_evaluator.dart';
@@ -16,6 +17,7 @@ import '../../util/props_resolver.dart';
 import '../../wrapper/interaction.dart';
 import '../../wrapper/scroll_event_wrapper.dart';
 import '../../wrapper/motion.dart';
+import '../../wrapper/presence.dart';
 import '../../wrapper/scope/bound_builder.dart';
 import '../../wrapper/scope/morph_scope.dart';
 import '../../wrapper/scope/press_scope.dart';
@@ -59,11 +61,82 @@ final class NodeBuilder {
         actions: scope.actions,
         lifecycle: scope.lifecycle,
         skeleton: scope.skeleton == null ? null : build(scope.skeleton!),
+        presence: scope.presence,
         child: scope.lifecycle.isEmpty
             ? build(scope.child)
             : _isolated(scope.child),
       ),
     };
+  }
+
+  /// Widget types whose widget is parent data and so must stay the direct
+  /// widget of its parent.
+  static const _parentData = {
+    'expanded',
+    'flexible',
+    'positioned',
+    'positioned_fill',
+    'spacer',
+  };
+
+  /// How a presence slot can hold what [directive] builds: in a box, in
+  /// place (a parent-data widget), or not at all (`null`: a sliver, or a
+  /// `dismissible`, which plays its own removal and must leave the tree as
+  /// soon as it is dismissed).
+  static PresenceMode? presenceMode(Directive directive) => switch (directive) {
+    PlainDirective node when _parentData.contains(node.type) =>
+      PresenceMode.inPlace,
+    PlainDirective node =>
+      node.type == 'dismissible' ||
+              WidgetFactory.specFor(node.type)?.produces ==
+                  LayoutProtocol.sliver
+          ? null
+          : PresenceMode.box,
+    ConditionDirective cond => _presenceModeOf([
+      for (final branch in cond.branches) branch.body,
+      ?cond.fallback,
+    ]),
+    SwitchDirective sw => _presenceModeOf([
+      for (final branch in sw.cases) branch.branch,
+      ?sw.fallback,
+    ]),
+    LoopDirective loop =>
+      loop.wrap == 'sliver_list' || loop.wrap == 'sliver_grid'
+          ? null
+          : PresenceMode.box,
+    MorphDirective morph => presenceMode(morph.child),
+    ScopeDirective scope => presenceMode(scope.child),
+  };
+
+  static PresenceMode? _presenceModeOf(List<Directive> bodies) {
+    var mode = PresenceMode.box;
+    for (final body in bodies) {
+      final each = presenceMode(body);
+      if (each == null) return null;
+      if (each == PresenceMode.inPlace) mode = each;
+    }
+    return mode;
+  }
+
+  /// Builds the output of [directive] (a cond or switch) showing [body]
+  /// under [key], or nothing when [body] is `null`: in a presence slot when
+  /// [presence] is on and the bodies fit one, plainly otherwise.
+  static Widget branch(
+    Directive directive,
+    PresenceConfig presence,
+    Object key,
+    Directive? body,
+  ) {
+    final mode = presence.enabled ? presenceMode(directive) : null;
+    if (mode == null) {
+      return body == null ? const SizedBox.shrink() : build(body);
+    }
+    return PresenceGroup.single(
+      config: presence,
+      mode: mode,
+      childKey: key,
+      child: body == null ? null : Scope.retained(child: build(body)),
+    );
   }
 
   /// Builds [directive] as the direct widget of a continuously animating
@@ -223,9 +296,15 @@ final class NodeBuilder {
     final off = _offMotions[context];
     for (final (index, motion) in directive.motions.indexed) {
       if (off != null && off.contains(index)) continue;
+      final phase = switch (motion.params['on']) {
+        'exit' => MotionPhase.exit,
+        'both' => MotionPhase.both,
+        _ => MotionPhase.enter,
+      };
       final List<(Motion, MotionParams)> atoms;
       try {
-        final resolved = ExpressionEvaluator.resolveMap(motion.params, env);
+        var resolved = ExpressionEvaluator.resolveMap(motion.params, env);
+        if (resolved.containsKey('on')) resolved = {...resolved}..remove('on');
         atoms = [
           for (final atom in MotionPresets.expand(motion.type, resolved))
             (MotionFactory.resolve(atom.type), MotionParams(atom.params)),
@@ -245,6 +324,7 @@ final class NodeBuilder {
           params: params,
           path: directive.path,
           repaintBoundary: box,
+          phase: phase,
           child: widget,
         );
       }
