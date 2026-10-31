@@ -28,7 +28,7 @@ final class Compile {
   /// Throws
   /// [InvalidTemplateException] on any template defect.
   ///
-  /// [catalog] is the language definition validation reads. When omitted it
+  /// [catalog] is the language definition compilation and validation read. When omitted it
   /// snapshots the compile-side registries (which the runtime seeds before
   /// any mount) — that covers widgets and commands but cannot enumerate
   /// motion/function names, so those checks are skipped. The engine passes
@@ -50,7 +50,7 @@ final class Compile {
         ? (Map<String, Object?>.of(template)..remove('_transition'))
         : template;
     final node = TemplateParser.buildUiTree(root);
-    final directive = TemplateCompiler.buildRoot(node);
+    final directive = TemplateCompiler.buildRoot(node, catalog: language);
     TemplateValidator.validate(directive, rootDataKeys, catalog: language);
     return (
       directive: directive,

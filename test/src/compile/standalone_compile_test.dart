@@ -4,7 +4,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/compile/compile.dart';
 import 'package:sdui_engine/src/compile/invalid_template_exception.dart';
+import 'package:sdui_engine/src/compile/schema/builtin_language.dart';
 import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
+import 'package:sdui_engine/src/compile/schema/widget_schema.dart';
+import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 
 void main() {
@@ -505,6 +508,75 @@ void main() {
           ],
         }),
         isNotNull,
+      );
+    });
+  });
+
+  group('derived bones read the passed catalog', () {
+    // A custom action widget the catalog declares but no registry holds.
+    final catalog = LanguageCatalog(
+      widgets: {
+        ...BuiltinLanguage.widgets,
+        'like_button': const WidgetSchema(kind: WidgetKind.action),
+      },
+      commands: BuiltinLanguage.commands,
+      motions: BuiltinLanguage.motions,
+      functions: BuiltinLanguage.functions,
+    );
+
+    Map<String, Object?> section(Map<String, Object?> button) => {
+      '_type': 'column',
+      '_scope': {
+        '_state': {'liked': null},
+        '_action': {
+          'load': {'_type': 'set', 'liked': null},
+        },
+        '_lifecycle': [
+          {'on': 'mount', 'action': 'load'},
+        ],
+      },
+      '_children': [
+        {
+          '_type': 'row',
+          '_skeleton': true,
+          '_children': [button],
+        },
+      ],
+    };
+
+    test('카탈로그의 action 위젯은 등록 없이도 크기 상자 뼈가 된다', () {
+      expect(WidgetSchemaRegistry.knows('like_button'), isFalse);
+      final directive = Compile.build(
+        section(const {'_type': 'like_button', 'width': 40, 'height': 40}),
+        const {},
+        catalog: catalog,
+      ).directive;
+      final row =
+          ((directive as ScopeDirective).child as PlainDirective)
+                  .children
+                  .single
+              as SkeletonDirective;
+      final bone =
+          (row.bones as PlainDirective).children.single as PlainDirective;
+      expect(bone.type, 'skeleton');
+      expect(bone.props, {'width': 40, 'height': 40});
+    });
+
+    test('크기 없는 카탈로그 action 위젯은 등록 없이도 컴파일 에러', () {
+      expect(WidgetSchemaRegistry.knows('like_button'), isFalse);
+      expect(
+        () => Compile.build(
+          section(const {'_type': 'like_button'}),
+          const {},
+          catalog: catalog,
+        ),
+        throwsA(
+          isA<InvalidTemplateException>().having(
+            (e) => e.toString(),
+            'message',
+            contains('"like_button" takes input or runs actions'),
+          ),
+        ),
       );
     });
   });

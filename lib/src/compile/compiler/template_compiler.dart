@@ -12,8 +12,8 @@ import 'package:sdui_engine/src/ir/expression.dart';
 import 'package:sdui_engine/src/ir/model/ui_node.dart';
 import '../invalid_template_exception.dart';
 import '../schema/builtin_language.dart';
+import '../schema/language_catalog.dart';
 import '../schema/widget_schema.dart';
-import '../schema/widget_schema_registry.dart';
 import '../template_parser.dart';
 import 'action_compiler.dart';
 import 'value_compiler.dart';
@@ -108,9 +108,13 @@ final class TemplateCompiler {
   /// Checks and consumes the root-only `_requires` declaration, then builds
   /// the tree like [buildDirectiveTree]. Throws [InvalidTemplateException]
   /// when `_requires` is not a list of known feature names.
-  static Directive buildRoot(UiNode node) {
+  ///
+  /// [catalog] is the language the widget schemas are read from; when
+  /// omitted it snapshots the compile-side registries.
+  static Directive buildRoot(UiNode node, {LanguageCatalog? catalog}) {
+    final language = catalog ?? LanguageCatalog.fromRegistries();
     if (!node.reserved.containsKey('_requires')) {
-      return buildDirectiveTree(node);
+      return _build(node, language);
     }
     final raw = node.reserved['_requires'];
     if (raw is! List) {
@@ -128,7 +132,7 @@ final class TemplateCompiler {
         );
       }
     }
-    return buildDirectiveTree(
+    return _build(
       UiNode(
         type: node.type,
         props: node.props,
@@ -141,6 +145,7 @@ final class TemplateCompiler {
         key: node.key,
         path: node.path,
       ),
+      language,
     );
   }
 
@@ -149,14 +154,21 @@ final class TemplateCompiler {
   /// Structural wrappers are applied from the node outward as morph, scope,
   /// condition, loop and skeleton boundaries. Throws [InvalidTemplateException] when a
   /// marker, control-flow branch, or embedded expression is invalid.
-  static Directive buildDirectiveTree(UiNode node) {
+  ///
+  /// [catalog] is as in [buildRoot].
+  static Directive buildDirectiveTree(
+    UiNode node, {
+    LanguageCatalog? catalog,
+  }) => _build(node, catalog ?? LanguageCatalog.fromRegistries());
+
+  static Directive _build(UiNode node, LanguageCatalog catalog) {
     Directive directive;
     if (node.type == _condType) {
       _rejectControlResiduals(node, _condAllowedKeys);
-      directive = _buildCond(node);
+      directive = _buildCond(node, catalog);
     } else if (node.type == _switchType) {
       _rejectControlResiduals(node, _switchAllowedKeys);
-      directive = _buildSwitch(node);
+      directive = _buildSwitch(node, catalog);
     } else {
       _rejectUnknownReserved(node);
       final motions = _parseMotion(node);
@@ -179,26 +191,24 @@ final class TemplateCompiler {
           ...CompiledValue.rootsOf(onSpec.payloads),
           for (final m in motions) ...CompiledValue.rootsOf(m.params),
         },
-        children: [
-          for (final child in node.children) buildDirectiveTree(child),
-        ],
+        children: [for (final child in node.children) _build(child, catalog)],
         slots: {
           for (final entry in node.slots.entries)
-            entry.key: buildDirectiveTree(entry.value),
+            entry.key: _build(entry.value, catalog),
         },
       );
     }
     // This order defines lexical visibility and execution order: morph is the
     // innermost boundary and skeleton is the outermost boundary.
     directive = _wrapMorph(node, directive);
-    directive = _wrapScope(node, directive);
+    directive = _wrapScope(node, directive, catalog);
     directive = _wrapIf(node, directive);
     directive = _wrapLoop(node, directive);
-    directive = _wrapSkeleton(node, directive);
+    directive = _wrapSkeleton(node, directive, catalog);
     return directive;
   }
 
-  static Directive _buildCond(UiNode node) {
+  static Directive _buildCond(UiNode node, LanguageCatalog catalog) {
     final branches = <({Expression predicate, Directive body})>[];
     Directive? fallback;
     for (final child in node.children) {
@@ -210,7 +220,7 @@ final class TemplateCompiler {
           'cond child needs exactly one of "_if"/"_else".',
         );
       }
-      final body = buildDirectiveTree(_without(child, _condMarkers));
+      final body = _build(_without(child, _condMarkers), catalog);
       if (hasElse) {
         if (child.reserved['_else'] != true) {
           throw InvalidTemplateException(
@@ -253,7 +263,7 @@ final class TemplateCompiler {
     );
   }
 
-  static Directive _buildSwitch(UiNode node) {
+  static Directive _buildSwitch(UiNode node, LanguageCatalog catalog) {
     final rawSelector = node.reserved['_value'];
     if (rawSelector is! String || rawSelector.isEmpty) {
       throw InvalidTemplateException(
@@ -274,7 +284,7 @@ final class TemplateCompiler {
           'switch child needs exactly one of "_case"/"_default".',
         );
       }
-      final body = buildDirectiveTree(_without(child, _switchMarkers));
+      final body = _build(_without(child, _switchMarkers), catalog);
       if (hasDefault) {
         if (child.reserved['_default'] != true) {
           throw InvalidTemplateException(
@@ -590,7 +600,11 @@ final class TemplateCompiler {
     'dispose': LifecycleTrigger.dispose,
   };
 
-  static Directive _wrapScope(UiNode node, Directive child) {
+  static Directive _wrapScope(
+    UiNode node,
+    Directive child,
+    LanguageCatalog catalog,
+  ) {
     if (!node.reserved.containsKey('_scope')) return child;
     final raw = node.reserved['_scope'];
     if (raw is! Map) {
@@ -639,11 +653,12 @@ final class TemplateCompiler {
           '"_scope._skeleton" must be a map.',
         );
       }
-      skeleton = buildDirectiveTree(
+      skeleton = _build(
         TemplateParser.buildUiTree(
           rawSkeleton.cast(),
           path: '${node.path}/_skeleton',
         ),
+        catalog,
       );
     }
     final lifecycle = _compileLifecycle(config['_lifecycle'], node.path);
@@ -1132,7 +1147,11 @@ final class TemplateCompiler {
   ///
   /// A node with its own mount hooks would wait for the scope around it, so
   /// it fails; its scope takes `_scope._skeleton` instead.
-  static Directive _wrapSkeleton(UiNode node, Directive child) {
+  static Directive _wrapSkeleton(
+    UiNode node,
+    Directive child,
+    LanguageCatalog catalog,
+  ) {
     if (!node.reserved.containsKey('_skeleton')) return child;
     final scope = node.reserved['_scope'];
     final lifecycle = scope is Map ? scope['_lifecycle'] : null;
@@ -1145,7 +1164,7 @@ final class TemplateCompiler {
       );
     }
     return SkeletonDirective(
-      bones: buildDirectiveTree(_boneTree(node)),
+      bones: _build(_boneTree(node, catalog), catalog),
       child: child,
       path: node.path,
       presence: _parsePresence(node),
@@ -1184,16 +1203,18 @@ final class TemplateCompiler {
   /// The bone tree of [node]'s `_skeleton`: `true` derives it, `{width}`
   /// derives one leaf bone of that width, a map with `_type` is the tree,
   /// and a `_loop` node repeats a row (`true` or `{count, tree}`).
-  static UiNode _boneTree(UiNode node) {
+  static UiNode _boneTree(UiNode node, LanguageCatalog catalog) {
     final raw = node.reserved['_skeleton'];
     final path = '${node.path}/_skeleton';
-    if (node.reserved.containsKey('_loop')) return _loopBones(node, raw, path);
-    if (raw == true) return _deriveBones(node);
+    if (node.reserved.containsKey('_loop')) {
+      return _loopBones(node, raw, path, catalog);
+    }
+    if (raw == true) return _deriveBones(node, catalog);
     if (raw is Map && raw.containsKey('_type')) {
       return TemplateParser.buildUiTree(raw.cast(), path: path);
     }
     if (raw is Map && raw.length == 1 && raw['width'] is num) {
-      final leaf = _deriveBones(node);
+      final leaf = _deriveBones(node, catalog);
       if (leaf.type != 'skeleton') {
         throw InvalidTemplateException(
           node.path,
@@ -1218,7 +1239,12 @@ final class TemplateCompiler {
   /// the node's `_wrap`; the row is `tree` or derived from the node. An
   /// interactive wrap becomes a plain column (a row when it scrolls
   /// horizontally) with its spacing, alignment and padding only.
-  static UiNode _loopBones(UiNode node, Object? raw, String path) {
+  static UiNode _loopBones(
+    UiNode node,
+    Object? raw,
+    String path,
+    LanguageCatalog catalog,
+  ) {
     final loop = node.reserved['_loop'] as Map;
     final wrap = loop['_wrap'] ?? 'column';
     final wrapType = wrap is Map ? wrap['_type'] : wrap;
@@ -1233,7 +1259,7 @@ final class TemplateCompiler {
     final UiNode row;
     if (raw == true) {
       count = 3;
-      row = _deriveBones(node);
+      row = _deriveBones(node, catalog);
     } else if (raw is Map &&
         raw.isNotEmpty &&
         raw.keys.every(const {'count', 'tree'}.contains)) {
@@ -1246,7 +1272,7 @@ final class TemplateCompiler {
         );
       }
       row = tree == null
-          ? _deriveBones(node)
+          ? _deriveBones(node, catalog)
           : TemplateParser.buildUiTree(
               tree.cast<String, Object?>(),
               path: '$path/tree',
@@ -1309,7 +1335,11 @@ final class TemplateCompiler {
   /// Nothing is guessed: a bound prop that is not paint-only, an image or
   /// an input or action widget without a literal size, and control flow
   /// without its own `_skeleton` fail.
-  static UiNode _deriveBones(UiNode node, {bool inOval = false}) {
+  static UiNode _deriveBones(
+    UiNode node,
+    LanguageCatalog catalog, {
+    bool inOval = false,
+  }) {
     if (node.type == _condType || node.type == _switchType) {
       throw InvalidTemplateException(
         node.path,
@@ -1317,7 +1347,7 @@ final class TemplateCompiler {
         'tree.',
       );
     }
-    final kind = WidgetSchemaRegistry.schemaFor(node.type)?.kind;
+    final kind = catalog.widgets[node.type]?.kind;
     if (kind == WidgetKind.bound || kind == WidgetKind.action) {
       final width = node.props['width'];
       final height = node.props['height'];
@@ -1390,18 +1420,23 @@ final class TemplateCompiler {
       type: node.type,
       props: _literalProps(node.props, node.path),
       children: [
-        for (final child in node.children) _childBones(child, inOval: oval),
+        for (final child in node.children)
+          _childBones(child, catalog, inOval: oval),
       ],
       slots: {
         for (final entry in node.slots.entries)
-          entry.key: _childBones(entry.value, inOval: oval),
+          entry.key: _childBones(entry.value, catalog, inOval: oval),
       },
       path: node.path,
     );
   }
 
-  static UiNode _childBones(UiNode node, {required bool inOval}) {
-    if (node.reserved.containsKey('_skeleton')) return _boneTree(node);
+  static UiNode _childBones(
+    UiNode node,
+    LanguageCatalog catalog, {
+    required bool inOval,
+  }) {
+    if (node.reserved.containsKey('_skeleton')) return _boneTree(node, catalog);
     if (node.reserved.containsKey('_if') ||
         node.reserved.containsKey('_loop') ||
         node.type == _condType ||
@@ -1412,7 +1447,7 @@ final class TemplateCompiler {
         'own "_skeleton" inside a derived "_skeleton".',
       );
     }
-    return _deriveBones(node, inOval: inOval);
+    return _deriveBones(node, catalog, inOval: inOval);
   }
 
   /// Keeps the literal entries of [props], drops bound paint-only entries
