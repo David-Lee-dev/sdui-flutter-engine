@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0
 
 **Behavior change:** structural changes animate by default. `_if`, `cond` and
 `switch` grow inserted content into its space and collapse removed content
