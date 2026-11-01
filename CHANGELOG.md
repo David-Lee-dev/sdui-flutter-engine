@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.20.2
+
+- The app sets the default for the `image` loading shimmer:
+  `SduiPresentation(imageShimmer: true)` makes a pending image without a
+  `loading` slot show the shimmer placeholder when the node sets no
+  `shimmer`. A node's `shimmer: false` or `shimmer: true` still wins. The
+  default stays `false`, so apps that set nothing see no change. See
+  docs/media.md.
+
 ## 0.20.1
 
 - `_skeleton: merge` (and `{ merge: true, radius, shape, width }`) now
