@@ -110,14 +110,26 @@ final class ActionHost implements ActionSink {
       unawaited(
         _runLogged(
           name,
-          () => _runFlow(action.steps, readEnv, <Future<void>>[], current),
+          () => _runFlow(
+            action.steps,
+            readEnv,
+            <Future<void>>[],
+            current,
+            event: event,
+          ),
         ).whenComplete(() => _inflight.remove(name)),
       );
     } else {
       unawaited(
         _runLogged(
           name,
-          () => _runFlow(action.steps, readEnv, <Future<void>>[], current),
+          () => _runFlow(
+            action.steps,
+            readEnv,
+            <Future<void>>[],
+            current,
+            event: event,
+          ),
         ),
       );
     }
@@ -150,7 +162,13 @@ final class ActionHost implements ActionSink {
     final readEnv = event == null ? env : _shadow(env, {'event': event});
     await _runLogged(
       name,
-      () => _runFlow(action.steps, readEnv, <Future<void>>[], current),
+      () => _runFlow(
+        action.steps,
+        readEnv,
+        <Future<void>>[],
+        current,
+        event: event,
+      ),
     );
   }
 
@@ -174,6 +192,7 @@ final class ActionHost implements ActionSink {
     List<Future<void>> background,
     ActionInvocation invocation, {
     String? branchOrigin,
+    required Object? event,
   }) async {
     for (final batch in flow) {
       // A completed driver cannot be cancelled, but its continuations can.
@@ -186,6 +205,7 @@ final class ActionHost implements ActionSink {
             background,
             invocation,
             branchOrigin: branchOrigin,
+            event: event,
           ),
         ),
       );
@@ -196,8 +216,10 @@ final class ActionHost implements ActionSink {
     Map<String, Object?> params,
     ActionInvocation invocation,
     String? branchOrigin,
+    Object? event,
   ) => DriverContext(
     params: params,
+    event: event,
     state: env,
     isCancelled: () => _disposed,
     invocation: invocation,
@@ -212,6 +234,7 @@ final class ActionHost implements ActionSink {
     List<Future<void>> background,
     ActionInvocation invocation, {
     String? branchOrigin,
+    required Object? event,
   }) async {
     if (_disposed) return;
     final guard = command.when;
@@ -226,7 +249,7 @@ final class ActionHost implements ActionSink {
       if (!pass) return;
     }
     if (command.background) {
-      background.add(_fireBackground(command, readEnv, invocation));
+      background.add(_fireBackground(command, readEnv, invocation, event));
       return;
     }
     try {
@@ -234,7 +257,7 @@ final class ActionHost implements ActionSink {
         Object? data;
         var ok = true;
         final params = ExpressionEvaluator.resolveMap(command.params, readEnv);
-        final ctx = _context(params, invocation, branchOrigin);
+        final ctx = _context(params, invocation, branchOrigin, event);
         final pending = _observer.begin(command, params, invocation, branchOrigin);
         // Await only when measurement is async (reserved span) — an
         // unconditional await would break synchronous `set` semantics.
@@ -260,6 +283,7 @@ final class ActionHost implements ActionSink {
                 background,
                 invocation,
                 branchOrigin: ActionOrigin.dismiss,
+                event: event,
               );
             }
           } else if (error is DriverError &&
@@ -276,6 +300,7 @@ final class ActionHost implements ActionSink {
                 background,
                 invocation,
                 branchOrigin: ActionOrigin.error,
+                event: event,
               );
             } else {
               _report(error, stack);
@@ -289,6 +314,7 @@ final class ActionHost implements ActionSink {
             background,
             invocation,
             branchOrigin: ActionOrigin.then,
+            event: event,
           );
         }
       } finally {
@@ -299,6 +325,7 @@ final class ActionHost implements ActionSink {
             background,
             invocation,
             branchOrigin: ActionOrigin.always,
+            event: event,
           );
         }
       }
@@ -312,6 +339,7 @@ final class ActionHost implements ActionSink {
     Command command,
     Environment readEnv,
     ActionInvocation invocation,
+    Object? event,
   ) async {
     CommandMeasurement? measurement;
     try {
@@ -323,7 +351,7 @@ final class ActionHost implements ActionSink {
         ActionOrigin.background,
       );
       measurement = pending is CommandMeasurement ? pending : await pending;
-      final ctx = _context(params, invocation, ActionOrigin.background);
+      final ctx = _context(params, invocation, ActionOrigin.background, event);
       await DriverRegistry.resolve(command.type).run(ctx);
       measurement.complete(outcome: _disposed ? 'cancelled' : 'success');
     } catch (error, stack) {

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/contract/telemetry_sink.dart';
+import 'package:sdui_engine/src/contract/external_command.dart';
+import 'package:sdui_engine/src/runtime/driver/external_driver.dart';
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/runtime/environment/scope/scope_environment.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
@@ -124,6 +126,20 @@ class _TelemetryCompletion implements TelemetryReservation {
   }
 }
 
+class _ExternalProbe extends ExternalCommand {
+  _ExternalProbe({this.measured = false});
+  @override
+  final bool measured;
+  final seen = <CommandInvocation>[];
+  @override
+  String get type => 'external_probe';
+  @override
+  Future<Object?> run(CommandInvocation invocation) async {
+    seen.add(invocation);
+    return null;
+  }
+}
+
 Command _set(String target, String expr) =>
     Command(type: 'set', params: {target: Expression.compile(expr)});
 
@@ -154,6 +170,96 @@ void main() {
   });
 
   group('ActionHost', () {
+    test('external command receives the initiating event', () async {
+      final probe = _ExternalProbe();
+      DriverRegistry.register(ExternalDriver(probe));
+      final host = ActionHost(
+        actions: {'run': _action(const Command(type: 'external_probe'))},
+        env: ScopeEnvironment(const {}),
+      );
+      final event = {'id': 42};
+      await host.handleAwaitable('run', event: event);
+      expect(probe.seen.single.event, same(event));
+    });
+
+    test(
+      'events remain invocation-local through parent and nested flows',
+      () async {
+        final probe = _ExternalProbe(measured: true);
+        DriverRegistry.register(ExternalDriver(probe));
+        final parent = ActionHost(
+          actions: {
+            'run': _action(
+              const Command(
+                type: 'external_probe',
+                then: [
+                  [Command(type: 'external_probe', background: true)],
+                ],
+                always: [
+                  [Command(type: 'external_probe')],
+                ],
+              ),
+            ),
+          },
+          env: ScopeEnvironment({'event': 'scope value'}),
+        );
+        final child = ActionHost(
+          actions: {},
+          env: ScopeEnvironment(const {}),
+          parent: parent,
+        );
+        final first = {'id': 1};
+        final second = {'id': 2};
+        await Future.wait([
+          child.handleAwaitable('run', event: first),
+          child.handleAwaitable('run', event: second),
+          child.handleAwaitable('run'),
+        ]);
+        await Future<void>.delayed(Duration.zero);
+        expect(probe.seen, hasLength(9));
+        expect(
+          probe.seen.where((i) => identical(i.event, first)),
+          hasLength(3),
+        );
+        expect(
+          probe.seen.where((i) => identical(i.event, second)),
+          hasLength(3),
+        );
+        expect(probe.seen.where((i) => i.event == null), hasLength(3));
+      },
+    );
+
+    for (final code in ['FAILED', DriverError.dismissed]) {
+      test('event survives $code continuation and always', () async {
+        final gate = Completer<Object?>();
+        DriverRegistry.register(_AsyncDriver(gate));
+        final probe = _ExternalProbe();
+        DriverRegistry.register(ExternalDriver(probe));
+        const branch = [
+          [Command(type: 'external_probe')],
+        ];
+        final host = ActionHost(
+          actions: {
+            'run': _action(
+              const Command(
+                type: 'async',
+                onError: {'_': branch},
+                dismiss: branch,
+                always: branch,
+              ),
+            ),
+          },
+          env: ScopeEnvironment(const {}),
+        );
+        final event = {'id': 42};
+        final run = host.handleAwaitable('run', event: event);
+        gate.completeError(DriverError(code));
+        await run;
+        expect(probe.seen, hasLength(2));
+        expect(probe.seen.every((i) => identical(i.event, event)), isTrue);
+      });
+    }
+
     group('command telemetry', () {
       test('api reserves before execution and masks variable values', () async {
         final sink = _TelemetrySink();

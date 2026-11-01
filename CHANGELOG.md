@@ -55,6 +55,12 @@
   first row left to right whatever the text direction, so `progress.index`
   0 is the first row's last child in RTL. Mirroring the track for RTL is
   not supported.
+- Fix: an app `ExternalCommand` receives the event that started the action
+  in `CommandInvocation.event`, including inside `_then`, `_error`,
+  `_dismiss`, `_always` and background commands and when the action is
+  found on a parent scope. It was always `null`. Overlapping runs each keep
+  their own event, and a scope state key named `event` is not mistaken for
+  it.
 
 ## 0.17.5
 
