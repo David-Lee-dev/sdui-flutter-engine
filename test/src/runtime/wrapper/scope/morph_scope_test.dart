@@ -342,6 +342,107 @@ void main() {
       await tester.pumpAndSettle();
       expect(value(tester), 1);
     });
+
+    testWidgets('mounted 템플릿 교체 — 같은 State가 새 _to로 재전이한다', (tester) async {
+      Map<String, Object?> morph(int to) => {
+        '_from': 0,
+        '_to': to,
+        '_as': 'n',
+        '_duration': 100,
+      };
+      await tester.pumpWidget(mount(morph(100)));
+      await tester.pumpAndSettle();
+      final state = tester.state(find.byType(MorphScope));
+      await tester.pumpWidget(mount(morph(200)));
+      expect(tester.state(find.byType(MorphScope)), same(state));
+      await tester.pumpAndSettle();
+      expect(value(tester), 200);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('mounted 템플릿 교체 — 바뀐 _to의 root를 다시 구독한다', (tester) async {
+      Map<String, Object?> template(String root) => {
+        '_type': 'text',
+        '_morph': {
+          '_from': 0,
+          '_to': '\${$root}',
+          '_as': 'n',
+          '_duration': 100,
+        },
+        'value': r'${n}',
+      };
+      Widget tree(Map<String, Object?> t, int b) => MaterialApp(
+        home: EngineRunner(template: t, rootData: {'a': 100, 'b': b}),
+      );
+      await tester.pumpWidget(tree(template('a'), 200));
+      await tester.pumpAndSettle();
+      final replacement = template('b');
+      await tester.pumpWidget(tree(replacement, 200));
+      await tester.pumpAndSettle();
+      expect(value(tester), 200);
+      // Same template instance: the value flows through the root scope.
+      await tester.pumpWidget(tree(replacement, 300));
+      await tester.pumpAndSettle();
+      expect(value(tester), 300);
+    });
+
+    testWidgets('mounted 템플릿 교체 — 현재값에서 새 duration·curve로 이어간다', (
+      tester,
+    ) async {
+      Map<String, Object?> morph(int to, int duration, String curve) => {
+        '_from': 0,
+        '_to': to,
+        '_as': 'n',
+        '_duration': duration,
+        '_curve': curve,
+      };
+      await tester.pumpWidget(mount(morph(100, 100, 'linear')));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(value(tester), closeTo(50, 1e-6));
+      await tester.pumpWidget(mount(morph(200, 200, 'ease_in')));
+      expect(value(tester), closeTo(50, 1e-6));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        value(tester),
+        closeTo(50 + 150 * Curves.easeIn.transform(0.5), 1e-6),
+      );
+      await tester.pumpAndSettle();
+      expect(value(tester), 200);
+    });
+
+    testWidgets('mounted 템플릿 교체 — timing만 바뀌어도 새 timing으로 다시 간다', (
+      tester,
+    ) async {
+      Map<String, Object?> morph(int duration) => {
+        '_from': 0,
+        '_to': 100,
+        '_as': 'n',
+        '_duration': duration,
+        '_curve': 'linear',
+      };
+      await tester.pumpWidget(mount(morph(100)));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpWidget(mount(morph(1000)));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(value(tester), closeTo(50 + 50 * 0.5, 1e-6));
+      await tester.pumpAndSettle();
+      expect(value(tester), 100);
+    });
+
+    testWidgets('같은 내용으로 다시 컴파일되면 진행 중인 전이를 이어간다', (tester) async {
+      Map<String, Object?> morph() => {
+        '_from': 0,
+        '_to': 100,
+        '_as': 'n',
+        '_duration': 100,
+        '_curve': 'linear',
+      };
+      await tester.pumpWidget(mount(morph()));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpWidget(mount(morph()));
+      await tester.pump(const Duration(milliseconds: 25));
+      expect(value(tester), closeTo(75, 1e-6));
+    });
   });
 
   group('MorphScope spring', () {
@@ -762,6 +863,86 @@ void main() {
       await tester.pumpAndSettle();
       expect(value(tester), 30);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('mounted 템플릿 교체 — 같은 State가 새 _to로 재전이한다', (tester) async {
+      Map<String, Object?> morph(int to) => {
+        '_from': 0,
+        '_to': to,
+        '_as': 'n',
+        '_spring': 'spatial_default',
+      };
+      await tester.pumpWidget(mount(morph(100)));
+      await tester.pumpAndSettle();
+      final state = tester.state(find.byType(SpringMorphScope));
+      await tester.pumpWidget(mount(morph(200)));
+      expect(tester.state(find.byType(SpringMorphScope)), same(state));
+      await tester.pumpAndSettle();
+      expect(value(tester), 200);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('mounted 템플릿 교체 — 바뀐 _to의 root를 다시 구독한다', (tester) async {
+      Map<String, Object?> template(String root) => {
+        '_type': 'text',
+        '_morph': {
+          '_from': 0,
+          '_to': '\${$root}',
+          '_as': 'n',
+          '_spring': 'spatial_default',
+        },
+        'value': r'${n}',
+      };
+      Widget tree(Map<String, Object?> t, int b) => MaterialApp(
+        home: EngineRunner(template: t, rootData: {'a': 100, 'b': b}),
+      );
+      await tester.pumpWidget(tree(template('a'), 200));
+      await tester.pumpAndSettle();
+      final replacement = template('b');
+      await tester.pumpWidget(tree(replacement, 200));
+      await tester.pumpAndSettle();
+      expect(value(tester), 200);
+      await tester.pumpWidget(tree(replacement, 300));
+      await tester.pumpAndSettle();
+      expect(value(tester), 300);
+    });
+
+    testWidgets('mounted 템플릿 교체 — 새 물리로, 현재 속도를 이어받아 간다', (tester) async {
+      Map<String, Object?> morph(int to, int stiffness) => {
+        '_from': 0,
+        '_to': to,
+        '_as': 'n',
+        '_spring': {'stiffness': stiffness, 'damping_ratio': 0.6},
+      };
+      final first = SpringSimulation(describe(300, 0.6), 0, 100, 0);
+      await tester.pumpWidget(mount(morph(100, 300)));
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpWidget(mount(morph(200, 500)));
+      final second = SpringSimulation(
+        describe(500, 0.6),
+        first.x(0.1),
+        200,
+        first.dx(0.1),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(value(tester), closeTo(second.x(0.02), 1e-6));
+      await tester.pumpAndSettle();
+      expect(value(tester), 200);
+    });
+
+    testWidgets('같은 내용으로 다시 컴파일되면 진행 중인 spring을 이어간다', (tester) async {
+      Map<String, Object?> morph() => {
+        '_from': 0,
+        '_to': 100,
+        '_as': 'n',
+        '_spring': {'stiffness': 300, 'damping_ratio': 0.6},
+      };
+      final sim = SpringSimulation(describe(300, 0.6), 0, 100, 0);
+      await tester.pumpWidget(mount(morph()));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpWidget(mount(morph()));
+      await tester.pump(const Duration(milliseconds: 30));
+      expect(value(tester), closeTo(sim.x(0.08), 1e-6));
     });
   });
 

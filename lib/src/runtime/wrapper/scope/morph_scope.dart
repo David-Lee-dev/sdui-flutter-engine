@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../environment/_base.dart';
@@ -28,7 +29,7 @@ class MorphScope extends StatefulWidget {
 class _MorphScopeState extends State<MorphScope>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Curve _curve;
+  late Curve _curve;
   late final CurvedAnimation _curved;
 
   /// Both `null` until `_to` or `_from` yields a finite number.
@@ -48,15 +49,30 @@ class _MorphScopeState extends State<MorphScope>
   @override
   void initState() {
     super.initState();
-    final ms = d.durationMs;
-    _controller = AnimationController(
-      vsync: this,
-      duration: ms == null
-          ? EngineCurve.settleDuration(d.curve) ?? _defaultDuration
-          : Duration(milliseconds: ms),
-    );
+    _controller = AnimationController(vsync: this, duration: _duration());
     _curve = EngineCurve.resolve(d.curve, fallback: Curves.easeOut);
     _curved = CurvedAnimation(parent: _controller, curve: _curve);
+  }
+
+  /// A replaced template (the runner recompiles but keeps this State) is
+  /// reconciled in place: resubscribe to the new roots, then retarget from
+  /// the current value. Changed timing restarts even toward the same target,
+  /// so the new duration and curve take effect.
+  @override
+  void didUpdateWidget(MorphScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final old = oldWidget.directive;
+    if (identical(old, d)) return;
+    final sameCurve = old.curve is List && d.curve is List
+        ? listEquals(old.curve as List, d.curve as List)
+        : old.curve == d.curve;
+    final timingChanged =
+        old.durationMs != d.durationMs ||
+        !sameCurve ||
+        old.repeat != d.repeat ||
+        old.reverse != d.reverse;
+    _rebind(_parent);
+    _retarget(force: timingChanged);
   }
 
   @override
@@ -86,7 +102,11 @@ class _MorphScopeState extends State<MorphScope>
     _dep?.addListener(_onDep);
   }
 
-  void _onDep() {
+  void _onDep() => _retarget();
+
+  /// Restarts from `_from` when the trigger fired, otherwise from the current
+  /// value when the target moved or [force] is set.
+  void _retarget({bool force = false}) {
     final newTrigger = d.trigger == null
         ? null
         : _read(d.trigger!, _lastTrigger);
@@ -95,9 +115,16 @@ class _MorphScopeState extends State<MorphScope>
     if (triggerFired) {
       _lastTrigger = newTrigger;
       _run(_from() ?? _current(), newTarget);
-    } else if (newTarget != _target) {
+    } else if (newTarget != _target || force) {
       _run(_current() ?? newTarget, newTarget);
     }
+  }
+
+  Duration _duration() {
+    final ms = d.durationMs;
+    return ms == null
+        ? EngineCurve.settleDuration(d.curve) ?? _defaultDuration
+        : Duration(milliseconds: ms);
   }
 
   /// The value now: `null` until a finite target was ever seen.
@@ -141,6 +168,13 @@ class _MorphScopeState extends State<MorphScope>
     _start = _reduceMotion ? to : from;
     _target = to;
     _controller.reset();
+    // Timing is read from the directive in force, so a replaced template's
+    // duration and curve apply from this run on.
+    _controller.duration = _duration();
+    _curved.curve = _curve = EngineCurve.resolve(
+      d.curve,
+      fallback: Curves.easeOut,
+    );
     void go() {
       if (!mounted || to == null || _reduceMotion) return;
       if (d.repeat) {
@@ -225,6 +259,17 @@ class _SpringMorphScopeState extends State<SpringMorphScope>
     _controller = AnimationController.unbounded(vsync: this);
   }
 
+  /// A replaced template is reconciled in place like the tween: resubscribe,
+  /// then retarget. Changed physics restart even toward the same target.
+  @override
+  void didUpdateWidget(SpringMorphScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final old = oldWidget.directive;
+    if (identical(old, d)) return;
+    _rebind(_parent);
+    _retarget(force: old.spring != d.spring);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -257,7 +302,11 @@ class _SpringMorphScopeState extends State<SpringMorphScope>
     _dep?.addListener(_onDep);
   }
 
-  void _onDep() {
+  void _onDep() => _retarget();
+
+  /// Restarts from `_from` when the trigger fired, otherwise from the current
+  /// value when the target moved or [force] is set.
+  void _retarget({bool force = false}) {
     final newTrigger = d.trigger == null
         ? null
         : _read(d.trigger!, _lastTrigger);
@@ -273,7 +322,7 @@ class _SpringMorphScopeState extends State<SpringMorphScope>
         newTarget,
         velocity: from == null ? _handoffVelocity() : 0,
       );
-    } else if (newTarget != _target) {
+    } else if (newTarget != _target || force) {
       _run(current, newTarget, velocity: _handoffVelocity());
     }
   }
@@ -282,6 +331,10 @@ class _SpringMorphScopeState extends State<SpringMorphScope>
       ? _clampVelocity(_controller.velocity)
       : 0;
 
+  /// The velocity a new simulation inherits. The incoming spring decides:
+  /// [EngineSpringSpec.carriesVelocity] says whether the spring about to run
+  /// takes momentum (an effect spring starts at rest), also after a
+  /// replacement switched specs.
   double _handoffVelocity() =>
       d.spring!.carriesVelocity && _controller.isAnimating
       ? _controller.velocity

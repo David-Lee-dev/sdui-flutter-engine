@@ -22,6 +22,12 @@
 - Fix: `//` between two integers is exact (`9007199254740993 // 1` keeps
   its last digit) and still floors negative quotients; with a decimal
   operand it works as before.
+- Fix: replacing the template of a mounted runner now updates a running
+  `_morph`. It moves from its current value to the new `_to`, follows
+  bindings the new `_to` reads, and uses the new `_duration`/`_curve`
+  (tween) or `_spring` physics, carrying the current velocity unless the
+  new spring is an effect spring. Recompiling unchanged content leaves a
+  running morph alone.
 - Fix: a `serpentine` board reports its intrinsic height (the rows'
   heights plus `spacing`), so it keeps its full height inside an
   `intrinsic_height` or any parent that measures it first.
