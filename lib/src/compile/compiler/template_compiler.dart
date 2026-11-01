@@ -105,6 +105,8 @@ final class TemplateCompiler {
     'skeleton_v2',
     // `_scope._skeleton_style`.
     'skeleton_style_v1',
+    // Node `_skeleton: merge`.
+    'skeleton_merge_v1',
   };
 
   /// Builds the directive tree for a template root.
@@ -159,41 +161,65 @@ final class TemplateCompiler {
   /// Returns [root] when it uses only features that [requires] declares.
   ///
   /// Throws [InvalidTemplateException] at the first scope with
-  /// `_skeleton_style` when `skeleton_style_v1` is not declared.
+  /// `_skeleton_style` when `skeleton_style_v1` is not declared, and at the
+  /// first node with `_skeleton: merge` when `skeleton_merge_v1` is not.
   static Directive _gateFeatures(Directive root, List<Object?> requires) {
-    if (requires.contains('skeleton_style_v1')) return root;
-    final path = _skeletonStylePath(root);
-    if (path != null) {
-      throw InvalidTemplateException(
-        path,
-        '"_scope._skeleton_style" needs "skeleton_style_v1" in "_requires".',
+    if (!requires.contains('skeleton_style_v1')) {
+      final path = _firstPath(
+        root,
+        (d) => d is ScopeDirective && d.skeletonStyle != null ? d.path : null,
       );
+      if (path != null) {
+        throw InvalidTemplateException(
+          path,
+          '"_scope._skeleton_style" needs "skeleton_style_v1" in "_requires".',
+        );
+      }
+    }
+    if (!requires.contains('skeleton_merge_v1')) {
+      final path = _firstPath(
+        root,
+        (d) => d is SkeletonDirective && d.merge != null ? d.path : null,
+      );
+      if (path != null) {
+        throw InvalidTemplateException(
+          path,
+          '"_skeleton: merge" needs "skeleton_merge_v1" in "_requires".',
+        );
+      }
     }
     return root;
   }
 
-  /// The path of the first scope in [directive] with `_skeleton_style`.
-  static String? _skeletonStylePath(Directive directive) => switch (directive) {
-    ScopeDirective scope when scope.skeletonStyle != null => scope.path,
-    ScopeDirective scope =>
-      _skeletonStylePath(scope.child) ??
-          (scope.skeleton == null ? null : _skeletonStylePath(scope.skeleton!)),
-    PlainDirective node =>
-      node.children.map(_skeletonStylePath).nonNulls.firstOrNull ??
-          node.slots.values.map(_skeletonStylePath).nonNulls.firstOrNull,
-    ConditionDirective cond => [
-      for (final branch in cond.branches) branch.body,
-      ?cond.fallback,
-    ].map(_skeletonStylePath).nonNulls.firstOrNull,
-    SwitchDirective sw => [
-      for (final branch in sw.cases) branch.branch,
-      ?sw.fallback,
-    ].map(_skeletonStylePath).nonNulls.firstOrNull,
-    LoopDirective loop => _skeletonStylePath(loop.child),
-    MorphDirective morph => _skeletonStylePath(morph.child),
-    SkeletonDirective skeleton =>
-      _skeletonStylePath(skeleton.bones) ?? _skeletonStylePath(skeleton.child),
-  };
+  /// The first path in [directive], depth first, that [use] returns.
+  static String? _firstPath(
+    Directive directive,
+    String? Function(Directive) use,
+  ) {
+    String? walk(Directive d) =>
+        use(d) ??
+        switch (d) {
+          ScopeDirective scope =>
+            walk(scope.child) ??
+                (scope.skeleton == null ? null : walk(scope.skeleton!)),
+          PlainDirective node =>
+            node.children.map(walk).nonNulls.firstOrNull ??
+                node.slots.values.map(walk).nonNulls.firstOrNull,
+          ConditionDirective cond => [
+            for (final branch in cond.branches) branch.body,
+            ?cond.fallback,
+          ].map(walk).nonNulls.firstOrNull,
+          SwitchDirective sw => [
+            for (final branch in sw.cases) branch.branch,
+            ?sw.fallback,
+          ].map(walk).nonNulls.firstOrNull,
+          LoopDirective loop => walk(loop.child),
+          MorphDirective morph => walk(morph.child),
+          SkeletonDirective skeleton =>
+            walk(skeleton.bones) ?? walk(skeleton.child),
+        };
+    return walk(directive);
+  }
 
   /// Builds the directive tree rooted at [node].
   ///
@@ -1305,11 +1331,90 @@ final class TemplateCompiler {
         'scope around it; use "_scope._skeleton" for this scope.',
       );
     }
+    final merge = _skeletonMerge(node);
     return SkeletonDirective(
-      bones: _build(_boneTree(node, catalog), catalog),
+      bones: _build(
+        merge == null ? _boneTree(node, catalog) : _deriveBones(node, catalog),
+        catalog,
+      ),
       child: child,
       path: node.path,
       presence: _parsePresence(node),
+      merge: merge,
+    );
+  }
+
+  /// The keys `_skeleton: {merge: true, …}` takes.
+  static const _mergeKeys = {'merge', 'radius', 'shape', 'width'};
+
+  /// Whether [raw] is a `_skeleton` that merges its derived bones.
+  static bool _merges(Object? raw) =>
+      raw == 'merge' || (raw is Map && raw.containsKey('merge'));
+
+  /// The merged box of [node]'s `_skeleton: merge` or `{merge: true, …}`;
+  /// `null` for the other forms. Values are literal: a `radius` or `width`
+  /// that is not a non-negative number, a `shape` other than `rect` or
+  /// `pill`, `radius` with `pill`, another key and a `_loop` node fail.
+  static SkeletonMerge? _skeletonMerge(UiNode node) {
+    final raw = node.reserved['_skeleton'];
+    if (!_merges(raw)) return null;
+    if (node.reserved.containsKey('_loop')) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton: merge" is not supported on a "_loop" node; put it on '
+        'the node around the loop.',
+      );
+    }
+    if (raw is! Map) return const SkeletonMerge();
+    for (final key in raw.keys) {
+      if (!_mergeKeys.contains(key)) {
+        throw InvalidTemplateException(
+          node.path,
+          'unknown "_skeleton" merge key "$key" '
+          '(allowed: ${_mergeKeys.join(", ")}).',
+        );
+      }
+    }
+    if (raw['merge'] != true) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" "merge" must be the literal true.',
+      );
+    }
+    if (_isBound(raw)) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" merge takes no bindings; write literal values.',
+      );
+    }
+    num? size(String key) {
+      final value = raw[key];
+      if (value == null) return null;
+      if (value is num && value >= 0) return value;
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" "$key" must be a non-negative number.',
+      );
+    }
+
+    final radius = size('radius');
+    final width = size('width');
+    final shape = raw['shape'];
+    if (shape != null && shape != 'rect' && shape != 'pill') {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" "shape" must be "rect" or "pill".',
+      );
+    }
+    if (shape == 'pill' && radius != null) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton" takes "radius" or "shape": "pill", not both.',
+      );
+    }
+    return SkeletonMerge(
+      radius: shape == 'pill' ? 999 : radius ?? 8,
+      width: width,
     );
   }
 
@@ -1567,6 +1672,13 @@ final class TemplateCompiler {
     LanguageCatalog catalog, {
     required bool inOval,
   }) {
+    if (_merges(node.reserved['_skeleton'])) {
+      throw InvalidTemplateException(
+        node.path,
+        '"_skeleton: merge" paints the slot of its own node only; inside a '
+        'derived "_skeleton" give this node true or a bone tree.',
+      );
+    }
     if (node.reserved.containsKey('_skeleton')) return _boneTree(node, catalog);
     if (node.reserved.containsKey('_if') ||
         node.reserved.containsKey('_loop') ||

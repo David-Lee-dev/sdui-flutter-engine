@@ -70,7 +70,13 @@ final class NodeBuilder {
             : _isolated(scope.child),
       ),
       SkeletonDirective skeleton => SkeletonSlot(
-        bones: build(skeleton.bones),
+        bones: switch (skeleton.merge) {
+          null => build(skeleton.bones),
+          final merge => MergedBones(
+            merge: merge,
+            child: build(skeleton.bones),
+          ),
+        },
         boxed: _holdsInBox(skeleton.child),
         path: skeleton.path,
         presence: skeleton.presence,

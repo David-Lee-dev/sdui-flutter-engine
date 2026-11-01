@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import 'package:sdui_engine/src/ir/model/directive/_base.dart';
 import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import 'package:sdui_engine/src/ir/model/skeleton_style_override.dart';
 import 'package:sdui_engine/src/presentation/skeleton_style.dart';
@@ -398,6 +401,71 @@ class _LoadingLayer extends InheritedWidget {
   @override
   bool updateShouldNotify(_LoadingLayer oldWidget) =>
       loading != oldWidget.loading || shimmer != oldWidget.shimmer;
+}
+
+/// A `_skeleton: merge`: lays [child] (the derived bones) out, under the
+/// merge width when set, and paints one rounded box of its size instead of
+/// it. The box is opaque like a bone, so the skeleton mask above recolors it
+/// with the style in effect; children outside the box (a positioned child
+/// that overflows) neither enlarge nor paint it.
+class MergedBones extends StatelessWidget {
+  const MergedBones({super.key, required this.merge, required this.child});
+
+  final SkeletonMerge merge;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = PropsResolver.size(context, merge.width);
+    return _MergedBox(
+      radius: PropsResolver.size(context, merge.radius) ?? 0,
+      child: width == null ? child : SizedBox(width: width, child: child),
+    );
+  }
+}
+
+class _MergedBox extends SingleChildRenderObjectWidget {
+  const _MergedBox({required this.radius, super.child});
+
+  final double radius;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMergedBox(radius);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderMergedBox renderObject) {
+    renderObject.radius = radius;
+  }
+}
+
+/// Sizes to its child but paints one rounded box in place of it.
+class _RenderMergedBox extends RenderProxyBox {
+  _RenderMergedBox(this._radius);
+
+  /// Opaque, as a bone's base, so the skeleton mask has pixels to recolor.
+  static const _base = Color(0xFF2C2C2C);
+
+  double _radius;
+  set radius(double value) {
+    if (value == _radius) return;
+    _radius = value;
+    markNeedsPaint();
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      false;
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    // A radius past half the short side (a pill's 999) rounds it fully.
+    final radius = math.min(_radius, size.shortestSide / 2);
+    context.canvas.drawRRect(
+      RRect.fromRectAndRadius(offset & size, Radius.circular(radius)),
+      Paint()..color = _base,
+    );
+  }
 }
 
 /// A node `_skeleton`: shows [bones] in place of [child] while the nearest

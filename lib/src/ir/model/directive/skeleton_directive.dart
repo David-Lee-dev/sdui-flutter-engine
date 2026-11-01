@@ -11,6 +11,7 @@ final class SkeletonDirective extends Directive {
     required this.child,
     required this.path,
     this.presence = const PresenceConfig(),
+    this.merge,
   });
 
   final Directive bones;
@@ -21,4 +22,19 @@ final class SkeletonDirective extends Directive {
 
   /// How the [bones] swap to [child], from the node's `_presence`.
   final PresenceConfig presence;
+
+  /// When set (`_skeleton: merge`), [bones] are laid out but not painted and
+  /// one rounded box of their size is painted instead.
+  final SkeletonMerge? merge;
+}
+
+/// The box a merged `_skeleton` paints over its derived bones.
+final class SkeletonMerge {
+  const SkeletonMerge({this.radius = 8, this.width});
+
+  /// Corner radius (`shape: pill` compiles to 999).
+  final num radius;
+
+  /// The width the bones are laid out under, or `null` for their own.
+  final num? width;
 }
