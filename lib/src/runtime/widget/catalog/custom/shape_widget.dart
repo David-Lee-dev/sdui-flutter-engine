@@ -15,7 +15,8 @@ import '../../../util/shape_geometry.dart';
 /// smooth union, subtract and intersect.
 ///
 /// Decorative only: no children, no hit testing, no semantics. The shape
-/// fills its parent's constraints; an unbounded axis collapses to `0`.
+/// fills its parent's constraints; an unbounded axis takes its minimum
+/// constraint (usually `0`).
 ///
 /// Props:
 /// - `shapes` (`List`, 1–8 items, default empty) — primitives, each a map:
@@ -388,9 +389,11 @@ class _RenderShape extends RenderBox {
   bool get alwaysNeedsCompositing => _backdropBlur > 0;
 
   @override
-  Size computeDryLayout(BoxConstraints constraints) => Size(
-    constraints.hasBoundedWidth ? constraints.maxWidth : 0,
-    constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+  Size computeDryLayout(BoxConstraints constraints) => constraints.constrain(
+    Size(
+      constraints.hasBoundedWidth ? constraints.maxWidth : 0,
+      constraints.hasBoundedHeight ? constraints.maxHeight : 0,
+    ),
   );
 
   @override
@@ -400,7 +403,8 @@ class _RenderShape extends RenderBox {
       if (!_warnedUnbounded) {
         _warnedUnbounded = true;
         EngineLog.warn(
-          'shape: placed on an unbounded axis; that axis is sized 0. '
+          'shape: placed on an unbounded axis; that axis is sized to its '
+          'minimum constraint (usually 0). '
           'Give the shape a bounded parent (sizedbox, positioned_fill).',
           tag: 'widget',
         );

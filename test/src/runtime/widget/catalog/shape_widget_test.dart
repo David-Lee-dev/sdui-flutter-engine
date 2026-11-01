@@ -246,6 +246,37 @@ void main() {
       expect(logs.where((l) => l.contains('unbounded')), hasLength(1));
     });
 
+    for (final vertical in [true, false]) {
+      testWidgets('무한 ${vertical ? '높이' : '폭'}도 최소 제약은 지킨다', (tester) async {
+        await tester.pumpWidget(
+          _host(
+            {
+              'shapes': [_bar],
+            },
+            wrap: (shape) {
+              final constrained = ConstrainedBox(
+                constraints: vertical
+                    ? const BoxConstraints(minHeight: 40)
+                    : const BoxConstraints(minWidth: 40),
+                child: shape,
+              );
+              return SizedBox(
+                key: _key,
+                width: vertical ? 100 : null,
+                height: vertical ? null : 100,
+                child: vertical
+                    ? Column(children: [constrained])
+                    : Row(children: [constrained]),
+              );
+            },
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        final size = _shapeBox(tester).size;
+        expect(vertical ? size.height : size.width, 40);
+      });
+    }
+
     testWidgets('intrinsic 측정 안에서도 예외가 없다', (tester) async {
       await tester.pumpWidget(
         _host(

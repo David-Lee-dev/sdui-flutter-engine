@@ -9,6 +9,8 @@
   without `text_baseline`, and `cross_alignment: baseline` on a
   `serpentine_row`, no longer fail layout. They align on the alphabetic
   baseline; `text_baseline` still picks another one.
+- Fix: a `shape` on an unbounded axis takes that axis's minimum constraint
+  (usually 0) instead of 0, so a minimum from its parent is kept.
 
 ## 0.17.5
 

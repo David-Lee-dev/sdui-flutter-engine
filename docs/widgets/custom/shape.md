@@ -2,7 +2,7 @@
 
 Paints circles, capsules and rounded rects folded together by smooth union, subtract and intersect. Since 0.7.0; `op`, per-item `smooth`, `at`, gradients, `shadow` and `backdrop` since 0.9.0 (`_requires: [shape_v2]`).
 
-`shape` is decorative: it takes no children, ignores hit testing (taps reach whatever is under it) and adds no semantics. It fills its parent's constraints, so place it in a bounded parent such as `positioned_fill` or a sized `sizedbox`. An unbounded axis is sized `0` and logged once.
+`shape` is decorative: it takes no children, ignores hit testing (taps reach whatever is under it) and adds no semantics. It fills its parent's constraints, so place it in a bounded parent such as `positioned_fill` or a sized `sizedbox`. An unbounded axis is sized to its minimum constraint (usually `0`) and logged once.
 
 ## Properties
 
