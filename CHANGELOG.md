@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.19.0
+
+- Skeleton style: bones are painted with one of three effects — `tint`
+  (still), `breathe` (base ↔ highlight) or `shimmer` (the sweep) — each
+  skeleton animating on its own. Apps set the default with
+  `SduiPresentation(skeleton: SkeletonStyle(effect:, base:, highlight:,
+  duration:))` (`SkeletonPaint.color` or `.gradient`); templates override
+  it per scope with `_scope._skeleton_style` (`_requires:
+  [skeleton_style_v1]`), key by key over the nearest outer scope. Reduced
+  motion paints the base. See docs/lifecycle.md.
+- Behavior change: the default skeleton paint is now a still `#2C2C2C`
+  tint instead of the shimmer sweep, and no ticker runs for it. Apps that
+  want the old look set `SkeletonStyle(effect: SkeletonEffect.shimmer)`,
+  whose default colors and 1500 ms period match the previous sweep.
+
 ## 0.18.0
 
 - Fix: a template number that is `NaN` or infinite (for example
