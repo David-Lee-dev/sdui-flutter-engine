@@ -294,6 +294,37 @@ class RenderSerpentine extends RenderBox
     return width + _trackMargin * 2;
   }
 
+  @override
+  double computeMinIntrinsicHeight(double width) => _rowsIntrinsicHeight(
+    width,
+    (child, width) => child.getMinIntrinsicHeight(width),
+  );
+
+  @override
+  double computeMaxIntrinsicHeight(double width) => _rowsIntrinsicHeight(
+    width,
+    (child, width) => child.getMaxIntrinsicHeight(width),
+  );
+
+  /// Stacks each row's intrinsic height at the width layout gives rows: the
+  /// board width minus the track room on both sides, plus inter-row spacing.
+  double _rowsIntrinsicHeight(
+    double width,
+    double Function(RenderBox, double) measure,
+  ) {
+    final contentWidth = math.max(0.0, width - _trackMargin * 2);
+    var height = 0.0;
+    for (
+      RenderBox? child = firstChild;
+      child != null;
+      child = childAfter(child)
+    ) {
+      height += measure(child, contentWidth);
+      if (childAfter(child) != null) height += _spacing;
+    }
+    return height;
+  }
+
   /// Horizontal room the track needs outside the cells, per side.
   ///
   /// The span reaches `overhang` past the cell edges and the stroke straddles

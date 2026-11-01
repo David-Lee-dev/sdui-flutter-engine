@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a `serpentine` board reports its intrinsic height (the rows'
+  heights plus `spacing`), so it keeps its full height inside an
+  `intrinsic_height` or any parent that measures it first.
+
 ## 0.17.5
 
 - Fix: a modal closed before its first frame (a `_background` open followed

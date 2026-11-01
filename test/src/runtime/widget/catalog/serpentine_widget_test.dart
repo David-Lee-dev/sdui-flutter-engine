@@ -322,6 +322,59 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('intrinsic height sums the row heights and the spacing', (
+      tester,
+    ) async {
+      final render = await _pumpBoard(
+        tester,
+        props: const {'spacing': 10},
+        rows: const [
+          [Size(30, 20)],
+          [Size(30, 30)],
+        ],
+      );
+
+      expect(render.getMinIntrinsicHeight(200), 60);
+      expect(render.getMaxIntrinsicHeight(200), 60);
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: EngineMetrics(
+            scale: 1,
+            child: Center(
+              child: IntrinsicHeight(
+                child: SizedBox(
+                  width: 200,
+                  child: Builder(
+                    builder: (context) => SerpentineWidget.build(
+                      context,
+                      const {'spacing': 10},
+                      [
+                        _row(context, const [Size(30, 20)]),
+                        _row(context, const [Size(30, 30)]),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester
+            .renderObject<RenderSerpentine>(
+              find.byType(SerpentineRenderObjectWidget),
+            )
+            .size
+            .height,
+        60,
+      );
+    });
+
     testWidgets('reserves horizontal room for U-turn stroke bounds', (
       tester,
     ) async {
