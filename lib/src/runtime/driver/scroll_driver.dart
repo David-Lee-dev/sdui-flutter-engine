@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../engine_registries.dart';
+import '../util/template_number.dart';
 import '_base.dart';
 
 /// Reveals a registered anchor without coupling templates to a scroll controller.
@@ -30,7 +31,9 @@ class ScrollDriver extends Driver {
     await Scrollable.ensureVisible(
       target,
       alignment: _double(ctx.params['alignment']) ?? 0.5,
-      duration: Duration(milliseconds: _int(ctx.params['duration']) ?? 300),
+      duration: Duration(
+        milliseconds: templateInt(ctx.params['duration']) ?? 300,
+      ),
       curve: Curves.easeInOut,
     );
     return null;
@@ -38,6 +41,4 @@ class ScrollDriver extends Driver {
 
   static double? _double(Object? value) =>
       value is num ? value.toDouble() : null;
-
-  static int? _int(Object? value) => value is num ? value.toInt() : null;
 }

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import 'props_resolver.dart';
+import 'template_number.dart';
 
 /// Maps expression-call names to pure runtime functions.
 ///
@@ -135,7 +136,7 @@ final class _Builtins {
   /// Converts a number or numeric string to an integer, or returns `null`.
   static Object? intOf(List<Object?> a) {
     final x = _at(a, 0);
-    if (x is num) return x.truncate();
+    if (x is num) return templateInt(x);
     if (x is String) return int.tryParse(x);
     return null;
   }
@@ -185,22 +186,29 @@ final class _Builtins {
     final x = _at(a, 0);
     if (x is! num) return null;
     final dRaw = _at(a, 1);
-    if (dRaw == null) return x.round();
-    if (dRaw is! num) return null;
-    final factor = math.pow(10, dRaw.toInt());
-    return (x * factor).round() / factor;
+    if (dRaw == null) return templateInt(x is double ? x.roundToDouble() : x);
+    final d = templateInt(dRaw);
+    if (d == null) return null;
+    final factor = math.pow(10, d);
+    final scaled = x * factor;
+    final rounded = templateInt(
+      scaled is double ? scaled.roundToDouble() : scaled,
+    );
+    if (rounded == null) return null;
+    final result = rounded / factor;
+    return result.isFinite ? result : null;
   }
 
   /// Rounds a number down to an integer, or returns `null`.
   static Object? floor(List<Object?> a) {
     final x = _at(a, 0);
-    return x is num ? x.floor() : null;
+    return templateInt(x is double ? x.floorToDouble() : x);
   }
 
   /// Rounds a number up to an integer, or returns `null`.
   static Object? ceil(List<Object?> a) {
     final x = _at(a, 0);
-    return x is num ? x.ceil() : null;
+    return templateInt(x is double ? x.ceilToDouble() : x);
   }
 
   /// Returns the smallest numeric argument, skipping non-numbers.
@@ -323,9 +331,8 @@ final class _Builtins {
   /// Formats a number with the requested fixed decimal places.
   static Object? format(List<Object?> a) {
     final x = _at(a, 0);
-    final d = _at(a, 1);
-    if (x is! num || d is! num) return null;
-    return x.toStringAsFixed(d.toInt());
+    if (x is! num) return null;
+    return _fixed(x, templateInt(_at(a, 1)));
   }
 
   /// Formats a ratio as a percentage with optional decimal places.
@@ -333,8 +340,15 @@ final class _Builtins {
     final r = _at(a, 0);
     if (r is! num) return null;
     final dRaw = _at(a, 1);
-    final d = dRaw is num ? dRaw.toInt() : 0;
-    return '${(r * 100).toStringAsFixed(d)}%';
+    final text = _fixed(r * 100, dRaw is num ? templateInt(dRaw) : 0);
+    return text == null ? null : '$text%';
+  }
+
+  /// [value] with [digits] decimal places, or `null` when [digits] is missing
+  /// or outside `toStringAsFixed`'s 0..20.
+  static String? _fixed(num value, int? digits) {
+    if (digits == null || digits < 0 || digits > 20) return null;
+    return value.toStringAsFixed(digits);
   }
 
   /// Formats a number with comma grouping and an optional currency symbol.
@@ -413,12 +427,12 @@ final class _Builtins {
   /// Returns `substring(s, start, end?)` with indices clamped to the string.
   static Object? substring(List<Object?> a) {
     final s = _at(a, 0);
-    final start = _at(a, 1);
-    if (s is! String || start is! num) return null;
+    final start = templateInt(_at(a, 1));
+    if (s is! String || start == null) return null;
     final len = s.length;
-    final st = _clampInt(start.toInt(), 0, len);
-    final endRaw = _at(a, 2);
-    final en = endRaw is num ? _clampInt(endRaw.toInt(), st, len) : len;
+    final st = _clampInt(start, 0, len);
+    final end = templateInt(_at(a, 2));
+    final en = end == null ? len : _clampInt(end, st, len);
     return s.substring(st, en);
   }
 
@@ -450,29 +464,38 @@ final class _Builtins {
   /// Left-pads a string to a minimum width with an optional fill string.
   static Object? padStart(List<Object?> a) {
     final s = _at(a, 0);
-    final n = _at(a, 1);
-    if (s is! String || n is! num) return null;
-    final c = _at(a, 2);
-    return s.padLeft(n.toInt(), c is String && c.isNotEmpty ? c : ' ');
+    final width = templateInt(_at(a, 1));
+    if (s is! String || width == null) return null;
+    return s.padLeft(width, _fill(s, width, _at(a, 2)));
   }
 
   /// Right-pads a string to a minimum width with an optional fill string.
   static Object? padEnd(List<Object?> a) {
     final s = _at(a, 0);
-    final n = _at(a, 1);
-    if (s is! String || n is! num) return null;
-    final c = _at(a, 2);
-    return s.padRight(n.toInt(), c is String && c.isNotEmpty ? c : ' ');
+    final width = templateInt(_at(a, 1));
+    if (s is! String || width == null) return null;
+    return s.padRight(width, _fill(s, width, _at(a, 2)));
+  }
+
+  /// The fill for padding [s] to [width], once the padding is known to stay
+  /// within the collection safety cap.
+  static String _fill(String s, int width, Object? c) {
+    final fill = c is String && c.isNotEmpty ? c : ' ';
+    if (width > s.length && width - s.length > _maxCollection ~/ fill.length) {
+      throw const FormatException(
+        'pad exceeds max collection size ($_maxCollection)',
+      );
+    }
+    return fill;
   }
 
   /// Repeats a string up to the collection safety cap.
   static Object? repeat(List<Object?> a) {
     final s = _at(a, 0);
-    final n = _at(a, 1);
-    if (s is! String || n is! num) return null;
-    final count = n.toInt();
-    if (count <= 0) return '';
-    if (s.length * count > _maxCollection) {
+    final count = templateInt(_at(a, 1));
+    if (s is! String || count == null) return null;
+    if (s.isEmpty || count <= 0) return '';
+    if (count > _maxCollection ~/ s.length) {
       throw const FormatException(
         'repeat exceeds max collection size ($_maxCollection)',
       );
@@ -625,8 +648,8 @@ final class _Builtins {
     final list = _at(a, 0);
     final i = _at(a, 1);
     if (list is! List) return list;
-    if (i is! num || i != i.truncate()) return list;
-    var n = i.toInt();
+    var n = templateInt(i);
+    if (n == null || n != i) return list;
     if (n < 0) n += list.length;
     if (n < 0 || n >= list.length) return list;
     return List<Object?>.of(list)..[n] = _at(a, 2);
@@ -655,8 +678,8 @@ final class _Builtins {
       };
     }
     if (node is List) {
-      if (seg is! num || seg != seg.truncate()) return node;
-      var n = seg.toInt();
+      var n = templateInt(seg);
+      if (n == null || n != seg) return node;
       if (n < 0) n += node.length;
       if (n < 0 || n >= node.length) return node;
       return List<Object?>.of(node)

@@ -56,6 +56,12 @@ void main() {
         expect(call('int', [true]), isNull);
       });
 
+      test('int — 유한하지 않은 수는 null', () {
+        expect(call('int', [double.nan]), isNull);
+        expect(call('int', [double.infinity]), isNull);
+        expect(call('int', [double.negativeInfinity]), isNull);
+      });
+
       test('num', () {
         expect(call('num', [5]), 5);
         expect(call('num', ['3.5']), 3.5);
@@ -122,6 +128,17 @@ void main() {
       test('floor/ceil', () {
         expect(call('floor', [1.9]), 1);
         expect(call('ceil', [1.1]), 2);
+      });
+
+      test('round/floor/ceil — 유한하지 않은 값·결과는 null', () {
+        for (final name in ['round', 'floor', 'ceil']) {
+          expect(call(name, [double.nan]), isNull, reason: name);
+          expect(call(name, [double.infinity]), isNull, reason: name);
+        }
+        expect(call('round', [double.nan, 2]), isNull);
+        expect(call('round', [1.5, double.nan]), isNull);
+        expect(call('round', [1.5, 400]), isNull); // 10^400 = Infinity
+        expect(call('round', [1.25, 1.9]), 1.3); // 자릿수는 버림
       });
 
       test('min/max — 가변 인자·리스트 둘 다', () {
@@ -243,6 +260,18 @@ void main() {
         expect(call('percent', [0.5567, 1]), '55.7%');
       });
 
+      test('format/percent — 0..20 밖이나 유한하지 않은 자릿수는 null', () {
+        for (final name in ['format', 'percent']) {
+          for (final d in [-1, 21, double.nan, double.infinity]) {
+            expect(call(name, [1, d]), isNull, reason: '$name $d');
+          }
+          expect(call(name, [1, 20]), isA<String>(), reason: name);
+        }
+        expect(call('format', [1, 2.9]), '1.00'); // 자릿수는 버림
+        expect(call('percent', [1, 2.9]), '100.00%');
+        expect(call('percent', [0.5, 'x']), '50%'); // 숫자 아닌 자릿수는 기본 0
+      });
+
       test('currency', () {
         expect(call('currency', [1234]), '₩1,234');
         expect(call('currency', [1234, r'\$']), r'\$1,234');
@@ -286,6 +315,12 @@ void main() {
         expect(call('substring', ['hello', 1, 3]), 'el');
       });
 
+      test('substring — 유한하지 않은 시작은 null, 끝은 문자열 끝', () {
+        expect(call('substring', ['hello', double.nan]), isNull);
+        expect(call('substring', ['hello', double.infinity]), isNull);
+        expect(call('substring', ['hello', 1, double.nan]), 'ello');
+      });
+
       test('startsWith/endsWith', () {
         expect(call('starts_with', ['hello', 'he']), true);
         expect(call('ends_with', ['hello', 'lo']), true);
@@ -322,6 +357,29 @@ void main() {
 
       test('repeat — 캡 초과는 FormatException', () {
         expect(() => call('repeat', ['x', 200000]), throwsFormatException);
+      });
+
+      test('padStart/padEnd/repeat — 유한하지 않은 횟수는 null', () {
+        for (final name in ['pad_start', 'pad_end', 'repeat']) {
+          expect(call(name, ['x', double.nan]), isNull, reason: name);
+          expect(call(name, ['x', double.infinity]), isNull, reason: name);
+        }
+      });
+
+      test('padStart/padEnd — 채울 길이가 캡을 넘으면 FormatException', () {
+        for (final name in ['pad_start', 'pad_end']) {
+          expect(() => call(name, ['x', 1000000000]), throwsFormatException);
+          expect(() => call(name, ['x', 100000, 'ab']), throwsFormatException);
+          expect((call(name, ['x', 100000]) as String).length, 100000);
+        }
+      });
+
+      test('repeat — 빈 문자열은 바로 빈 결과, 크기 계산이 넘쳐도 캡을 지킨다', () {
+        expect(call('repeat', ['', 1000000000000]), '');
+        expect(
+          () => call('repeat', ['ab', 4611686018427387904]),
+          throwsFormatException,
+        );
       });
     });
 

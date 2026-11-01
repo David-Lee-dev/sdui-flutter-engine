@@ -73,6 +73,36 @@ void main() {
 
         expect(controller.offset, greaterThan(0)); // ensureVisible이 스크롤함
       });
+
+      testWidgets('유한하지 않은 duration은 기본값으로 스크롤한다', (tester) async {
+        final registry = AnchorRegistry();
+        final controller = ScrollController();
+        await tester.pumpWidget(
+          _wrap(
+            SingleChildScrollView(
+              controller: controller,
+              child: Column(
+                children: [
+                  const SizedBox(height: 2000),
+                  AnchorScope(
+                    id: 'bottom',
+                    registry: registry,
+                    child: const Text('타깃'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        final done = ScrollDriver(
+          anchors: registry,
+        ).run(_ctx({'anchor': 'bottom', 'duration': double.nan}));
+        await tester.pumpAndSettle();
+        await done;
+
+        expect(controller.offset, greaterThan(0));
+      });
     });
   });
 }

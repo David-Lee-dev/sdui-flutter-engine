@@ -832,6 +832,11 @@ void main() {
         expect(PropsResolver.fontWeight(650), isNull);
       });
 
+      test('fontWeight — 유한하지 않은 숫자는 null', () {
+        expect(PropsResolver.fontWeight(double.nan), isNull);
+        expect(PropsResolver.fontWeight(double.infinity), isNull);
+      });
+
       test('font_style', () {
         expect(PropsResolver.fontStyle('italic'), FontStyle.italic);
       });

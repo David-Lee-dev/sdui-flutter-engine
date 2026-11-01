@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Fix: a template number that is `NaN` or infinite (for example
+  `10.0 ** 400`) no longer crashes the node where a count, index, width
+  or precision is expected. Functions (`int`, `floor`, `ceil`, `round`,
+  `format`, `percent`, `substring`, `pad_start`, `pad_end`, `repeat`)
+  return `null`; `update_at`/`set_path` return the input; a list index
+  reads `null`; slice bounds fall back to the default and a slice step
+  gives `[]`; `*` repetition and `//` raise the usual expression error.
+  `font_weight` and the `scroll` command's `duration` ignore it.
+- Fix: a fractional slice step that truncates to 0 (`[::0.5]`) returns
+  `[]` instead of hanging; other fractional steps still truncate. A very
+  large step no longer overflows.
+- Fix: repeating an empty string or list returns it at once for any
+  count, the repetition cap can no longer be bypassed by overflow, and
+  `pad_start`/`pad_end` are held to the same cap (an expression error
+  past it).
+- Fix: `format`/`percent` with a precision outside 0..20 return `null`
+  instead of crashing the node.
 - Fix: a `serpentine` board reports its intrinsic height (the rows'
   heights plus `spacing`), so it keeps its full height inside an
   `intrinsic_height` or any parent that measures it first.

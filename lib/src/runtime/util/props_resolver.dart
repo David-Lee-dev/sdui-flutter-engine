@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../engine_presentation.dart';
 import 'engine_metrics.dart';
 import 'styled_border.dart';
+import 'template_number.dart';
 import '../widget/util/icon_catalog.dart';
 
 /// Decodes loosely typed template properties into Flutter values.
@@ -501,7 +502,7 @@ final class PropsResolver {
   static TextOverflow? textOverflow(Object? raw) => enumOf(raw, _textOverflows);
 
   static FontWeight? fontWeight(Object? raw) {
-    if (raw is num) return _fontWeightsByValue[raw.toInt()];
+    if (raw is num) return _fontWeightsByValue[templateInt(raw)];
     return enumOf(raw, _fontWeights);
   }
 

@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/environment/map_environment.dart';
 import 'package:sdui_engine/src/runtime/interpreter/expression_evaluator.dart';
@@ -12,6 +14,30 @@ bool truthy(String src, [Map<String, Object?> vars = const {}]) =>
       Expression.compile(src),
       MapEnvironment(vars),
     );
+
+/// Evaluates [src] in its own isolate, so a loop that never ends fails the
+/// test by timeout instead of hanging the whole run. A thrown error is
+/// rethrown here.
+Future<Object?> evalBounded(String src) async {
+  final port = ReceivePort();
+  final isolate = await Isolate.spawn((SendPort send) {
+    try {
+      send.send((eval(src), null));
+    } catch (error) {
+      send.send((null, error));
+    }
+  }, port.sendPort);
+  try {
+    final (value, error) =
+        await port.first.timeout(const Duration(seconds: 2))
+            as (Object?, Object?);
+    if (error != null) throw error;
+    return value;
+  } finally {
+    isolate.kill(priority: Isolate.immediate);
+    port.close();
+  }
+}
 
 void main() {
   group('Expression', () {
@@ -319,6 +345,28 @@ void main() {
       test('반복 캡 초과는 FormatException', () {
         expect(() => eval("'x' * 200000"), throwsFormatException);
       });
+
+      test('반복 횟수·// 결과가 유한하지 않으면 FormatException', () {
+        final vars = {'nan': double.nan, 'inf': double.infinity};
+        expect(() => eval("'x' * nan", vars), throwsFormatException);
+        expect(() => eval('inf * [1]', vars), throwsFormatException);
+        expect(() => eval("'x' * (10.0 ** 400)"), throwsFormatException);
+        expect(() => eval('inf // 1', vars), throwsFormatException);
+        expect(() => eval('1 // nan', vars), throwsFormatException);
+      });
+
+      test('빈 시퀀스 반복은 횟수와 관계없이 바로 빈 결과', () async {
+        expect(await evalBounded('[] * 1000000000000'), isEmpty);
+        expect(eval("'' * 1000000000000"), '');
+      });
+
+      test('반복 결과 크기 계산이 넘쳐도 캡을 지킨다', () async {
+        expect(() => eval("'ab' * 4611686018427387904"), throwsFormatException);
+        await expectLater(
+          evalBounded('[1, 2] * 4611686018427387904'),
+          throwsFormatException,
+        );
+      });
     });
 
     group('접근 확장', () {
@@ -360,6 +408,32 @@ void main() {
           }),
           isEmpty,
         );
+      });
+
+      test('slice 소수 step은 버림 — 0이 되면 빈 결과', () async {
+        expect(await evalBounded('[1, 2, 3][::0.5]'), isEmpty);
+        expect(await evalBounded('[1, 2, 3][::-0.5]'), isEmpty);
+        expect(eval('[1, 2, 3][::1.5]'), [1, 2, 3]);
+        expect(eval('[1, 2, 3][::-2.5]'), [3, 1]);
+      });
+
+      test('slice 큰 step도 인덱스 계산이 넘치지 않는다', () {
+        expect(eval('[1, 2, 3][1::9223372036854775807]'), [2]);
+        expect(eval('[1, 2, 3][1::-9223372036854775807]'), [2]);
+      });
+
+      test('유한하지 않은 인덱스·slice 값은 관대하게 처리', () {
+        final vars = {
+          'items': [1, 2, 3],
+          'nan': double.nan,
+          'inf': double.infinity,
+        };
+        expect(eval(r'items[nan]', vars), isNull);
+        expect(eval(r'items[inf]', vars), isNull);
+        expect(eval(r'items[inf:]', vars), [1, 2, 3]);
+        expect(eval(r'items[:nan]', vars), [1, 2, 3]);
+        expect(eval(r"'abc'[nan:]", vars), 'abc');
+        expect(eval(r'items[::inf]', vars), isEmpty);
       });
     });
 
@@ -464,6 +538,18 @@ void main() {
 
       test('setPath — 빈 경로는 원본', () {
         expect(eval(r'set_path(x, [], 9)', {'x': 5}), 5);
+      });
+
+      test('updateAt·setPath — 유한하지 않은 인덱스는 원본', () {
+        final vars = {
+          'items': [10, 20],
+          'nan': double.nan,
+          'inf': double.infinity,
+        };
+        expect(eval(r'update_at(items, nan, 1)', vars), [10, 20]);
+        expect(eval(r'update_at(items, inf, 1)', vars), [10, 20]);
+        expect(eval(r'set_path(items, [nan], 1)', vars), [10, 20]);
+        expect(eval(r'set_path(items, [inf], 1)', vars), [10, 20]);
       });
     });
 

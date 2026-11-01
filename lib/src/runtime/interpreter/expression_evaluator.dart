@@ -4,6 +4,7 @@ import '../environment/_base.dart';
 import '../environment/map_environment.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
 import '../util/function_registry.dart';
+import '../util/template_number.dart';
 
 /// Evaluates compiled expressions and values against a runtime environment.
 final class ExpressionEvaluator {
@@ -76,8 +77,8 @@ final class ExpressionEvaluator {
       final i = _eval(index, env);
       if (t is Map) return t[i];
       if (t is List) {
-        if (i is num && i == i.truncate()) {
-          var n = i.toInt();
+        var n = templateInt(i);
+        if (n != null && n == i) {
           if (n < 0) n += t.length;
           if (n >= 0 && n < t.length) return t[n];
         }
@@ -260,7 +261,8 @@ Object? _arith(String op, Object? a, Object? b) {
       return a / b;
     case '//':
       if (b == 0) _error('floor division by zero');
-      return (a / b).floor();
+      return templateInt((a / b).floorToDouble()) ??
+          _error('floor division result is not finite');
     case '**':
       return math.pow(a, b);
     case '%':
@@ -273,33 +275,44 @@ Object? _arith(String op, Object? a, Object? b) {
 }
 
 String _repeatSeq(String s, num n) {
-  final count = n.truncate();
-  if (count <= 0) return '';
-  if (s.length * count > _maxCollection) {
-    _error('repeat exceeds max collection size ($_maxCollection)');
-  }
+  final count = _repeatCount(s.length, n);
+  if (count == 0) return '';
   return List.filled(count, s).join();
 }
 
 List<Object?> _repeatList(List<Object?> list, num n) {
-  final count = n.truncate();
-  if (count <= 0) return const [];
-  if (list.length * count > _maxCollection) {
+  final count = _repeatCount(list.length, n);
+  if (count == 0) return const [];
+  return [for (var i = 0; i < count; i++) ...list];
+}
+
+/// How many times a sequence of [length] repeats for [n]: 0 when it is empty
+/// or [n] is not positive, so no work is done. A non-finite [n] or a result
+/// past the collection cap is an error; the cap test divides so it cannot
+/// overflow.
+int _repeatCount(int length, num n) {
+  final count = templateInt(n);
+  if (count == null) _error('repeat count must be a finite number');
+  if (length == 0 || count <= 0) return 0;
+  if (count > _maxCollection ~/ length) {
     _error('repeat exceeds max collection size ($_maxCollection)');
   }
-  return [for (var i = 0; i < count; i++) ...list];
+  return count;
 }
 
 List<int> _sliceIndices(int length, Object? start, Object? stop, Object? step) {
   var stepVal = 1;
   if (step != null) {
-    if (step is! num || step == 0) return const [];
-    stepVal = step.toInt();
+    final n = templateInt(step);
+    if (n == null || n == 0) return const [];
+    // A step past the length reaches at most one index either way; bounding
+    // it keeps `i += stepVal` from overflowing.
+    stepVal = n.clamp(-(length + 1), length + 1);
   }
   int clamp(int v, int lo, int hi) => v < lo ? lo : (v > hi ? hi : v);
   int normalize(Object? v, int fallback) {
-    if (v is! num) return fallback;
-    var n = v.toInt();
+    var n = templateInt(v);
+    if (n == null) return fallback;
     if (n < 0) n += length;
     return n;
   }
