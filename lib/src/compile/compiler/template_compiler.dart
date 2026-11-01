@@ -948,7 +948,8 @@ final class TemplateCompiler {
 
   static Duration _millis(UiNode node, String event, String key, Object? raw) {
     final ms = raw is num ? raw : num.tryParse('$raw');
-    if (ms == null || ms <= 0) {
+    // NaN passes `<= 0`, and a huge value overflows once scaled to µs.
+    if (ms == null || ms <= 0 || !(ms * 1000).isFinite) {
       throw InvalidTemplateException(
         node.path,
         'interaction "$event": "$key" must be a positive number of milliseconds.',

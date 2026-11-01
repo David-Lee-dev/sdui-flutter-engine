@@ -229,7 +229,7 @@ class HapticSemantics {
           intensity: _unit(p['intensity'], 1.0),
           sharpness: _unit(p['sharpness'], 0.5),
           delay: Duration(
-            milliseconds: math.max(0, _num(p['delay'])?.round() ?? 0),
+            milliseconds: math.max(0, _finite(p['delay'])?.round() ?? 0),
           ),
         ),
     ];
@@ -272,7 +272,7 @@ class HapticSemantics {
     for (final p in value) {
       if (p is! List || p.length != 2) return null;
       final [ms, v] = p;
-      if (ms is! num || v is! num) return null;
+      if (ms is! num || !ms.isFinite || v is! num) return null;
 
       final at = ms.round();
       if (at < 0 || (curve.isNotEmpty && at < curve.last.$1)) return null;
@@ -315,6 +315,10 @@ class HapticSemantics {
       _num(value)?.toDouble().clamp(0.0, 1.0) ?? fallback;
 
   static num? _num(Object? value) => value is num ? value : null;
+
+  /// [_num] limited to finite values, for reads that are rounded to `int`.
+  static num? _finite(Object? value) =>
+      value is num && value.isFinite ? value : null;
 
   static HapticLevel _shift(HapticLevel base, int delta) {
     final i = (base.index + delta).clamp(0, HapticLevel.values.length - 1);

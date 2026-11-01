@@ -943,6 +943,31 @@ void main() {
       });
     });
 
+    group('pulses', () {
+      test('a non-finite delay falls back to no delay', () {
+        final read = HapticSemantics.pulses([
+          {'delay': double.nan},
+          {'delay': double.infinity},
+        ])!;
+        expect(read.map((p) => p.delay), [Duration.zero, Duration.zero]);
+      });
+    });
+
+    group('continuous', () {
+      test('a non-finite curve time rejects the pattern', () {
+        for (final at in [double.nan, double.infinity]) {
+          expect(
+            HapticSemantics.continuous({
+              'intensity': [
+                [at, 1],
+              ],
+            }),
+            isNull,
+          );
+        }
+      });
+    });
+
     group('level', () {
       test('세기 이름을 읽는다 — heavy는 strong 별칭', () {
         expect(HapticSemantics.level('light'), HapticLevel.light);

@@ -1844,6 +1844,23 @@ void main() {
         );
       });
 
+      test('a non-finite ms is rejected', () {
+        for (final ms in ['NaN', 'Infinity', 1e306]) {
+          expect(
+            () => compileOn({
+              'tap': {'do': 'x', 'throttle': ms},
+            }),
+            throwsInvalidTemplate,
+          );
+          expect(
+            () => compileOn({
+              'tap': {'do': 'x', 'debounce': ms},
+            }),
+            throwsInvalidTemplate,
+          );
+        }
+      });
+
       test('0 이하 ms는 거부', () {
         expect(
           () => compileOn({

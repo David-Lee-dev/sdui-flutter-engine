@@ -70,6 +70,11 @@
   it supports no longer plays anything (neither the platform fallback nor a
   `continuous` pattern). A legacy rhythm such as `success` cancelled during
   the gap between pulses no longer plays the next pulse.
+- Fix: a `NaN` or infinite haptic `pattern` pulse `delay` plays with no
+  delay, and a `continuous` curve with a `NaN` or infinite time is rejected
+  like any other invalid curve. Both used to crash.
+- Fix: a `NaN`, infinite or overflowing `_on` `throttle`/`debounce` is a
+  compile error like any other invalid value instead of a crash.
 
 ## 0.17.5
 
