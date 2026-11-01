@@ -98,8 +98,10 @@ class AppStorageDriver extends Driver {
 
     final stamped = DateTime.fromMillisecondsSinceEpoch(stored);
     final now = _now();
-    final today = DateTime(now.year, now.month, now.day);
-    final stampedDay = DateTime(stamped.year, stamped.month, stamped.day);
+    // Local date fields as UTC dates, so every day is 24 hours: a DST
+    // change would otherwise make the gap between local midnights 23 hours.
+    final today = DateTime.utc(now.year, now.month, now.day);
+    final stampedDay = DateTime.utc(stamped.year, stamped.month, stamped.day);
     if (stampedDay.isAfter(today)) return true;
 
     return today.difference(stampedDay).inDays >= daysParam;

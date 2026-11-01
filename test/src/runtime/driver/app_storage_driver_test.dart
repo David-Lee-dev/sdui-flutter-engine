@@ -171,6 +171,25 @@ void main() {
         );
       });
 
+      // Only meaningful in a time zone with DST, where 2026-03-08 is 23 hours
+      // long (America/New_York); elsewhere it passes on any implementation.
+      // Run it with TZ=America/New_York to check a regression.
+      test('서머타임 시작일(23시간)을 넘어도 달력일로 센다', () async {
+        store.data['popup.daily'] = DateTime(
+          2026,
+          3,
+          8,
+          23,
+          50,
+        ).millisecondsSinceEpoch;
+        final now = DateTime(2026, 3, 9, 0, 10);
+        final clocked = AppStorageDriver(store: store, now: () => now);
+        expect(
+          await clocked.run(_ctx({'method': 'due', 'key': 'popup.daily'})),
+          isTrue,
+        );
+      });
+
       test('days: 7 — 6일 경과는 false', () async {
         store.data['popup.weekly'] = DateTime(
           2026,

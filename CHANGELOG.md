@@ -28,6 +28,9 @@
   (tween) or `_spring` physics, carrying the current velocity unless the
   new spring is an effect spring. Recompiling unchanged content leaves a
   running morph alone.
+- Fix: `app_storage` `due` counts calendar days across a daylight-saving
+  change. A stamp at 23:50 on the day clocks spring forward is due with
+  `days: 1` at 00:10 the next day.
 - Fix: a `serpentine` board reports its intrinsic height (the rows'
   heights plus `spacing`), so it keeps its full height inside an
   `intrinsic_height` or any parent that measures it first.
