@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../contract/screen_loader.dart';
 import '../ir/model/page_transition.dart';
 import '../runtime/engine_presentation.dart';
-import 'go_router_navigate.dart';
+import 'page_liveness.dart';
 import 'screen_cache.dart';
 import 'sdui_state.dart';
 import 'sdui_transition_page.dart';
@@ -64,17 +64,7 @@ final class _Frozen {
   final byKey = <LocalKey, _Decision>{};
 
   void _release(RouteMatchList configuration) {
-    final live = <LocalKey>{};
-    void walk(List<RouteMatchBase> matches) {
-      for (final match in matches) {
-        live.add(match.pageKey);
-        if (match is ImperativeRouteMatch) walk(match.matches.matches);
-        if (match is ShellRouteMatch) walk(match.matches);
-      }
-    }
-
-    walk(configuration.matches);
-    live.addAll(retainedPageKeys(configuration.matches));
+    final live = livePageKeys(configuration);
     byKey.removeWhere((key, _) => !live.contains(key));
   }
 }

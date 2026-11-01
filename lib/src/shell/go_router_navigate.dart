@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../runtime/engine_host.dart';
+import 'page_liveness.dart';
 
 /// Adapts [router] to the engine's [NavigateHandle] contract.
 ///
@@ -50,6 +51,8 @@ Future<Object?> _pushUntilGone(GoRouter router, String location) {
   }
 
   void onStackChanged() {
+    // The active stack is checked by completer, not by key: `replace` gives
+    // its page the displaced page's key, and that must still settle this push.
     final matches = delegate.currentConfiguration.matches;
     final match = _findPush(matches, completer);
     if (match != null) {
@@ -104,46 +107,4 @@ ImperativeRouteMatch? _findPush(
     }
   }
   return null;
-}
-
-/// Page keys held by the navigators of inactive stateful branches (and of
-/// shells nested in them), which keep their pages outside the active
-/// configuration. Active branches are excluded: they are the configuration.
-///
-/// Pages are matched by `match.pageKey`, so a page whose app `pageBuilder`
-/// sets its own key is never seen as retained.
-Set<LocalKey> retainedPageKeys(List<RouteMatchBase> matches) {
-  final keys = <LocalKey>{};
-  void addPages(GlobalKey<NavigatorState> navigatorKey) {
-    final pages = navigatorKey.currentState?.widget.pages ?? const <Page>[];
-    for (final page in pages) {
-      if (page.key case final key?) keys.add(key);
-    }
-  }
-
-  void addNested(List<RouteBase> routes) {
-    for (final route in routes) {
-      if (route is ShellRoute) addPages(route.navigatorKey);
-      if (route is StatefulShellRoute) {
-        for (final branch in route.branches) {
-          addPages(branch.navigatorKey);
-        }
-      }
-      addNested(route.routes);
-    }
-  }
-
-  for (final match in matches) {
-    if (match is! ShellRouteMatch) continue;
-    final route = match.route;
-    if (route is StatefulShellRoute) {
-      for (final branch in route.branches) {
-        if (branch.navigatorKey == match.navigatorKey) continue;
-        addPages(branch.navigatorKey);
-        addNested(branch.routes);
-      }
-    }
-    keys.addAll(retainedPageKeys(match.matches));
-  }
-  return keys;
 }
