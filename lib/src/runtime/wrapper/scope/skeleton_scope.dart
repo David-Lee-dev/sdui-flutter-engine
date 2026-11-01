@@ -4,7 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:sdui_engine/src/ir/model/presence_config.dart';
+import 'package:sdui_engine/src/ir/model/skeleton_style_override.dart';
+import 'package:sdui_engine/src/presentation/skeleton_style.dart';
+import '../../engine_presentation.dart';
 import '../../log/engine_log.dart';
+import '../../util/props_resolver.dart';
 import '../presence.dart';
 
 enum _Phase { holding, showing, done }
@@ -40,9 +44,9 @@ class SkeletonScope extends StatefulWidget {
   /// How the skeleton swaps to the content.
   final PresenceConfig presence;
 
-  /// The shimmer phase shared by the skeletons of one [LoadingScope]; the
-  /// skeleton runs its own when `null`.
-  final Animation<double>? shimmer;
+  /// The phase shared by the skeletons of one [LoadingScope]; the skeleton
+  /// runs its own when `null` or when its style's period differs.
+  final AnimationController? shimmer;
 
   @override
   State<SkeletonScope> createState() => _SkeletonScopeState();
@@ -89,14 +93,14 @@ class _SkeletonScopeState extends State<SkeletonScope> {
     super.dispose();
   }
 
-  /// The author's outline, wrapped in the automatic shimmer sweep. Authors draw
-  /// only bones (`skeleton` widgets) and layout — the effect is applied here so
-  /// no node wires its own animation. Bones are inert in every phase: they
-  /// take no pointer or focus and say nothing to screen readers.
-  Widget get _shimmered => IgnorePointer(
+  /// The author's outline, painted by the skeleton style in effect. Authors
+  /// draw only bones (`skeleton` widgets) and layout — the effect is applied
+  /// here so no node wires its own animation. Bones are inert in every phase:
+  /// they take no pointer or focus and say nothing to screen readers.
+  Widget get _bones => IgnorePointer(
     child: ExcludeSemantics(
       child: ExcludeFocus(
-        child: _Shimmer(animation: widget.shimmer, child: widget.skeleton),
+        child: _SkeletonMask(phase: widget.shimmer, child: widget.skeleton),
       ),
     ),
   );
@@ -108,44 +112,104 @@ class _SkeletonScopeState extends State<SkeletonScope> {
     config: widget.presence,
     childKey: _phase == _Phase.done ? 'content' : 'skeleton',
     child: switch (_phase) {
-      _Phase.holding => Opacity(opacity: 0, child: _shimmered),
-      _Phase.showing => _shimmered,
+      _Phase.holding => Opacity(opacity: 0, child: _bones),
+      _Phase.showing => _bones,
       _Phase.done => widget.child,
     },
   );
 }
 
-/// Sweeps an animated shimmer band across its whole subtree.
-///
-/// A `srcATop` [ShaderMask] repaints every opaque pixel of the skeleton outline
-/// with a moving `base → highlight → base` gradient, so all bones shimmer in one
-/// continuous band while transparent layout gaps stay clear. A shared
-/// [animation] or else one controller per skeleton drives it; individual bones
-/// carry no animation.
-class _Shimmer extends StatefulWidget {
-  const _Shimmer({required this.child, this.animation});
+/// Applies a scope's `_skeleton_style` over the skeleton style around it,
+/// key by key, for the skeletons and scopes below.
+class SkeletonStyleScope extends StatelessWidget {
+  const SkeletonStyleScope({
+    super.key,
+    required this.style,
+    required this.child,
+  });
 
+  /// The keys this scope sets.
+  final SkeletonStyleOverride style;
   final Widget child;
-  final Animation<double>? animation;
 
-  // Standard shimmer cadence (the `shimmer` package's default period).
-  static const period = Duration(milliseconds: 1500);
+  /// The skeleton style in effect at [context]: the nearest scope's, or the
+  /// app's.
+  static SkeletonStyle of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_StyleLayer>()?.style ??
+      EnginePresentation.value.skeleton;
 
   @override
-  State<_Shimmer> createState() => _ShimmerState();
+  Widget build(BuildContext context) {
+    final effect = style.effect;
+    final ms = style.durationMs;
+    return _StyleLayer(
+      style: of(context).merge(
+        effect: effect == null ? null : SkeletonEffect.values.byName(effect),
+        base: _paint(style.base),
+        highlight: _paint(style.highlight),
+        duration: ms == null ? null : Duration(milliseconds: ms),
+      ),
+      child: child,
+    );
+  }
+
+  /// Decodes a compiled color literal or gradient map.
+  static SkeletonPaint? _paint(Object? raw) {
+    if (raw is Map) {
+      final gradient = PropsResolver.gradient(raw);
+      return gradient == null ? null : SkeletonPaint.gradient(gradient);
+    }
+    final color = PropsResolver.color(raw);
+    return color == null ? null : SkeletonPaint.color(color);
+  }
 }
 
-class _ShimmerState extends State<_Shimmer>
-    with SingleTickerProviderStateMixin {
-  static const Color _base = Color(0xFF2C2C2C); // surface30
-  static const Color _highlight = Color(0xFF4B4B4B); // surface50
+class _StyleLayer extends InheritedWidget {
+  const _StyleLayer({required this.style, required super.child});
 
+  final SkeletonStyle style;
+
+  @override
+  bool updateShouldNotify(_StyleLayer oldWidget) => style != oldWidget.style;
+}
+
+/// Paints the whole subtree with the skeleton style in effect.
+///
+/// A `srcATop` [ShaderMask] repaints every opaque pixel of the skeleton
+/// outline while transparent layout gaps stay clear, so all bones share one
+/// paint. [SkeletonEffect.tint] paints the base and never ticks; breathe and
+/// shimmer animate over the style's period, on the shared [phase] when its
+/// period matches or else on one controller of their own. Reduced motion
+/// paints the base. Individual bones carry no animation.
+class _SkeletonMask extends StatefulWidget {
+  const _SkeletonMask({required this.child, this.phase});
+
+  final Widget child;
+  final AnimationController? phase;
+
+  @override
+  State<_SkeletonMask> createState() => _SkeletonMaskState();
+}
+
+class _SkeletonMaskState extends State<_SkeletonMask>
+    with SingleTickerProviderStateMixin {
   AnimationController? _own;
 
-  Animation<double> get _animation =>
-      widget.animation ??
-      (_own ??= AnimationController(vsync: this, duration: _Shimmer.period)
-        ..repeat());
+  /// The phase to animate on: the shared one at [period], else this mask's.
+  Animation<double> _phaseAt(Duration period) {
+    final shared = widget.phase;
+    if (shared != null && shared.duration == period) {
+      _own?.stop();
+      return shared;
+    }
+    final own = _own ??= AnimationController(vsync: this, duration: period);
+    if (own.duration != period || !own.isAnimating) {
+      own
+        ..duration = period
+        ..repeat();
+    }
+    return own;
+  }
 
   @override
   void dispose() {
@@ -155,30 +219,65 @@ class _ShimmerState extends State<_Shimmer>
 
   @override
   Widget build(BuildContext context) {
-    final animation = _animation;
+    final style = SkeletonStyleScope.of(context);
+    final still =
+        style.effect == SkeletonEffect.tint ||
+        (MediaQuery.maybeDisableAnimationsOf(context) ?? false);
+    if (still) {
+      _own?.stop();
+      return _mask(widget.child, () => style.base.asGradient);
+    }
+    final phase = _phaseAt(style.duration);
     return AnimatedBuilder(
-      animation: animation,
+      animation: phase,
       child: widget.child,
-      builder: (context, child) => ShaderMask(
-        blendMode: BlendMode.srcATop,
-        shaderCallback: (bounds) =>
-            _gradient(animation.value).createShader(bounds),
-        child: child,
+      builder: (context, child) => _mask(
+        child!,
+        () => style.effect == SkeletonEffect.breathe
+            ? _breath(style, phase.value)
+            : _band(style, phase.value),
       ),
     );
   }
 
-  /// The standard shimmer gradient: a highlight band padded by base on both ends
-  /// (so a base gap follows each pass), swept left→right as [t] goes 0→1. Clamp
-  /// tiling keeps everything base once the band slides off. Matches the widely
-  /// used `shimmer` package's default colors/stops/direction.
-  static LinearGradient _gradient(double t) => LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.centerRight,
-    colors: const [_base, _base, _highlight, _base, _base],
-    stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
-    transform: _SlideTransform(2 * t - 1),
+  static Widget _mask(Widget child, Gradient Function() gradient) => ShaderMask(
+    blendMode: BlendMode.srcATop,
+    shaderCallback: (bounds) => gradient().createShader(bounds),
+    child: child,
   );
+
+  /// Base eased to highlight and back as [t] goes 0→1.
+  static Gradient _breath(SkeletonStyle style, double t) => Gradient.lerp(
+    style.base.asGradient,
+    style.highlight.asGradient,
+    Curves.easeInOut.transform(t < 0.5 ? 2 * t : 2 - 2 * t),
+  )!;
+
+  /// The standard shimmer gradient: a highlight band padded by base on both
+  /// ends (so a base gap follows each pass), swept left→right as [t] goes
+  /// 0→1. Clamp tiling keeps everything base once the band slides off.
+  /// With one color each it matches the widely used `shimmer` package's
+  /// stops and direction. A gradient paint contributes its colors along the
+  /// sweep: the base's first and last pad the band, and the highlight's
+  /// spread evenly across it.
+  static LinearGradient _band(SkeletonStyle style, double t) {
+    final base = style.base.colors;
+    final highlight = style.highlight.colors;
+    final n = highlight.length;
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.centerRight,
+      colors: [base.first, base.first, ...highlight, base.last, base.last],
+      stops: [
+        0.0,
+        0.35,
+        for (var i = 1; i <= n; i++) 0.35 + 0.3 * i / (n + 1),
+        0.65,
+        1.0,
+      ],
+      transform: _SlideTransform(2 * t - 1),
+    );
+  }
 }
 
 /// Translates a gradient horizontally by [percent] of the bounds' width, moving
@@ -193,8 +292,9 @@ class _SlideTransform extends GradientTransform {
       Matrix4.translationValues(bounds.width * percent, 0, 0);
 }
 
-/// Gives the node skeletons below a scope its loading state and one shimmer
-/// phase, which runs only while the scope loads and some bones paint it.
+/// Gives the node skeletons below a scope its loading state and one shared
+/// animation phase at the style's period, which runs only while the scope
+/// loads and some bones animate on it (a still tint never does).
 class LoadingScope extends StatefulWidget {
   const LoadingScope({super.key, required this.loading, required this.child});
 
@@ -214,6 +314,15 @@ class _LoadingScopeState extends State<LoadingScope>
     super.initState();
     widget.loading.addListener(_sync);
     _sync();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final period = SkeletonStyleScope.of(context).duration;
+    if (_shimmer.duration == period) return;
+    _shimmer.duration = period;
+    if (_shimmer.isAnimating) _shimmer.repeat();
   }
 
   @override
@@ -249,12 +358,12 @@ class _LoadingScopeState extends State<LoadingScope>
   );
 }
 
-/// The shimmer phase a [LoadingScope] shares. Its listeners are the bones
-/// painting it, so [onPainters] learns when bones come on stage and when
-/// the last ones leave, an exit included; a settled slot paints none.
+/// The animation phase a [LoadingScope] shares. Its listeners are the bones
+/// animating on it, so [onPainters] learns when bones come on stage and when
+/// the last ones leave, an exit included; a settled slot or a still tint
+/// paints none.
 class _SharedShimmer extends AnimationController {
-  _SharedShimmer({required super.vsync, required this.onPainters})
-    : super(duration: _Shimmer.period);
+  _SharedShimmer({required super.vsync, required this.onPainters});
 
   final VoidCallback onPainters;
 
@@ -284,7 +393,7 @@ class _LoadingLayer extends InheritedWidget {
   });
 
   final ValueListenable<bool> loading;
-  final Animation<double> shimmer;
+  final AnimationController shimmer;
 
   @override
   bool updateShouldNotify(_LoadingLayer oldWidget) =>

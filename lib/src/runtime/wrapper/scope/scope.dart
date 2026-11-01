@@ -18,6 +18,7 @@ import 'lifecycle_runner.dart';
 import 'skeleton_scope.dart';
 import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
+import 'package:sdui_engine/src/ir/model/skeleton_style_override.dart';
 
 class _ScopeLayer extends InheritedWidget {
   const _ScopeLayer({required this.env, required super.child});
@@ -54,6 +55,7 @@ class Scope extends StatefulWidget {
     this.skeleton,
     this.tracksLoading = false,
     this.presence = const PresenceConfig(),
+    this.skeletonStyle,
   });
 
   Scope.ofState(Map<String, Object?> state, {super.key, required this.child})
@@ -62,7 +64,8 @@ class Scope extends StatefulWidget {
       lifecycle = const [],
       skeleton = null,
       tracksLoading = false,
-      presence = const PresenceConfig();
+      presence = const PresenceConfig(),
+      skeletonStyle = null;
 
   final ScopeConfig config;
 
@@ -79,6 +82,10 @@ class Scope extends StatefulWidget {
 
   /// How [skeleton] swaps to [child].
   final PresenceConfig presence;
+
+  /// The skeleton paint this scope overrides for its skeleton and the
+  /// skeletons below.
+  final SkeletonStyleOverride? skeletonStyle;
 
   final Widget child;
 
@@ -253,9 +260,15 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
         : widget.tracksLoading
         ? LoadingScope(loading: _loading, child: widget.child)
         : widget.child;
+    final style = widget.skeletonStyle;
     return _ScopeLayer(
       env: _env,
-      child: _ActionLayer(host: _host, child: child),
+      child: _ActionLayer(
+        host: _host,
+        child: style == null
+            ? child
+            : SkeletonStyleScope(style: style, child: child),
+      ),
     );
   }
 }

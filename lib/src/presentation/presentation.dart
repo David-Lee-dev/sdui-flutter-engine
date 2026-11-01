@@ -5,6 +5,7 @@ import 'modal_style.dart';
 import 'page_transition_style.dart';
 import 'presence_style.dart';
 import 'scaling.dart';
+import 'skeleton_style.dart';
 import 'typography.dart';
 
 /// Presents a template `toast` command — the app's chance to replace the
@@ -43,6 +44,7 @@ final class SduiPresentation {
     this.modal = const ModalStyle(),
     this.transitions = const PageTransitionStyle(),
     this.presence = const PresenceStyle(),
+    this.skeleton = const SkeletonStyle(),
     this.typography = const SduiTypography(),
     this.scaling = const SduiScaling(),
     this.screenErrorBuilder,
@@ -60,6 +62,9 @@ final class SduiPresentation {
 
   /// Defaults for structural enter, exit and swap transitions.
   final PresenceStyle presence;
+
+  /// How skeleton bones are painted while a scope loads.
+  final SkeletonStyle skeleton;
   final SduiTypography typography;
   final SduiScaling scaling;
 

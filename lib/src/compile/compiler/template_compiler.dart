@@ -8,6 +8,7 @@ import 'package:sdui_engine/src/ir/model/interaction_events.dart';
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
+import 'package:sdui_engine/src/ir/model/skeleton_style_override.dart';
 import 'package:sdui_engine/src/ir/compiled_value.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
 import 'package:sdui_engine/src/ir/model/ui_node.dart';
@@ -102,6 +103,8 @@ final class TemplateCompiler {
     'presence_v1',
     // 0.17.0: node `_skeleton` and the `skeleton` `of: text` bone.
     'skeleton_v2',
+    // `_scope._skeleton_style`.
+    'skeleton_style_v1',
   };
 
   /// Builds the directive tree for a template root.
@@ -115,7 +118,7 @@ final class TemplateCompiler {
   static Directive buildRoot(UiNode node, {LanguageCatalog? catalog}) {
     final language = catalog ?? LanguageCatalog.fromRegistries();
     if (!node.reserved.containsKey('_requires')) {
-      return _build(node, language);
+      return _gateFeatures(_build(node, language), const []);
     }
     final raw = node.reserved['_requires'];
     if (raw is! List) {
@@ -133,22 +136,64 @@ final class TemplateCompiler {
         );
       }
     }
-    return _build(
-      UiNode(
-        type: node.type,
-        props: node.props,
-        reserved: {
-          for (final entry in node.reserved.entries)
-            if (entry.key != '_requires') entry.key: entry.value,
-        },
-        children: node.children,
-        slots: node.slots,
-        key: node.key,
-        path: node.path,
+    return _gateFeatures(
+      _build(
+        UiNode(
+          type: node.type,
+          props: node.props,
+          reserved: {
+            for (final entry in node.reserved.entries)
+              if (entry.key != '_requires') entry.key: entry.value,
+          },
+          children: node.children,
+          slots: node.slots,
+          key: node.key,
+          path: node.path,
+        ),
+        language,
       ),
-      language,
+      raw,
     );
   }
+
+  /// Returns [root] when it uses only features that [requires] declares.
+  ///
+  /// Throws [InvalidTemplateException] at the first scope with
+  /// `_skeleton_style` when `skeleton_style_v1` is not declared.
+  static Directive _gateFeatures(Directive root, List<Object?> requires) {
+    if (requires.contains('skeleton_style_v1')) return root;
+    final path = _skeletonStylePath(root);
+    if (path != null) {
+      throw InvalidTemplateException(
+        path,
+        '"_scope._skeleton_style" needs "skeleton_style_v1" in "_requires".',
+      );
+    }
+    return root;
+  }
+
+  /// The path of the first scope in [directive] with `_skeleton_style`.
+  static String? _skeletonStylePath(Directive directive) => switch (directive) {
+    ScopeDirective scope when scope.skeletonStyle != null => scope.path,
+    ScopeDirective scope =>
+      _skeletonStylePath(scope.child) ??
+          (scope.skeleton == null ? null : _skeletonStylePath(scope.skeleton!)),
+    PlainDirective node =>
+      node.children.map(_skeletonStylePath).nonNulls.firstOrNull ??
+          node.slots.values.map(_skeletonStylePath).nonNulls.firstOrNull,
+    ConditionDirective cond => [
+      for (final branch in cond.branches) branch.body,
+      ?cond.fallback,
+    ].map(_skeletonStylePath).nonNulls.firstOrNull,
+    SwitchDirective sw => [
+      for (final branch in sw.cases) branch.branch,
+      ?sw.fallback,
+    ].map(_skeletonStylePath).nonNulls.firstOrNull,
+    LoopDirective loop => _skeletonStylePath(loop.child),
+    MorphDirective morph => _skeletonStylePath(morph.child),
+    SkeletonDirective skeleton =>
+      _skeletonStylePath(skeleton.bones) ?? _skeletonStylePath(skeleton.child),
+  };
 
   /// Builds the directive tree rooted at [node].
   ///
@@ -417,7 +462,12 @@ final class TemplateCompiler {
     '_action',
     '_lifecycle',
     '_skeleton',
+    '_skeleton_style',
   };
+
+  static const _skeletonStyleKeys = {'effect', 'base', 'highlight', 'duration'};
+
+  static const _skeletonEffects = {'tint', 'breathe', 'shimmer'};
 
   static const _morphAllowedKeys = {
     '_from',
@@ -680,8 +730,98 @@ final class TemplateCompiler {
       actions: _compileActions(config['_action'], node.path),
       lifecycle: lifecycle,
       presence: _parsePresence(node),
+      skeletonStyle: _compileSkeletonStyle(config, node.path),
     );
   }
+
+  /// Validates `_scope._skeleton_style`: literal values only, each key
+  /// optional. Returns `null` when the scope declares none.
+  static SkeletonStyleOverride? _compileSkeletonStyle(
+    Map<String, Object?> config,
+    String path,
+  ) {
+    if (!config.containsKey('_skeleton_style')) return null;
+    final raw = config['_skeleton_style'];
+    if (raw is! Map) {
+      throw InvalidTemplateException(
+        path,
+        '"_scope._skeleton_style" must be a map.',
+      );
+    }
+    for (final key in raw.keys) {
+      if (!_skeletonStyleKeys.contains(key)) {
+        throw InvalidTemplateException(
+          path,
+          'unknown "_skeleton_style" key "$key" '
+          '(allowed: ${_skeletonStyleKeys.join(", ")}).',
+        );
+      }
+    }
+    if (_hasBinding(raw)) {
+      throw InvalidTemplateException(
+        path,
+        '"_skeleton_style" takes no bindings; write literal values.',
+      );
+    }
+
+    final effect = raw['effect'];
+    if (effect != null && !_skeletonEffects.contains(effect)) {
+      throw InvalidTemplateException(
+        path,
+        'unknown "_skeleton_style.effect" "$effect" '
+        '(supported: ${_skeletonEffects.join(", ")}).',
+      );
+    }
+    for (final key in const ['base', 'highlight']) {
+      final paint = raw[key];
+      if (paint != null && !_isPaint(paint)) {
+        throw InvalidTemplateException(
+          path,
+          '"_skeleton_style.$key" must be a color ("#RRGGBB") or a gradient '
+          'map with at least two colors.',
+        );
+      }
+    }
+    final duration = raw['duration'];
+    if (duration != null && (duration is! num || duration <= 0)) {
+      throw InvalidTemplateException(
+        path,
+        '"_skeleton_style.duration" must be a positive number (ms).',
+      );
+    }
+
+    return SkeletonStyleOverride(
+      effect: effect as String?,
+      base: raw['base'],
+      highlight: raw['highlight'],
+      // Rounded up so a fraction of a millisecond stays a positive period.
+      durationMs: (duration as num?)?.ceil(),
+    );
+  }
+
+  /// Whether [raw] holds a `${…}` binding at any depth.
+  static bool _hasBinding(Object? raw) => switch (raw) {
+    String text => text.contains(r'${'),
+    Map map => map.values.any(_hasBinding),
+    List list => list.any(_hasBinding),
+    _ => false,
+  };
+
+  /// Whether [raw] is a color literal or a gradient map with two or more
+  /// colors, as the runtime props decoders read them.
+  static bool _isPaint(Object? raw) {
+    if (raw is! Map) return _isColor(raw);
+    final colors = raw['colors'];
+    return colors is List && colors.length >= 2 && colors.every(_isColor);
+  }
+
+  /// An ARGB integer or a `#RGB`, `#RRGGBB` or `#AARRGGBB` string.
+  static bool _isColor(Object? raw) =>
+      raw is int ||
+      raw is String &&
+          RegExp(
+            r'^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$',
+          ).hasMatch(raw.trim());
 
   static bool _hasMountHook(List<LifecycleHook> lifecycle) =>
       lifecycle.any((hook) => hook.trigger == LifecycleTrigger.mount);

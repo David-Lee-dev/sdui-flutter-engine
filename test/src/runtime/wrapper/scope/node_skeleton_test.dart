@@ -6,8 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
+import 'package:sdui_engine/src/presentation/presentation.dart';
+import 'package:sdui_engine/src/presentation/skeleton_style.dart';
 import 'package:sdui_engine/src/runtime/driver/_base.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
+import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
 import 'package:sdui_engine/src/runtime/log/engine_log.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
@@ -574,6 +577,11 @@ void main() {
     testWidgets('bones in one scope share one shimmer animation', (
       tester,
     ) async {
+      // Only an animating effect shares a phase; the default tint is still.
+      EnginePresentation.value = const SduiPresentation(
+        skeleton: SkeletonStyle(effect: SkeletonEffect.shimmer),
+      );
+      addTearDown(EnginePresentation.reset);
       await tester.pumpWidget(
         _app(_section(column([boned(_content), boned(_content)]))),
       );

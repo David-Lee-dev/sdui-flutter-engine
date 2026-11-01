@@ -14,6 +14,7 @@ final class ScopeDirective extends Directive {
     this.skeleton,
     this.tracksLoading = false,
     this.presence = const PresenceConfig(),
+    this.skeletonStyle,
   });
 
   final ScopeConfig config;
@@ -37,4 +38,7 @@ final class ScopeDirective extends Directive {
 
   /// How the [skeleton] swaps to content, from the node's `_presence`.
   final PresenceConfig presence;
+
+  /// The skeleton paint this scope overrides for the skeletons under it.
+  final SkeletonStyleOverride? skeletonStyle;
 }

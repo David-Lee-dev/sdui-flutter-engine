@@ -64,6 +64,7 @@ final class NodeBuilder {
         skeleton: _scopeBones(scope),
         tracksLoading: scope.tracksLoading,
         presence: scope.presence,
+        skeletonStyle: scope.skeletonStyle,
         child: scope.lifecycle.isEmpty
             ? build(scope.child)
             : _isolated(scope.child),

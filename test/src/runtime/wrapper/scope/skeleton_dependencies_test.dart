@@ -1,6 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/ir/model/presence_config.dart';
+import 'package:sdui_engine/src/presentation/presentation.dart';
+import 'package:sdui_engine/src/presentation/skeleton_style.dart';
+import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/skeleton_scope.dart';
 
 Widget _host(Widget child) => Directionality(
@@ -24,16 +27,14 @@ Widget _slot({Key? key, Widget child = const Text('content')}) => SkeletonSlot(
 );
 
 /// The shimmer the slot under [key] gives its bones.
-AnimationController _shimmerOf(WidgetTester tester, Key key) =>
-    tester
-            .widget<SkeletonScope>(
-              find.descendant(
-                of: find.byKey(key),
-                matching: find.byType(SkeletonScope),
-              ),
-            )
-            .shimmer!
-        as AnimationController;
+AnimationController _shimmerOf(WidgetTester tester, Key key) => tester
+    .widget<SkeletonScope>(
+      find.descendant(
+        of: find.byKey(key),
+        matching: find.byType(SkeletonScope),
+      ),
+    )
+    .shimmer!;
 
 class _Mount extends StatefulWidget {
   const _Mount(this.onMount);
@@ -57,6 +58,15 @@ class _MountState extends State<_Mount> {
 
 void main() {
   group('skeleton 은 바뀐 loading 과 옮겨 간 owner 를 다시 얻는다', () {
+    // These cases cover the shared phase, which only an animating effect
+    // runs; the engine default is a still tint.
+    setUp(
+      () => EnginePresentation.value = const SduiPresentation(
+        skeleton: SkeletonStyle(effect: SkeletonEffect.shimmer),
+      ),
+    );
+    tearDown(EnginePresentation.reset);
+
     testWidgets('SkeletonScope 의 notifier 를 바꾸면 새 것을 듣고 옛 것은 놓는다', (
       tester,
     ) async {

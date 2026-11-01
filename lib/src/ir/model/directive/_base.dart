@@ -4,6 +4,7 @@ import '../event_timing.dart';
 import '../lifecycle_hook.dart';
 import '../presence_config.dart';
 import '../scope_config.dart';
+import '../skeleton_style_override.dart';
 import 'package:sdui_engine/src/ir/compiled_value.dart';
 import 'package:sdui_engine/src/ir/expression.dart';
 

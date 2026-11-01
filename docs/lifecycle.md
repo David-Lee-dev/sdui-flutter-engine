@@ -42,7 +42,7 @@ Timers are cancelled on disposal. Updating the lifecycle list cancels old schedu
 
 ## Skeletons
 
-A skeleton shows while a scope's first `mount` actions run. It is held invisible for a 300 ms grace (its space is reserved), then painted with a shimmer. When the load finishes the skeleton swaps for the content as a presence swap (`_presence` on the node tunes it, `false` swaps at once): the content fades in while the slot's size goes from the skeleton's to the content's. A load inside the grace swaps the same way, so the content still fades in; the never-painted skeleton stays unpainted. If the mount actions have not finished after 8 s, the content shows anyway in its current state and a warning is logged; the requests are not cancelled and a late response updates the content in place. `remount`, reseeds and later loads never show the skeleton again.
+A skeleton shows while a scope's first `mount` actions run. It is held invisible for a 300 ms grace (its space is reserved), then painted with the skeleton style in effect ([Skeleton style](#skeleton-style)). When the load finishes the skeleton swaps for the content as a presence swap (`_presence` on the node tunes it, `false` swaps at once): the content fades in while the slot's size goes from the skeleton's to the content's. A load inside the grace swaps the same way, so the content still fades in; the never-painted skeleton stays unpainted. If the mount actions have not finished after 8 s, the content shows anyway in its current state and a warning is logged; the requests are not cancelled and a late response updates the content in place. `remount`, reseeds and later loads never show the skeleton again.
 
 `_scope._skeleton` draws one tree for the whole scope. Since 0.17.0 (`_requires: [skeleton_v2]`) a node may instead carry its own `_skeleton`: the frames around it show at once and only that node shows bones. The nearest enclosing scope with a `mount` hook gates it (a scope without mount hooks passes through; a nested scope with mount hooks gates the node skeletons below it). A node built after the load, or without such a scope, shows its content directly. A scope with both `_scope._skeleton` and node skeletons below fails to compile, and so does a node `_skeleton` on a node with its own mount hooks (use `_scope._skeleton` there).
 
@@ -81,6 +81,38 @@ _children:
 
 Derived bones never read data: frames (layout, padding, decoration, spacing, alignment) keep their literal props, every reserved key (`_on`, `_motion`, `_morph`, `_scope`, …) is dropped, and every display leaf becomes a bone, literal or bound. A text or `rich_text` becomes one `skeleton` `of: text` with its literal `style` and `max_lines` (so `내 적립` and `'${a}/1000원'` are one bone each). An `image` becomes a box of its literal `width` and `height` (a circle under `clip_oval`, its literal `radius` otherwise); an `icon` becomes a square of its `size` (24 by default). An input or action widget (`toggle`, `checkbox`, `text_field`, `slider`, `page_view`, `refresh_indicator`, `dismissible`, `scratch_card`, `video`, …) becomes one box of its literal `width` and `height`, children and all, keeping a literal `radius` and `shape`. A bound `color`, `gradient`, `opacity` or `semantics_label` is dropped. Compilation fails, naming the node, for any other bound prop, an image or an input or action widget without a literal size, and a nested `_if`, `_loop`, `cond` or `switch` without its own `_skeleton` (whose bones are then used).
 
-A node `_skeleton` sits outside the node's `_if` and `_loop`, so an `_if` that turns out false after the load collapses the bones to nothing. It is a box: it fails to compile on a parent-data node (`expanded`, `flexible`, `positioned`, `positioned_fill`, `spacer`) and in a sliver position; on an app-registered widget it is skipped with a warning. The bones of one scope share one shimmer phase, which runs only while some bones are on stage.
+A node `_skeleton` sits outside the node's `_if` and `_loop`, so an `_if` that turns out false after the load collapses the bones to nothing. It is a box: it fails to compile on a parent-data node (`expanded`, `flexible`, `positioned`, `positioned_fill`, `spacer`) and in a sliver position; on an app-registered widget it is skipped with a warning. The bones of one scope share one animation phase (breathe or shimmer at the scope's period), which runs only while some bones are on stage; a still tint runs none.
 
 Bones are inert, `_scope._skeleton` included: while held or shown they take no taps, drags or focus and expose nothing to screen readers. A text bone without `width` fills the parent's width (80 px when the width is unbounded) and stands for `max_lines` lines, so a frame that sizes to its content, or a text that wraps to another line count, can change size when the content swaps in; give the bone a `width` (`_skeleton: { width }`) and the text a `max_lines`.
+
+### Skeleton style
+
+Bones are painted with one `srcATop` mask over the whole outline, so transparent layout gaps stay clear and layout is never touched. Three effects:
+
+| `effect` | Paint |
+| --- | --- |
+| `tint` (default) | `base`, still. Nothing ticks. |
+| `breathe` | The whole outline eases from `base` to `highlight` and back (ease in-out) once per `duration`. |
+| `shimmer` | A `highlight` band padded by `base` sweeps left to right once per `duration`. |
+
+Each skeleton animates on its own; there is no sync between scopes and no screen-space alignment. When the platform asks to reduce motion (`MediaQuery.disableAnimations`), `breathe` and `shimmer` paint `base` and run nothing.
+
+The app sets the default through `SduiPresentation(skeleton: SkeletonStyle(...))`: `effect` (`SkeletonEffect.tint` / `breathe` / `shimmer`), `base` and `highlight` (`SkeletonPaint.color(...)` or `SkeletonPaint.gradient(...)`), and `duration`. When the app sets nothing the engine uses `tint`, base `#2C2C2C`, highlight `#4B4B4B`, 1500 ms (`shimmer` with these is the sweep of 0.18.0 and earlier).
+
+Since `skeleton_style_v1`, any `_scope` may declare `_skeleton_style`. Every key is optional and merges key by key over the nearest outer scope's style, then the app's. It applies to that scope's `_scope._skeleton`, the node `_skeleton`s below it and nested scopes until one declares its own; sibling scopes are unaffected.
+
+```yaml
+_requires: [skeleton_style_v1]
+_type: column
+_scope:
+  _lifecycle: [{ 'on': mount, action: load }]
+  _skeleton_style: { effect: breathe, base: '#1E2016', highlight: { colors: ['#0D9EFF', '#F32DD6'] }, duration: 1800 }
+```
+
+| Key | Value |
+| --- | --- |
+| `effect` | `tint`, `breathe` or `shimmer` |
+| `base`, `highlight` | a color (`#RGB`, `#RRGGBB`, `#AARRGGBB`) or a gradient map with at least two `colors`, as in widget props |
+| `duration` | milliseconds, positive (a fraction rounds up) |
+
+Values are literal: compilation fails, naming the scope, when `_skeleton_style` is not a map, has an unknown key, an unknown effect, a `${…}` binding, a malformed color or gradient, a duration that is not a positive number, or when the template root does not declare `skeleton_style_v1` in `_requires`.

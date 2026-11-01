@@ -1,6 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/ir/model/presence_config.dart';
+import 'package:sdui_engine/src/presentation/presentation.dart';
+import 'package:sdui_engine/src/presentation/skeleton_style.dart';
+import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/wrapper/presence.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/skeleton_scope.dart';
 
@@ -29,19 +32,26 @@ Widget _slot({
 );
 
 /// The shimmer the slot under [key] gives its bones.
-AnimationController _shimmerOf(WidgetTester tester, Key key) =>
-    tester
-            .widget<SkeletonScope>(
-              find.descendant(
-                of: find.byKey(key),
-                matching: find.byType(SkeletonScope),
-              ),
-            )
-            .shimmer!
-        as AnimationController;
+AnimationController _shimmerOf(WidgetTester tester, Key key) => tester
+    .widget<SkeletonScope>(
+      find.descendant(
+        of: find.byKey(key),
+        matching: find.byType(SkeletonScope),
+      ),
+    )
+    .shimmer!;
 
 void main() {
   group('shimmer 는 bones 가 그려지는 동안만 owner 를 붙든다', () {
+    // These cases cover the shared phase, which only an animating effect
+    // runs; the engine default is a still tint.
+    setUp(
+      () => EnginePresentation.value = const SduiPresentation(
+        skeleton: SkeletonStyle(effect: SkeletonEffect.shimmer),
+      ),
+    );
+    tearDown(EnginePresentation.reset);
+
     testWidgets('끝난 slot 을 loading 중인 owner 로 옮겨도 shimmer 를 켜지 않는다', (
       tester,
     ) async {

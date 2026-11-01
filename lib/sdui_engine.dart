@@ -61,6 +61,8 @@ export 'src/presentation/presentation.dart'
         SduiScreenErrorBuilder,
         SduiToastPresenter;
 export 'src/presentation/scaling.dart' show SduiScaling;
+export 'src/presentation/skeleton_style.dart'
+    show SkeletonEffect, SkeletonPaint, SkeletonStyle;
 export 'src/presentation/typography.dart' show SduiTypography;
 export 'src/compile/schema/builtin_language.dart' show BuiltinLanguage;
 export 'src/compile/schema/language_catalog.dart' show LanguageCatalog;
