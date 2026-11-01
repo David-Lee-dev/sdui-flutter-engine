@@ -8,8 +8,12 @@ import 'child_builder.dart';
 
 /// Describes how the engine builds a widget and validates its layout protocol.
 ///
-/// [produces] identifies the node's own protocol. A null [childProtocol] opts
-/// out of uniform child validation for widgets with mixed child roles.
+/// [produces] identifies the node's own protocol. [childProtocol] is the
+/// protocol every child must produce; [lastChildProtocol] overrides it for
+/// the last positional child (a `nested_scroll_view`'s sliver headers and box
+/// body). A null [childProtocol] skips the check for the children it covers,
+/// which only an app widget whose child roles these two fields cannot
+/// describe needs.
 /// [parentData] declares the parent data the widget's output carries
 /// (`Expanded` carries [ParentDataKind.flex], `Positioned`
 /// [ParentDataKind.stack]); such an output must stay the direct widget of a
@@ -27,6 +31,7 @@ sealed class WidgetSpec {
   const WidgetSpec({
     this.produces = LayoutProtocol.box,
     this.childProtocol = LayoutProtocol.box,
+    this.lastChildProtocol,
     this.parentData = ParentDataKind.none,
     this.childParentData = ParentDataKind.none,
   });
@@ -34,6 +39,16 @@ sealed class WidgetSpec {
   final LayoutProtocol produces;
 
   final LayoutProtocol? childProtocol;
+
+  /// The protocol of the last positional child, overriding [childProtocol]
+  /// for that child only; earlier children keep [childProtocol] and an empty
+  /// list has no last child. Null leaves every child to [childProtocol].
+  ///
+  /// The compiled position is the rendered one: a false `_if` or `switch`
+  /// without a fallback still renders a placeholder of the same protocol,
+  /// and a loop yields one container, so the last child checked at compile
+  /// time is the last one at run time.
+  final LayoutProtocol? lastChildProtocol;
 
   final ParentDataKind parentData;
 
@@ -54,6 +69,7 @@ final class EagerSpec extends WidgetSpec {
     this.build, {
     super.produces,
     super.childProtocol,
+    super.lastChildProtocol,
     super.parentData,
     super.childParentData,
   });
@@ -75,6 +91,7 @@ final class SlotSpec extends WidgetSpec {
     this.build, {
     super.produces,
     super.childProtocol,
+    super.lastChildProtocol,
     super.parentData,
     super.childParentData,
   });
@@ -97,6 +114,7 @@ final class BuilderSpec extends WidgetSpec {
     this.build, {
     super.produces,
     super.childProtocol,
+    super.lastChildProtocol,
     super.parentData,
     super.childParentData,
   });
@@ -120,6 +138,7 @@ final class BoundSpec extends WidgetSpec {
     this.build, {
     super.produces,
     super.childProtocol,
+    super.lastChildProtocol,
     super.parentData,
     super.childParentData,
   });
@@ -142,6 +161,7 @@ final class ActionSpec extends WidgetSpec {
     this.build, {
     super.produces,
     super.childProtocol,
+    super.lastChildProtocol,
     super.parentData,
     super.childParentData,
   });

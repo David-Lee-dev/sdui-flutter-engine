@@ -70,7 +70,7 @@ abstract final class BuiltinLanguage {
   'list_tile': WidgetSchema(kind: WidgetKind.slot, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'list_view': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'loading_indicator': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
-  'nested_scroll_view': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: null),
+  'nested_scroll_view': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.sliver, lastChildProtocol: LayoutProtocol.box),
   'offstage': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'opacity': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'overflow_bar': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),

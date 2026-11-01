@@ -11,6 +11,16 @@
   baseline; `text_baseline` still picks another one.
 - Fix: a `shape` on an unbounded axis takes that axis's minimum constraint
   (usually 0) instead of 0, so a minimum from its parent is kept.
+- Fix: `nested_scroll_view` children are now checked by position at
+  compile time. A box header (anything but the last child) or a sliver
+  body (the last child) is a compile error instead of a render failure on
+  the device. Sliver headers followed by a box body, a body alone, and no
+  children still compile.
+- New: `WidgetSpec` and `WidgetSchema` take an optional
+  `lastChildProtocol`, the protocol of the last positional child; earlier
+  children keep `childProtocol`. An app widget with header/body roles can
+  declare it. A null `childProtocol` still skips the check. This adds a
+  public field, so the next release is a minor version (0.18.0).
 
 ## 0.17.5
 

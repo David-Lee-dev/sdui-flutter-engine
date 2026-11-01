@@ -112,7 +112,7 @@ The parser rejects mixing `_slots` with positional children and mixing `_child` 
 
 Every widget declares the render protocol it produces and the protocol its children require. Most produce and consume boxes. Sliver producers are valid only under sliver parents such as [`custom_scroll_view`](widgets/scrolling/custom_scroll_view.md); [`sliver_to_box_adapter`](widgets/scrolling/sliver_to_box_adapter.md) adapts a box into a sliver. A bare sliver at the engine root is invalid.
 
-`nested_scroll_view` deliberately accepts mixed child roles. Loop wrappers `sliver_list` and `sliver_grid` produce slivers; all other loop wrappers produce boxes. Repeated items themselves must produce boxes.
+A widget may declare a different protocol for its last positional child. `nested_scroll_view` does: every child but the last is a header and must produce a sliver, and the last child is the body and must produce a box. Loop wrappers `sliver_list` and `sliver_grid` produce slivers; all other loop wrappers produce boxes. Repeated items themselves must produce boxes.
 
 ## Insets
 

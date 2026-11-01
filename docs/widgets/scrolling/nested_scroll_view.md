@@ -17,7 +17,7 @@ All non-structural property values are recursively expression-bindable. Structur
 
 ## Protocol
 
-This widget produces the **box** layout protocol. Its positional children must produce the protocol appropriate to their role. This type is not selected directly by `_loop._wrap`; `_loop` may still wrap this widget node as the repeated item. See [Concepts](../../concepts.md#box-and-sliver-protocols) and [Loops](../../loops.md).
+This widget produces the **box** layout protocol. Its positional children must produce the protocol of their role: every child but the last is a header and must produce a **sliver**, and the last child is the body and must produce a **box**. A misplaced child is a compile error. This type is not selected directly by `_loop._wrap`; `_loop` may still wrap this widget node as the repeated item. See [Concepts](../../concepts.md#box-and-sliver-protocols) and [Loops](../../loops.md).
 
 ## Examples
 

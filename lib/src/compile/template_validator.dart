@@ -122,7 +122,9 @@ final class TemplateValidator {
         final childDeclared = node.provides.isEmpty
             ? ownDeclared
             : {...ownDeclared, ...node.provides};
-        // A null child protocol permits widgets with mixed child protocols.
+        // Children follow the child protocol, the last positional one the
+        // optional last-child protocol; a null protocol skips that check
+        // (app widgets whose child roles the schema cannot describe).
         final childExpected = schema.childProtocol;
         // A node passing its child through hands it its own parent's place.
         final childAccepts = passThrough(node, _passesChild) == null
@@ -130,13 +132,16 @@ final class TemplateValidator {
             : accepts;
         final intrinsic = _intrinsicTypes.contains(node.type);
         if (intrinsic) _intrinsicDepth++;
-        for (final child in node.children) {
+        final last = node.children.length - 1;
+        for (var index = 0; index <= last; index++) {
           _walk(
-            child,
+            node.children[index],
             childDeclared,
             writable,
             actions,
-            childExpected,
+            index == last
+                ? schema.lastChildProtocol ?? childExpected
+                : childExpected,
             childAccepts,
           );
         }

@@ -9,6 +9,7 @@ import 'package:sdui_engine/src/compile/schema/language_catalog.dart';
 import 'package:sdui_engine/src/compile/schema/command_schema.dart';
 import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'package:sdui_engine/src/compile/template_validator.dart';
+import 'package:sdui_engine/src/ir/model/layout_protocol.dart';
 import 'package:sdui_engine/src/runtime/widget/factory.dart';
 
 final throwsInvalidTemplate = throwsA(isA<InvalidTemplateException>());
@@ -293,8 +294,8 @@ void main() {
         );
       });
 
-      test('nestedScrollView(혼합 자식)는 프로토콜 검증을 건너뛴다', () {
-        // 헤더 sliver + box body가 위치로 섞여 단일 프로토콜로 못 적음 → childProtocol=null(스킵).
+      test('nestedScrollView의 header sliver + box body를 허용한다', () {
+        // 헤더는 childProtocol(sliver), 마지막 body는 lastChildProtocol(box)을 따른다.
         expect(
           () => validate({
             '_type': 'nested_scroll_view',
@@ -306,6 +307,128 @@ void main() {
               {'_type': 'text', 'value': 'body'},
             ],
           }, const {}),
+          returnsNormally,
+        );
+      });
+
+      test('nestedScrollView의 box header는 마운트-치명', () {
+        expect(
+          () => validate({
+            '_type': 'nested_scroll_view',
+            '_children': [
+              {'_type': 'text', 'value': 'header'},
+              {'_type': 'text', 'value': 'body'},
+            ],
+          }, const {}),
+          throwsInvalidTemplate,
+        );
+      });
+
+      test('nestedScrollView의 sliver body는 마운트-치명', () {
+        expect(
+          () => validate({
+            '_type': 'nested_scroll_view',
+            '_children': [
+              {'_type': 'sliver_list', '_children': <Object?>[]},
+            ],
+          }, const {}),
+          throwsInvalidTemplate,
+        );
+      });
+
+      test('nestedScrollView는 자식 없음·body만도 통과', () {
+        expect(
+          () => validate({
+            '_type': 'nested_scroll_view',
+            '_children': <Object?>[],
+          }, const {}),
+          returnsNormally,
+        );
+        expect(
+          () => validate({
+            '_type': 'nested_scroll_view',
+            '_children': [
+              {'_type': 'text', 'value': 'body'},
+            ],
+          }, const {}),
+          returnsNormally,
+        );
+      });
+
+      test('lastChildProtocol은 이름과 무관하게 앱 위젯 스키마로 동작한다', () {
+        WidgetFactory.register(
+          'section_host',
+          EagerSpec(
+            (context, props, children) => const SizedBox(),
+            childProtocol: LayoutProtocol.sliver,
+            lastChildProtocol: LayoutProtocol.box,
+          ),
+        );
+        Map<String, Object?> host(List<Object?> children) => {
+          '_type': 'section_host',
+          '_children': children,
+        };
+
+        expect(
+          () => validate(
+            host([
+              {'_type': 'sliver_list', '_children': <Object?>[]},
+              {'_type': 'text', 'value': 'body'},
+            ]),
+            const {},
+          ),
+          returnsNormally,
+        );
+        expect(
+          () => validate(
+            host([
+              {'_type': 'text', 'value': 'header'},
+              {'_type': 'text', 'value': 'body'},
+            ]),
+            const {},
+          ),
+          throwsInvalidTemplate,
+        );
+        expect(
+          () => validate(
+            host([
+              {'_type': 'sliver_list', '_children': <Object?>[]},
+            ]),
+            const {},
+          ),
+          throwsInvalidTemplate,
+        );
+      });
+
+      test('_if로 감싼 nestedScrollView 자식도 위치별 프로토콜을 따른다', () {
+        expect(
+          () => validate(
+            {
+              '_type': 'nested_scroll_view',
+              '_children': [
+                {'_type': 'text', 'value': 'header', '_if': r'${show}'},
+                {'_type': 'text', 'value': 'body'},
+              ],
+            },
+            {'show'},
+          ),
+          throwsInvalidTemplate,
+        );
+        expect(
+          () => validate(
+            {
+              '_type': 'nested_scroll_view',
+              '_children': [
+                {
+                  '_type': 'sliver_list',
+                  '_if': r'${show}',
+                  '_children': <Object?>[],
+                },
+                {'_type': 'text', 'value': 'body', '_if': r'${show}'},
+              ],
+            },
+            {'show'},
+          ),
           returnsNormally,
         );
       });

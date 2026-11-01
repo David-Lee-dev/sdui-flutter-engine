@@ -270,7 +270,8 @@ final class WidgetFactory {
     'tab_bar_view': EagerSpec(TabBarViewWidget.build),
     'nested_scroll_view': EagerSpec(
       NestedScrollViewWidget.build,
-      childProtocol: null,
+      childProtocol: LayoutProtocol.sliver,
+      lastChildProtocol: LayoutProtocol.box,
     ),
     'toggle': BoundSpec(ToggleWidget.build),
     'cupertino_switch': BoundSpec(CupertinoSwitchWidget.build),
@@ -319,6 +320,7 @@ final class WidgetFactory {
       kind: _kindOf(spec),
       produces: spec.produces,
       childProtocol: spec.childProtocol,
+      lastChildProtocol: spec.lastChildProtocol,
       parentData: spec.parentData,
       childParentData: spec.childParentData,
       decoratesChild: spec.parentData != ParentDataKind.none && builtin,

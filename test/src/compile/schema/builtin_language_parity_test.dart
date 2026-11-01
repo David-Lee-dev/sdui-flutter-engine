@@ -22,12 +22,14 @@ void main() {
         final schema = WidgetFactory.schemaOf(type)!;
         runtime[type] =
             '${schema.kind.name}/${schema.produces.name}/${schema.childProtocol?.name}'
+            '/${schema.lastChildProtocol?.name}'
             '/${schema.parentData.name}/${schema.childParentData.name}';
       }
       final declared = BuiltinLanguage.widgets.map(
         (type, schema) => MapEntry(
           type,
           '${schema.kind.name}/${schema.produces.name}/${schema.childProtocol?.name}'
+          '/${schema.lastChildProtocol?.name}'
           '/${schema.parentData.name}/${schema.childParentData.name}',
         ),
       );

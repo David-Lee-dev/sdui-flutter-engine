@@ -12,6 +12,7 @@ class WidgetSchema {
     required this.kind,
     this.produces = LayoutProtocol.box,
     this.childProtocol = LayoutProtocol.box,
+    this.lastChildProtocol,
     this.parentData = ParentDataKind.none,
     this.childParentData = ParentDataKind.none,
     this.decoratesChild = false,
@@ -21,6 +22,11 @@ class WidgetSchema {
   final WidgetKind kind;
   final LayoutProtocol produces;
   final LayoutProtocol? childProtocol;
+
+  /// Overrides [childProtocol] for the last positional child; earlier
+  /// children keep [childProtocol] and an empty list has no last child.
+  /// Mirrors `WidgetSpec.lastChildProtocol`.
+  final LayoutProtocol? lastChildProtocol;
 
   /// The parent data the widget's output carries, which must stay the
   /// direct widget of a parent taking that kind.
