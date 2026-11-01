@@ -10,7 +10,7 @@ import '../../../util/props_resolver.dart';
 /// - `alignment` (`main_axis_alignment`, default `center`) — horizontal cell
 ///   distribution.
 /// - `cross_alignment` (`cross_axis_alignment`, default `center`) — vertical
-///   cell alignment.
+///   cell alignment; `baseline` aligns on the alphabetic baseline.
 ///
 /// Children: the cells, positionally.
 ///
@@ -84,7 +84,11 @@ class RenderSerpentineRow extends RenderFlex {
     required super.mainAxisAlignment,
     required super.crossAxisAlignment,
     required super.textDirection,
-  }) : super(direction: Axis.horizontal, mainAxisSize: MainAxisSize.max);
+  }) : super(
+         direction: Axis.horizontal,
+         mainAxisSize: MainAxisSize.max,
+         textBaseline: TextBaseline.alphabetic,
+       );
 
   List<Rect> _cellRects = const [];
 

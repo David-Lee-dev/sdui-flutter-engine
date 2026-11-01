@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/primitive/row_widget.dart';
@@ -47,6 +48,28 @@ void main() {
           children: [const Text('a'), const Text('b'), const Text('c')],
         );
         expect(tester.widget<Row>(find.byType(Row)).children, hasLength(3));
+      });
+
+      testWidgets('baseline 정렬은 text_baseline 없으면 alphabetic으로 맞춘다', (
+        tester,
+      ) async {
+        await _pump(
+          tester,
+          const {'cross_axis_alignment': 'baseline'},
+          children: const [
+            Text('a', style: TextStyle(fontSize: 12)),
+            Text('b', style: TextStyle(fontSize: 24)),
+          ],
+        );
+
+        expect(tester.takeException(), isNull);
+        final row = tester.renderObject<RenderFlex>(find.byType(Row));
+        final a = row.firstChild!;
+        final b = row.childAfter(a)!;
+        double baseline(RenderBox box) =>
+            (box.parentData! as FlexParentData).offset.dy +
+            box.getDryBaseline(box.constraints, TextBaseline.alphabetic)!;
+        expect(baseline(a), closeTo(baseline(b), 0.001));
       });
     });
   });

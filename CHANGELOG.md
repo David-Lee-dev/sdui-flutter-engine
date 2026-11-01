@@ -5,6 +5,10 @@
 - Fix: a `serpentine` board reports its intrinsic height (the rows'
   heights plus `spacing`), so it keeps its full height inside an
   `intrinsic_height` or any parent that measures it first.
+- Fix: `cross_axis_alignment: baseline` on a `row`, `column` or `flex`
+  without `text_baseline`, and `cross_alignment: baseline` on a
+  `serpentine_row`, no longer fail layout. They align on the alphabetic
+  baseline; `text_baseline` still picks another one.
 
 ## 0.17.5
 

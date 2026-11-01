@@ -18,7 +18,7 @@ import '../../../util/props_resolver.dart';
 /// - `main_axis_size` (`mainAxisSize`, default `max`) — min hugs children, max fills the main axis. Values: min | max.
 /// - `vertical_direction` (`verticalDirection`, default `down`) — orders vertical layout from top-down or bottom-up. Values: up | down.
 /// - `text_direction` (`textDirection`, default `null`) — resolves start/end ordering and alignment. Values: ltr | rtl.
-/// - `text_baseline` (`textBaseline`, default `null`) — baseline used when aligning flex children. Values: alphabetic | ideographic.
+/// - `text_baseline` (`textBaseline`, default `alphabetic`) — baseline used when aligning flex children. Values: alphabetic | ideographic.
 /// - `spacing` (`size` (scaled by EngineMetrics), default `0.0`) — gap between adjacent children or indicator dots.
 ///
 /// Child: `_children`.
@@ -44,7 +44,9 @@ final class ColumnWidget {
           PropsResolver.verticalDirection(props['vertical_direction']) ??
           VerticalDirection.down,
       textDirection: PropsResolver.textDirection(props['text_direction']),
-      textBaseline: PropsResolver.textBaseline(props['text_baseline']),
+      textBaseline:
+          PropsResolver.textBaseline(props['text_baseline']) ??
+          TextBaseline.alphabetic,
       spacing: PropsResolver.size(context, props['spacing']) ?? 0.0,
       children: children,
     );

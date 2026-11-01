@@ -56,6 +56,22 @@ void main() {
           hasLength(2),
         );
       });
+
+      testWidgets('baseline 정렬은 text_baseline 없으면 alphabetic을 쓴다', (
+        tester,
+      ) async {
+        await _pump(
+          tester,
+          const {'cross_axis_alignment': 'baseline'},
+          children: [const Text('a')],
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(
+          tester.widget<Column>(find.byType(Column)).textBaseline,
+          TextBaseline.alphabetic,
+        );
+      });
     });
   });
 }

@@ -8,7 +8,7 @@ Lays out one measured row of serpentine board cells.
 | --- | --- | --- | --- | --- | --- |
 | `spacing` | `size`, scaled | — | `0` | Yes | gap between adjacent cells. |
 | `alignment` | `main_axis_alignment` | start, end, center, space_between, space_around, space_evenly | `center` | Yes | horizontal cell distribution. |
-| `cross_alignment` | `cross_axis_alignment` | start, end, center, stretch, baseline | `center` | Yes | vertical cell alignment. |
+| `cross_alignment` | `cross_axis_alignment` | start, end, center, stretch, baseline | `center` | Yes | vertical cell alignment; `baseline` aligns on the alphabetic baseline. |
 | `_children` | list of widget nodes | — | `[]` | No | Positional children; cannot be combined with `_child` or `_slots`. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 

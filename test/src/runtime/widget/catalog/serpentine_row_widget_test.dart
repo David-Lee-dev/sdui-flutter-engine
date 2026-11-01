@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
@@ -65,6 +66,25 @@ void main() {
         Rect.fromLTWH(0, 10, 20, 10),
         Rect.fromLTWH(70, 0, 30, 20),
       ]);
+    });
+
+    testWidgets('aligns cells on the alphabetic baseline', (tester) async {
+      final render = await _pumpRow(
+        tester,
+        const {'cross_alignment': 'baseline'},
+        children: const [
+          Text('a', style: TextStyle(fontSize: 12)),
+          Text('b', style: TextStyle(fontSize: 24)),
+        ],
+      );
+
+      expect(tester.takeException(), isNull);
+      final a = render.firstChild!;
+      final b = render.childAfter(a)!;
+      double baseline(RenderBox box) =>
+          (box.parentData! as FlexParentData).offset.dy +
+          box.getDryBaseline(box.constraints, TextBaseline.alphabetic)!;
+      expect(baseline(a), closeTo(baseline(b), 0.001));
     });
 
     testWidgets('reports no cell rects for an empty row', (tester) async {
