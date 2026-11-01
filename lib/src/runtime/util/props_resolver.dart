@@ -458,13 +458,10 @@ final class PropsResolver {
     };
   }
 
-  /// Coerces integral numbers and integer strings without truncating fractions.
-  static int? integer(Object? raw) {
-    if (raw is int) return raw;
-    if (raw is num && raw.isFinite) return raw.toInt();
-    if (raw is String) return int.tryParse(raw.trim());
-    return null;
-  }
+  /// Coerces finite numbers by truncation, as [templateInt] does, and
+  /// integer strings.
+  static int? integer(Object? raw) =>
+      templateInt(raw) ?? (raw is String ? int.tryParse(raw.trim()) : null);
 
   /// Returns [raw] only when it is already a boolean.
   static bool? flag(Object? raw) => raw is bool ? raw : null;
