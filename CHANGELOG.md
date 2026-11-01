@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.4
+
+- A `cond` with only an `_else` branch, the layer templates use to nest
+  loops, no longer gets a presence box: it can never switch, so the box had
+  nothing to animate. Under `serpentine` the box hid each `serpentine_row`,
+  so every row was taken as one cell and the track ran the full width
+  instead of following the cells.
+
 ## 0.20.3
 
 - iOS `sys_haptic` presets: taps now play at their own intensity and
