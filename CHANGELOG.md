@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20.0
+
+- Merged node skeleton: `_skeleton: merge` (or `{ merge: true, radius,
+  shape, width }`, `_requires: [skeleton_merge_v1]`) derives the bones as
+  `true` does and lays them out, but paints one rounded box of the node's
+  size in place of them (radius 8 by default, `shape: pill` fully rounded,
+  `width` lays the bones out at that width). The box takes the skeleton
+  style like any bone; a positioned child overflowing a stack does not
+  enlarge it. Not supported on a `_loop` node or inside another node's
+  derived `_skeleton`. See docs/lifecycle.md.
+
 ## 0.19.1
 
 - Fix: a swap (skeleton to content, if/else, switch case) whose content
