@@ -6,6 +6,8 @@ import 'package:skeletonizer/skeletonizer.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/primitive/image_widget.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
 import 'package:sdui_engine/src/contract/image_source.dart';
+import 'package:sdui_engine/src/presentation/presentation.dart';
+import 'package:sdui_engine/src/runtime/engine_presentation.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
 
 class _CaptureImageSource implements ImageSource {
@@ -190,6 +192,53 @@ void main() {
         });
         expect(bone, findsOneWidget);
         expect(tester.getSize(bone), const Size(120, 80));
+      });
+
+      group('app default (SduiPresentation.imageShimmer)', () {
+        tearDown(EnginePresentation.reset);
+
+        testWidgets('앱 기본값 true면 prop 없이도 skeleton bone을 보여준다', (tester) async {
+          EnginePresentation.value = const SduiPresentation(imageShimmer: true);
+          await pumpPending(tester, const {
+            'src': 'https://example.com/a.png',
+            'width': 120,
+            'height': 80,
+          });
+          expect(bone, findsOneWidget);
+          expect(tester.getSize(bone), const Size(120, 80));
+        });
+
+        testWidgets('앱 기본값 true여도 shimmer: false면 투명하게 자리만 잡는다', (
+          tester,
+        ) async {
+          EnginePresentation.value = const SduiPresentation(imageShimmer: true);
+          await pumpPending(tester, const {
+            'src': 'https://example.com/a.png',
+            'width': 120,
+            'height': 80,
+            'shimmer': false,
+          });
+          expect(bone, findsNothing);
+          expect(
+            tester.getSize(find.byType(FutureBuilder<Widget?>)),
+            const Size(120, 80),
+          );
+        });
+
+        testWidgets('앱 기본값 false여도 shimmer: true면 skeleton bone을 보여준다', (
+          tester,
+        ) async {
+          EnginePresentation.value = const SduiPresentation(
+            imageShimmer: false,
+          );
+          await pumpPending(tester, const {
+            'src': 'https://example.com/a.png',
+            'width': 120,
+            'height': 80,
+            'shimmer': true,
+          });
+          expect(bone, findsOneWidget);
+        });
       });
     });
   });

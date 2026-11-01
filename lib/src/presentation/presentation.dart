@@ -45,6 +45,7 @@ final class SduiPresentation {
     this.transitions = const PageTransitionStyle(),
     this.presence = const PresenceStyle(),
     this.skeleton = const SkeletonStyle(),
+    this.imageShimmer = false,
     this.typography = const SduiTypography(),
     this.scaling = const SduiScaling(),
     this.screenErrorBuilder,
@@ -65,6 +66,10 @@ final class SduiPresentation {
 
   /// How skeleton bones are painted while a scope loads.
   final SkeletonStyle skeleton;
+
+  /// Whether a pending `image` without a `loading` slot shows the shimmer
+  /// placeholder by default; a template `shimmer` flag still wins.
+  final bool imageShimmer;
   final SduiTypography typography;
   final SduiScaling scaling;
 

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:sdui_engine/src/contract/image_source.dart';
 
+import '../../../engine_presentation.dart';
 import '../../../util/props_resolver.dart';
 import '../../../media/image_source_registry.dart';
 import '../../../media/loading_image.dart';
@@ -28,7 +29,7 @@ import '../../../media/loading_image.dart';
 /// - `semantic_label` (`text`, default `null`) — accessibility label.
 /// - `cache_width` (`integer`, default `null`) — target decoded image width in physical pixels.
 /// - `cache_height` (`integer`, default `null`) — target decoded image height in physical pixels.
-/// - `shimmer` (`flag`, default `false`) — shows a shimmer skeleton while a remote image loads; otherwise the box stays transparent.
+/// - `shimmer` (`flag`, default `SduiPresentation.imageShimmer`) — shows a shimmer skeleton while a remote image loads; otherwise the box stays transparent. The app default is `false` unless the app sets `SduiPresentation(imageShimmer: true)`.
 ///
 /// Child: `_slots: { error, loading }`.
 ///
@@ -46,7 +47,9 @@ final class ImageWidget {
     if (src is! String || src.isEmpty) return const SizedBox.shrink();
     final width = PropsResolver.size(context, props['width']);
     final height = PropsResolver.size(context, props['height']);
-    final shimmer = PropsResolver.flag(props['shimmer']) ?? false;
+    final shimmer =
+        PropsResolver.flag(props['shimmer']) ??
+        EnginePresentation.value.imageShimmer;
     final result = ImageSourceRegistry.current.resolve(
       ImageRequest(
         src: src,

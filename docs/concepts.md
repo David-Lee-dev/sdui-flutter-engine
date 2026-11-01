@@ -74,6 +74,7 @@ A contract never bundles a policy call; whether a seam is *required* is expresse
 
 - `tapFeedback` — a `TapFeedback` implementation; `null` uses the package default (`InkTapFeedback`, [see interaction](interaction.md#tap-feedback)).
 - `modal` — `ModalStyle`, the [`modal`](commands/modal.md) command's chrome.
+- `imageShimmer` — whether a pending [`image`](widgets/display/image.md) without a `loading` slot shows the shimmer placeholder by default (`false`); a node's `shimmer` flag still wins.
 - `typography` — `SduiTypography(fontFamily, baseStyle)`, merged *under* every template `style` (template fields win field by field; see `PropsResolver.textStyle`).
 - `scaling` — `SduiScaling(baseWidth: 390, minScale: 0.82, maxScale: 1.0)`, the width band `EngineMetrics.scaleForWidth` scales template dimensions against.
 - `screenErrorBuilder` — global fallback for a mount-level compile failure; a mount-local `EngineRunner.errorBuilder`/`SduiScreenPage.errorBuilder` still wins. The package default renders neutral English text ("This screen could not be loaded.").
