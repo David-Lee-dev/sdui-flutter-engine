@@ -10,7 +10,7 @@ public class SduiEnginePlugin: NSObject, FlutterPlugin {
 
   private var engine: CHHapticEngine?
   private var running = false
-  private var continuousPlayer: CHHapticPatternPlayer?
+  private var players: [CHHapticPatternPlayer] = []
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -65,7 +65,9 @@ public class SduiEnginePlugin: NSObject, FlutterPlugin {
 
   /// One continuous event at full intensity / zero sharpness shaped by the
   /// intensity and sharpness control curves, plus a transient per tap — the
-  /// same composition as Pulsar. Best effort like [tap].
+  /// same composition as Pulsar. The taps play from their own pattern started
+  /// at the same moment, because control curves scale every event of their
+  /// pattern and would mute a tap under a curve at 0. Best effort like [tap].
   ///
   /// - Parameters:
   ///   - taps: rows of [ms from start, intensity, sharpness]
@@ -78,48 +80,54 @@ public class SduiEnginePlugin: NSObject, FlutterPlugin {
     let sharpnessPoints = Self.controlPoints(sharpness)
     let duration = (intensityPoints + sharpnessPoints).map(\.relativeTime).max() ?? 0
 
-    var events: [CHHapticEvent] = []
-    if !intensityPoints.isEmpty {
-      events.append(
-        CHHapticEvent(
+    var patterns: [CHHapticPattern] = []
+    do {
+      if !intensityPoints.isEmpty {
+        let continuous = CHHapticEvent(
           eventType: .hapticContinuous,
           parameters: [
             CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.0),
           ],
           relativeTime: 0,
-          duration: duration))
-    }
-    for row in taps where row.count >= 3 {
-      events.append(
+          duration: duration)
+        let curves =
+          Self.curves(.hapticIntensityControl, intensityPoints)
+          + Self.curves(.hapticSharpnessControl, sharpnessPoints)
+        patterns.append(try CHHapticPattern(events: [continuous], parameterCurves: curves))
+      }
+
+      let transients = taps.filter { $0.count >= 3 }.map { row in
         CHHapticEvent(
           eventType: .hapticTransient,
           parameters: [
             CHHapticEventParameter(parameterID: .hapticIntensity, value: Self.unit(row[1])),
             CHHapticEventParameter(parameterID: .hapticSharpness, value: Self.unit(row[2])),
           ],
-          relativeTime: row[0] / 1000.0))
-    }
-    guard !events.isEmpty else { return }
+          relativeTime: row[0] / 1000.0)
+      }
+      if !transients.isEmpty {
+        patterns.append(try CHHapticPattern(events: transients, parameters: []))
+      }
+      guard !patterns.isEmpty else { return }
 
-    let curves =
-      Self.curves(.hapticIntensityControl, intensityPoints)
-      + Self.curves(.hapticSharpnessControl, sharpnessPoints)
-
-    do {
-      let pattern = try CHHapticPattern(events: events, parameterCurves: curves)
-      let player = try startedEngine().makePlayer(with: pattern)
-      try? continuousPlayer?.stop(atTime: CHHapticTimeImmediate)
-      continuousPlayer = player
-      try player.start(atTime: CHHapticTimeImmediate)
+      let engine = try startedEngine()
+      let players = try patterns.map { try engine.makePlayer(with: $0) }
+      stop()
+      self.players = players
+      for player in players {
+        try player.start(atTime: CHHapticTimeImmediate)
+      }
     } catch {
       running = false
     }
   }
 
   private func stop() {
-    try? continuousPlayer?.stop(atTime: CHHapticTimeImmediate)
-    continuousPlayer = nil
+    for player in players {
+      try? player.stop(atTime: CHHapticTimeImmediate)
+    }
+    players = []
   }
 
   /// Seconds and clamped values; a curve starting after 0 gets its first value
