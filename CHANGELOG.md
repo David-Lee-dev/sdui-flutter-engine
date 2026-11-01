@@ -66,6 +66,10 @@
   longer runs. The span completes once as `cancelled`, and no `_then`,
   `_error`, `_dismiss` or `_always` runs. This applies to background
   commands too.
+- Fix: a `haptic` command cancelled while the engine asks the device what
+  it supports no longer plays anything (neither the platform fallback nor a
+  `continuous` pattern). A legacy rhythm such as `success` cancelled during
+  the gap between pulses no longer plays the next pulse.
 
 ## 0.17.5
 

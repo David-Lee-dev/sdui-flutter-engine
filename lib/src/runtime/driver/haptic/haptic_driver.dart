@@ -210,6 +210,7 @@ class HapticSemantics {
     for (var i = 0; i < pattern.offsets.length; i++) {
       if (isCancelled?.call() ?? false) return true;
       if (i > 0) await Future<void>.delayed(pattern.gap);
+      if (isCancelled?.call() ?? false) return true;
       await player.impact(_shift(base, pattern.offsets[i]));
     }
     return true;
@@ -412,7 +413,7 @@ class HapticDriver extends Driver {
       player: _player,
       isCancelled: () => ctx.isCancelled,
     );
-    if (played) return null;
+    if (played || ctx.isCancelled) return null;
 
     switch (variant) {
       case 'light':
@@ -435,6 +436,7 @@ class HapticDriver extends Driver {
   /// Starts [pattern] natively and holds the run for its length, stopping
   /// the vibration as soon as the run is cancelled.
   Future<void> _playContinuous(HapticPattern pattern, DriverContext ctx) async {
+    if (ctx.isCancelled) return;
     await _player.play(pattern);
 
     var left = pattern.duration;

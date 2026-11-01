@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/driver/haptic/haptic_driver.dart';
@@ -46,6 +48,14 @@ class _FakeHapticPlayer implements HapticPlayer {
   Future<void> vibrate() async => calls.add('vibrate');
 }
 
+class _PendingCapabilityPlayer extends _FakeHapticPlayer {
+  final capability = Completer<bool>();
+  @override
+  Future<bool> supportsTaps() => capability.future;
+  @override
+  Future<bool> supportsContinuous() => capability.future;
+}
+
 class _NoState implements StateWriter {
   @override
   void commit(Map<String, Object?> changes) {}
@@ -66,6 +76,56 @@ void main() {
     setUp(() {
       player = _FakeHapticPlayer();
       driver = HapticDriver(player: player);
+    });
+
+    for (final params in <Map<String, Object?>>[
+      {'variant': 'light'},
+      {
+        'continuous': {
+          'intensity': [
+            [0, 0.5],
+            [100, 0.5],
+          ],
+        },
+      },
+    ]) {
+      test(
+        'cancellation during capability discovery prevents dispatch: $params',
+        () async {
+          final pending = _PendingCapabilityPlayer();
+          var cancelled = false;
+          final run = HapticDriver(player: pending).run(
+            DriverContext(
+              params: params,
+              state: _NoState(),
+              isCancelled: () => cancelled,
+            ),
+          );
+          cancelled = true;
+          pending.capability.complete(params.containsKey('continuous'));
+          await run;
+          expect(pending.calls, isEmpty);
+        },
+      );
+    }
+
+    test('legacy rhythm stops when cancelled during its inter-pulse gap', () {
+      fakeAsync((async) {
+        var cancelled = false;
+        HapticDriver(player: player).run(
+          DriverContext(
+            params: const {'variant': 'success'},
+            state: _NoState(),
+            isCancelled: () => cancelled,
+          ),
+        );
+        async.flushMicrotasks();
+        expect(player.calls, ['impact:light']);
+        async.elapse(const Duration(milliseconds: 35));
+        cancelled = true;
+        async.elapse(const Duration(seconds: 1));
+        expect(player.calls, ['impact:light']);
+      });
     });
 
     group('pattern', () {
