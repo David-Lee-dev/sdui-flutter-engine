@@ -19,6 +19,9 @@
   past it).
 - Fix: `format`/`percent` with a precision outside 0..20 return `null`
   instead of crashing the node.
+- Fix: `//` between two integers is exact (`9007199254740993 // 1` keeps
+  its last digit) and still floors negative quotients; with a decimal
+  operand it works as before.
 - Fix: a `serpentine` board reports its intrinsic height (the rows'
   heights plus `spacing`), so it keeps its full height inside an
   `intrinsic_height` or any parent that measures it first.

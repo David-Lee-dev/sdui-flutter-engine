@@ -261,6 +261,12 @@ Object? _arith(String op, Object? a, Object? b) {
       return a / b;
     case '//':
       if (b == 0) _error('floor division by zero');
+      if (a is int && b is int) {
+        // Exact for every int (a double quotient loses precision past 2^53):
+        // `~/` truncates, so step down when a remainder has opposite signs.
+        final q = a ~/ b;
+        return a.remainder(b) != 0 && (a < 0) != (b < 0) ? q - 1 : q;
+      }
       return templateInt((a / b).floorToDouble()) ??
           _error('floor division result is not finite');
     case '**':
