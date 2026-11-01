@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.20.1
+
+- `_skeleton: merge` (and `{ merge: true, radius, shape, width }`) now
+  works on a node inside another node's derived `_skeleton: true`: the
+  node's bones become one merged box among the ancestor's bones. The
+  ancestor's slot alone loads, swaps and applies the skeleton style; the
+  merge errors (and `skeleton_merge_v1`) apply there too. Before, such a
+  node failed to compile.
+
 ## 0.20.0
 
 - Merged node skeleton: `_skeleton: merge` (or `{ merge: true, radius,
