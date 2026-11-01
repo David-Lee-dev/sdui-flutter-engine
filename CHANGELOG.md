@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.20.3
+
+- iOS `sys_haptic` presets: taps now play at their own intensity and
+  sharpness. They used to share one Core Haptics pattern with the
+  continuous rumble, whose intensity and sharpness curves scaled every
+  event in it — a curve starting at 0 muted the first tap and weakened
+  later ones. The taps now play from a separate pattern started at the
+  same moment; the rumble keeps its curves. Android is unchanged.
+
 ## 0.20.2
 
 - The app sets the default for the `image` loading shimmer:
