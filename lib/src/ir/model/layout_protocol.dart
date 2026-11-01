@@ -136,6 +136,7 @@ LayoutProtocol? producesOf(
   MorphDirective morph => producesOf(morph.child, widget),
   ScopeDirective scope => producesOf(scope.child, widget),
   SkeletonDirective skeleton => producesOf(skeleton.child, widget),
+  MergedBonesDirective() => LayoutProtocol.box,
 };
 
 LayoutProtocol? _bodiesProduce(
@@ -262,6 +263,7 @@ ParentDataOutput parentDataOf(
     passesChild,
   ),
   LoopDirective() => ParentDataOutput.none,
+  MergedBonesDirective() => ParentDataOutput.none,
 };
 
 ParentDataOutput _bodiesParentData(

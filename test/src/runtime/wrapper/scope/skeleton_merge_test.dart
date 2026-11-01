@@ -409,4 +409,200 @@ void main() {
       reason: 'box $box, content $end, frames $heights',
     );
   });
+
+  group('inside a derived _skeleton', () {
+    final merged = find.byType(MergedBones);
+
+    /// A text of [size] px that reads the section state.
+    Map<String, Object?> text(String value, double size) => {
+      '_type': 'text',
+      'value': '$value \${ready}',
+      'style': {'font_size': size},
+    };
+
+    /// A column with derived bones: a text above [node].
+    Map<String, Object?> column(Map<String, Object?> node) => {
+      '_type': 'column',
+      'cross_axis_alignment': 'start',
+      '_skeleton': true,
+      '_children': [text('title', 20), node],
+    };
+
+    /// A row of two texts and a pill container under [skeleton].
+    Map<String, Object?> row(Object? skeleton) => {
+      '_type': 'row',
+      'main_axis_size': 'min',
+      'spacing': 8,
+      '_skeleton': ?skeleton,
+      '_children': [
+        text('name', 28),
+        text('live', 12),
+        const {
+          '_type': 'container',
+          'width': 36,
+          'height': 18,
+          'decoration': {'color': '#FF00FF', 'border_radius': 9},
+        },
+      ],
+    };
+
+    /// The size of the descendant of type [widget] in the derived bones.
+    Future<Size> derivedSize(
+      WidgetTester tester,
+      Map<String, Object?> node,
+      Type widget,
+    ) async {
+      await showBones(tester, _section([column(node)]));
+      final size = tester.getSize(
+        find
+            .descendant(
+              of: find.byType(ShaderMask),
+              matching: find.byType(widget),
+            )
+            .last,
+      );
+      await leave(tester);
+      return size;
+    }
+
+    /// The rect of the merged box, local to the skeleton mask.
+    Rect boxRect(WidgetTester tester) =>
+        (tester.getTopLeft(merged) -
+            tester.getTopLeft(find.byType(ShaderMask))) &
+        tester.getSize(merged);
+
+    testWidgets('a merged row is one box of the row size beside the bones', (
+      tester,
+    ) async {
+      final derived = await derivedSize(tester, row(null), Row);
+
+      await showBones(tester, _section([column(row('merge'))]));
+      expect(merged, findsOneWidget);
+      expect(tester.getSize(merged), derived);
+      // The title bone and the merged box; the row's own bones are not.
+      expect(_mask(tester), paintsExactlyCountTimes(#drawRRect, 2));
+      expect(
+        _mask(tester),
+        paints
+          ..rrect()
+          ..rrect(
+            rrect: RRect.fromRectAndRadius(
+              boxRect(tester),
+              const Radius.circular(8),
+            ),
+          ),
+      );
+      await leave(tester);
+    });
+
+    testWidgets('width and radius: the width set, the height derived', (
+      tester,
+    ) async {
+      Map<String, Object?> timer(Object? skeleton) => {
+        '_type': 'column',
+        'cross_axis_alignment': 'start',
+        '_skeleton': ?skeleton,
+        '_children': [text('time', 28), text('left', 12)],
+      };
+      // Without a width the box is the derived column (as for the row).
+      await showBones(
+        tester,
+        _section([
+          column(timer({'merge': true, 'radius': 12})),
+        ]),
+      );
+      final derived = tester.getSize(merged);
+      // A 28 px text over a 12 px text.
+      expect(derived.height, greaterThan(40));
+      await leave(tester);
+
+      await showBones(
+        tester,
+        _section([
+          column(timer({'merge': true, 'width': 224, 'radius': 12})),
+        ]),
+      );
+      expect(tester.getSize(merged), Size(224, derived.height));
+      expect(
+        _mask(tester),
+        paints
+          ..rrect()
+          ..rrect(
+            rrect: RRect.fromRectAndRadius(
+              boxRect(tester),
+              const Radius.circular(12),
+            ),
+          ),
+      );
+      await leave(tester);
+    });
+
+    testWidgets('a pill stack is the stack box, its overflowing balloon '
+        'outside', (tester) async {
+      await showBones(
+        tester,
+        _section([
+          column(const {
+            '_type': 'stack',
+            'clip_behavior': 'none',
+            '_skeleton': {'merge': true, 'shape': 'pill'},
+            '_children': [
+              {'_type': 'container', 'width': 100, 'height': 40},
+              {
+                '_type': 'positioned',
+                'top': -18,
+                'left': 0,
+                '_child': {'_type': 'text', 'value': r'balloon ${ready}'},
+              },
+            ],
+          }),
+        ]),
+      );
+      expect(tester.getSize(merged), const Size(100, 40));
+      expect(_mask(tester), paintsExactlyCountTimes(#drawRRect, 2));
+      expect(
+        _mask(tester),
+        paints
+          ..rrect()
+          ..rrect(
+            rrect: RRect.fromRectAndRadius(
+              boxRect(tester),
+              const Radius.circular(20),
+            ),
+          ),
+      );
+      await leave(tester);
+    });
+
+    testWidgets('the ancestor slot alone loads, tints the box and swaps once', (
+      tester,
+    ) async {
+      EnginePresentation.value = const SduiPresentation(
+        skeleton: SkeletonStyle(base: SkeletonPaint.color(_red)),
+      );
+      await showBones(tester, _section([column(row('merge'))]));
+      expect(_slot, findsOneWidget);
+      expect(gates, hasLength(1));
+      final box = boxRect(tester);
+      // The spacing gap after the name stays clear with derived bones but is
+      // painted by the merged box.
+      final at =
+          tester.getTopLeft(merged) -
+          tester.getTopLeft(_slot) +
+          Offset(box.width - 40, box.height / 2);
+      expect(await _pixel(tester, at), _near(_red));
+
+      gates.single.complete();
+      await tester.pump();
+      await tester.pump();
+      final content = find.textContaining('name true');
+      expect(content, findsOneWidget);
+      final element = tester.element(content);
+      await tester.pumpAndSettle();
+      expect(find.byType(ShaderMask), findsNothing);
+      expect(merged, findsNothing);
+      expect(identical(tester.element(content), element), isTrue);
+      expect(gates, hasLength(1));
+    });
+  });
 }

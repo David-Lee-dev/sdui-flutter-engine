@@ -11,7 +11,6 @@ final class SkeletonDirective extends Directive {
     required this.child,
     required this.path,
     this.presence = const PresenceConfig(),
-    this.merge,
   });
 
   final Directive bones;
@@ -22,10 +21,26 @@ final class SkeletonDirective extends Directive {
 
   /// How the [bones] swap to [child], from the node's `_presence`.
   final PresenceConfig presence;
+}
 
-  /// When set (`_skeleton: merge`), [bones] are laid out but not painted and
-  /// one rounded box of their size is painted instead.
-  final SkeletonMerge? merge;
+/// A `_skeleton: merge` within bones: lays [bones] out but paints one
+/// rounded box of their size instead. It holds no loading slot of its own;
+/// the slot whose bones contain it (the node's own, or an ancestor's
+/// derived `_skeleton`) loads and swaps.
+final class MergedBonesDirective extends Directive {
+  const MergedBonesDirective({
+    required this.bones,
+    required this.merge,
+    required this.path,
+  });
+
+  /// The node's bones, derived as for `_skeleton: true`.
+  final Directive bones;
+
+  final SkeletonMerge merge;
+
+  /// The source node's tree path for diagnostics.
+  final String path;
 }
 
 /// The box a merged `_skeleton` paints over its derived bones.

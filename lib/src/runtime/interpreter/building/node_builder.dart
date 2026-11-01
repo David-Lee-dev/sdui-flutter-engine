@@ -70,17 +70,15 @@ final class NodeBuilder {
             : _isolated(scope.child),
       ),
       SkeletonDirective skeleton => SkeletonSlot(
-        bones: switch (skeleton.merge) {
-          null => build(skeleton.bones),
-          final merge => MergedBones(
-            merge: merge,
-            child: build(skeleton.bones),
-          ),
-        },
+        bones: build(skeleton.bones),
         boxed: _holdsInBox(skeleton.child),
         path: skeleton.path,
         presence: skeleton.presence,
         child: build(skeleton.child),
+      ),
+      MergedBonesDirective merged => MergedBones(
+        merge: merged.merge,
+        child: build(merged.bones),
       ),
     };
   }
@@ -138,6 +136,7 @@ final class NodeBuilder {
     MorphDirective morph => presenceMode(morph.child),
     ScopeDirective scope => presenceMode(scope.child),
     SkeletonDirective skeleton => presenceMode(skeleton.child),
+    MergedBonesDirective() => PresenceMode.box,
   };
 
   /// The layout protocol [directive] builds, which its empty or failed

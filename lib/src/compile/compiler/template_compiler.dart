@@ -179,7 +179,7 @@ final class TemplateCompiler {
     if (!requires.contains('skeleton_merge_v1')) {
       final path = _firstPath(
         root,
-        (d) => d is SkeletonDirective && d.merge != null ? d.path : null,
+        (d) => d is MergedBonesDirective ? d.path : null,
       );
       if (path != null) {
         throw InvalidTemplateException(
@@ -217,6 +217,7 @@ final class TemplateCompiler {
           MorphDirective morph => walk(morph.child),
           SkeletonDirective skeleton =>
             walk(skeleton.bones) ?? walk(skeleton.child),
+          MergedBonesDirective merged => walk(merged.bones),
         };
     return walk(directive);
   }
@@ -234,6 +235,13 @@ final class TemplateCompiler {
   }) => _build(node, catalog ?? LanguageCatalog.fromRegistries());
 
   static Directive _build(UiNode node, LanguageCatalog catalog) {
+    if (node.reserved[_mergeMarker] case final SkeletonMerge merge) {
+      return MergedBonesDirective(
+        bones: _build(_unmarked(node), catalog),
+        merge: merge,
+        path: node.path,
+      );
+    }
     Directive directive;
     if (node.type == _condType) {
       _rejectControlResiduals(node, _condAllowedKeys);
@@ -869,6 +877,8 @@ final class TemplateCompiler {
           (sw.fallback != null && _hasNodeSkeleton(sw.fallback!)),
     LoopDirective loop => _hasNodeSkeleton(loop.child),
     MorphDirective morph => _hasNodeSkeleton(morph.child),
+    // Only within bones, which hold no slot.
+    MergedBonesDirective() => false,
   };
 
   static List<LifecycleHook> _compileLifecycle(Object? raw, String path) {
@@ -1331,18 +1341,33 @@ final class TemplateCompiler {
         'scope around it; use "_scope._skeleton" for this scope.',
       );
     }
-    final merge = _skeletonMerge(node);
     return SkeletonDirective(
-      bones: _build(
-        merge == null ? _boneTree(node, catalog) : _deriveBones(node, catalog),
-        catalog,
-      ),
+      bones: _build(_boneTree(node, catalog), catalog),
       child: child,
       path: node.path,
       presence: _parsePresence(node),
-      merge: merge,
     );
   }
+
+  /// The reserved key on a bone node whose bones merge into one box. Only
+  /// the compiler sets it, to a [SkeletonMerge] (which no template value
+  /// is), so [_build] honors it and a template key of that name still fails
+  /// as unknown.
+  static const _mergeMarker = '_skeleton_merge';
+
+  /// [node] without [_mergeMarker].
+  static UiNode _unmarked(UiNode node) => UiNode(
+    type: node.type,
+    props: node.props,
+    reserved: {
+      for (final entry in node.reserved.entries)
+        if (entry.key != _mergeMarker) entry.key: entry.value,
+    },
+    children: node.children,
+    slots: node.slots,
+    key: node.key,
+    path: node.path,
+  );
 
   /// The keys `_skeleton: {merge: true, …}` takes.
   static const _mergeKeys = {'merge', 'radius', 'shape', 'width'};
@@ -1435,10 +1460,22 @@ final class TemplateCompiler {
 
   /// The bone tree of [node]'s `_skeleton`: `true` derives it, `{width}`
   /// derives one leaf bone of that width, a map with `_type` is the tree,
-  /// and a `_loop` node repeats a row (`true` or `{count, tree}`).
+  /// `merge` marks the derived bones to merge into one box, and a `_loop`
+  /// node repeats a row (`true` or `{count, tree}`).
   static UiNode _boneTree(UiNode node, LanguageCatalog catalog) {
     final raw = node.reserved['_skeleton'];
     final path = '${node.path}/_skeleton';
+    if (_skeletonMerge(node) case final merge?) {
+      final bones = _deriveBones(node, catalog);
+      return UiNode(
+        type: bones.type,
+        props: bones.props,
+        reserved: {...bones.reserved, _mergeMarker: merge},
+        children: bones.children,
+        slots: bones.slots,
+        path: bones.path,
+      );
+    }
     if (node.reserved.containsKey('_loop')) {
       return _loopBones(node, raw, path, catalog);
     }
@@ -1672,13 +1709,6 @@ final class TemplateCompiler {
     LanguageCatalog catalog, {
     required bool inOval,
   }) {
-    if (_merges(node.reserved['_skeleton'])) {
-      throw InvalidTemplateException(
-        node.path,
-        '"_skeleton: merge" paints the slot of its own node only; inside a '
-        'derived "_skeleton" give this node true or a bone tree.',
-      );
-    }
     if (node.reserved.containsKey('_skeleton')) return _boneTree(node, catalog);
     if (node.reserved.containsKey('_if') ||
         node.reserved.containsKey('_loop') ||

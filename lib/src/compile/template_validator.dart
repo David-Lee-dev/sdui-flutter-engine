@@ -272,6 +272,29 @@ final class TemplateValidator {
           LayoutProtocol.box,
           accepts,
         );
+      case MergedBonesDirective merged:
+        // The merged box holds the bones as its one box child.
+        if (_parentDataOf(merged.bones) != ParentDataOutput.none) {
+          throw InvalidTemplateException(
+            merged.path,
+            '"_skeleton: merge" on a parent-data node would move it out of '
+            'its parent; put it on its child.',
+          );
+        }
+        _checkProtocol(
+          merged.path,
+          '"_skeleton: merge"',
+          LayoutProtocol.box,
+          expected,
+        );
+        _walk(
+          merged.bones,
+          declared,
+          writable,
+          actions,
+          LayoutProtocol.box,
+          ParentDataKind.none,
+        );
     }
   }
 
