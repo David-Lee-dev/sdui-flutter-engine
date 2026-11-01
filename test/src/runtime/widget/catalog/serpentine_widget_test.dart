@@ -375,6 +375,61 @@ void main() {
       );
     });
 
+    testWidgets('in RTL the track still starts at the top-left cell', (
+      tester,
+    ) async {
+      ValueKey<String> cell(int row, int column) => ValueKey('r$row c$column');
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.rtl,
+          child: EngineMetrics(
+            scale: 1,
+            child: Center(
+              child: SizedBox(
+                width: 200,
+                child: Builder(
+                  builder: (context) =>
+                      SerpentineWidget.build(context, const {}, [
+                        for (var row = 0; row < 2; row++)
+                          SerpentineRowWidget.build(context, const {}, [
+                            for (var column = 0; column < 3; column++)
+                              SizedBox(
+                                key: cell(row, column),
+                                width: 30,
+                                height: 20,
+                              ),
+                          ]),
+                      ]),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      final render = tester.renderObject<RenderSerpentine>(
+        find.byType(SerpentineRenderObjectWidget),
+      );
+      final distances = render.track.distances;
+      expect(distances, hasLength(6));
+      for (var i = 1; i < distances.length; i++) {
+        expect(distances[i], greaterThan(distances[i - 1]));
+      }
+
+      // Progress index 0 is the physical top-left cell, which RTL makes the
+      // last child of the first row.
+      final start = render.track.path
+          .computeMetrics()
+          .first
+          .getTangentForOffset(distances.first)!
+          .position;
+      expect(
+        tester.getRect(find.byKey(cell(0, 2))).center.dx,
+        closeTo(render.localToGlobal(start).dx, 0.001),
+      );
+    });
+
     testWidgets('reserves horizontal room for U-turn stroke bounds', (
       tester,
     ) async {

@@ -27,6 +27,12 @@ import 'serpentine_row_widget.dart';
 ///
 /// Children: one `serpentine_row` per board row.
 ///
+/// The track is physical: whatever the text direction, it starts at the
+/// top-left cell and runs the first row left to right, then alternates.
+/// Progress index `i` is the `i`-th cell along that track, so in RTL index 0
+/// is the first row's last child. Mirroring the track for RTL is not
+/// supported.
+///
 /// SDUI type: `serpentine`.
 final class SerpentineWidget {
   const SerpentineWidget._();
@@ -391,7 +397,10 @@ class RenderSerpentine extends RenderBox
 
       List<Rect> rects;
       if (child is RenderSerpentineRow) {
-        rects = [for (final rect in child.cellRects) rect.shift(offset)];
+        // The geometry takes each row left to right; RTL lays cells out
+        // right to left, so order them physically.
+        rects = [for (final rect in child.cellRects) rect.shift(offset)]
+          ..sort((a, b) => a.center.dx.compareTo(b.center.dx));
         points.add([for (final rect in rects) _anchor.withinRect(rect)]);
       } else {
         assert(

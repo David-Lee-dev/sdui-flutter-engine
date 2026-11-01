@@ -21,6 +21,11 @@
   children keep `childProtocol`. An app widget with header/body roles can
   declare it. A null `childProtocol` still skips the check. This adds a
   public field, so the next release is a minor version (0.18.0).
+- Fix: a `serpentine` board under RTL draws its track through the cells in
+  order. The track is physical: it starts at the top-left cell and runs the
+  first row left to right whatever the text direction, so `progress.index`
+  0 is the first row's last child in RTL. Mirroring the track for RTL is
+  not supported.
 
 ## 0.17.5
 

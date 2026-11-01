@@ -49,6 +49,7 @@ _children:
 ## Pitfalls & related
 
 - Use only the documented positional child form; `_slots` are rejected for this specification kind.
+- The track is physical: whatever the text direction, it starts at the top-left cell and runs the first row left to right, then alternates. `progress.index` counts cells along the track, so in RTL index 0 is the first row's last child. The track is not mirrored for RTL.
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
 - Return to the [widget catalog](../README.md).
