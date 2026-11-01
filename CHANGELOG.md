@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.19.1
+
+- Fix: a swap (skeleton to content, if/else, switch case) whose content
+  holds a `reveal_*` motion anywhere inside no longer jumps to the sum of
+  the old and new sizes before settling. The reveal made the new content
+  take its whole size at once while the old one still held its share; in a
+  swap the slot now always goes from one size to the other. Outside swaps
+  a reveal still owns the space in its phase.
+- Fix: a `reveal_*` motion no longer changes its size on the other axis.
+  Under a bounded constraint, `reveal_left`/`reveal_right` used to grow to
+  the full available height and `reveal_up`/`reveal_down` to the full
+  width.
+- Behavior change: a `reveal_up`/`reveal_down` whose child is narrower
+  than a bounded width now hugs the child's width instead of filling the
+  width and centering the child; `reveal_left`/`reveal_right` likewise
+  hug the child's height. Templates that relied on the old fill wrap the
+  child in a sized box or use the parent's alignment.
+
 ## 0.19.0
 
 - Skeleton style: bones are painted with one of three effects — `tint`
