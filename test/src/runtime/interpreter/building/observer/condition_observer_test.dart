@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/interpreter/building/node_builder.dart';
 import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
+import 'package:sdui_engine/src/runtime/wrapper/presence.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 
 Widget _content(Map<String, Object?> template) => NodeBuilder.build(
@@ -56,6 +57,24 @@ void main() {
 
       await _pump(tester, _content(elseOnly));
 
+      expect(find.text('fallback'), findsOneWidget);
+    });
+
+    // 루프를 겹치려고 쓰는 「투명한 한 겹」 cond 가 상자로 감싸이면, 직속 자식의 렌더 타입을 보는
+    // 부모(serpentine 은 RenderSerpentineRow 를 찾는다)가 자식을 못 알아본다.
+    testWidgets('_else만 있는 cond 는 가지가 바뀔 일이 없어 presence 슬롯 없이 본문을 그대로 낸다', (
+      tester,
+    ) async {
+      const elseOnly = {
+        '_type': 'cond',
+        '_children': [
+          {'_type': 'text', 'value': 'fallback', '_else': true},
+        ],
+      };
+
+      await _pump(tester, _content(elseOnly));
+
+      expect(find.byType(PresenceGroup), findsNothing);
       expect(find.text('fallback'), findsOneWidget);
     });
 

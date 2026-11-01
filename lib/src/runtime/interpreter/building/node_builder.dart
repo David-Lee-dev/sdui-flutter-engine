@@ -190,7 +190,9 @@ final class NodeBuilder {
     Object key,
     Directive? body,
   ) {
-    final mode = presence.enabled ? presenceMode(directive) : null;
+    final mode = presence.enabled && _canSwitch(directive)
+        ? presenceMode(directive)
+        : null;
     if (mode == null) {
       if (body != null) return build(body);
       return produces(directive) == LayoutProtocol.sliver
@@ -204,6 +206,17 @@ final class NodeBuilder {
       child: body == null ? null : Scope.retained(child: build(body)),
     );
   }
+
+  /// Whether [directive]'s output can ever change. An `_else`-only cond, the
+  /// transparent layer templates use to nest loops, always shows its one
+  /// body; a presence box around it has nothing to animate and hides the
+  /// body's render object from a parent that checks its direct children
+  /// (`serpentine` needs each row to be a `serpentine_row`).
+  static bool _canSwitch(Directive directive) => switch (directive) {
+    ConditionDirective cond => cond.branches.isNotEmpty,
+    SwitchDirective sw => sw.cases.isNotEmpty,
+    _ => true,
+  };
 
   /// Builds [directive] as the direct widget of a continuously animating
   /// morph or of a scope: a plain box node gets its own repaint boundary,
