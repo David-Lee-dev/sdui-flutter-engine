@@ -71,6 +71,27 @@ Future<void> _pumpPage(
 void main() {
   group('SduiScreenPage', () {
     group('build', () {
+      testWidgets('synchronous loader failure reports and retries', (
+        tester,
+      ) async {
+        final errors = <SduiError>[];
+        EngineErrors.observer = _RecordingObserver(errors.add);
+        addTearDown(EngineErrors.reset);
+        final loader = _FakeLoader([
+          () => throw StateError('offline-sync'),
+          () async => _screen('recovered-sync'),
+        ]);
+        await _pumpPage(tester, loader);
+        expect(tester.takeException(), isNull);
+        await tester.pumpAndSettle();
+        expect(errors.single.scope, SduiErrorScope.screenLoad);
+        expect(find.textContaining('offline-sync'), findsOneWidget);
+        await tester.tap(find.byType(TextButton));
+        await tester.pumpAndSettle();
+        expect(find.text('recovered-sync'), findsOneWidget);
+        expect(loader.calls, 2);
+      });
+
       testWidgets('load 실패는 전역 loadErrorBuilder로 떨어지고 옵저버에 보고된다', (
         tester,
       ) async {

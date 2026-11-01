@@ -75,6 +75,25 @@
   like any other invalid curve. Both used to crash.
 - Fix: a `NaN`, infinite or overflowing `_on` `throttle`/`debounce` is a
   compile error like any other invalid value instead of a crash.
+- Fix: an engine `push` whose page sits in a `StatefulShellRoute` branch
+  that is switched away from stays pending. It completes with the pop
+  result when the page is popped later, and with `null` only when the page
+  is actually removed.
+- Fix: an engine page in an inactive branch keeps its frozen transition. A
+  rebuild after returning to the branch no longer picks up a transition
+  from a background cache refresh while the content stays the original.
+- Fix: preloaded screens are used only by the loader that preloaded them.
+  A route with a loader override (`Sdui.router(loader:)` or its own
+  `SduiScreenPage(loader:)`) loads its screen itself and uses
+  `defaultType`, instead of showing the preloaded content and transition.
+  It no longer refreshes the preload cache either.
+- New: `Sdui.page` takes an optional `loader`, the loader its child uses
+  (defaults to `Sdui.screenLoader`), so a custom route with an override
+  gets a transition from the same source as its content. The generic
+  route passes its loader automatically. This adds a public parameter.
+- Fix: a `ScreenLoader.load` that throws synchronously is reported as
+  `screenLoad` and shows the error surface with retry, like a failed
+  future, instead of escaping the page.
 
 ## 0.17.5
 

@@ -175,6 +175,7 @@ final class Sdui {
           context,
           state,
           screenId: state.pathParameters['id']!,
+          loader: loader ?? screenLoader,
           child: child,
         );
       },
@@ -199,10 +200,20 @@ final class Sdui {
   ///   ),
   /// )
   /// ```
+  ///
+  /// Pass [loader] when the child loads with an override, so the transition
+  /// and the content come from the same source. Defaults to [screenLoader].
   static Page<void> page(
     BuildContext context,
     GoRouterState state, {
     required String screenId,
     required Widget child,
-  }) => buildScreenPage(context, state, screenId: screenId, child: child);
+    ScreenLoader? loader,
+  }) => buildScreenPage(
+    context,
+    state,
+    screenId: screenId,
+    loader: loader,
+    child: child,
+  );
 }

@@ -218,6 +218,156 @@ GoRoute _appRoute() => GoRoute(
 void main() {
   tearDown(resetEngineForTest);
 
+  testWidgets('a page in an inactive branch keeps its decision', (
+    tester,
+  ) async {
+    var version = 1;
+    final loader = _Loader({
+      'detail': () async => version == 1
+          ? _screen('detail', transition: {'type': 'fade', 'duration': 300})
+          : _screen('detail', transition: {'type': 'fade', 'duration': 500}),
+    });
+    await _init(loader, preload: ['detail'], type: 'none');
+    late StatefulNavigationShell shell;
+    final router = Sdui.router(
+      loader: loader,
+      initialLocation: '/tab-home',
+      routes: [
+        StatefulShellRoute.indexedStack(
+          builder: (_, _, navigationShell) => shell = navigationShell,
+          branches: [
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/tab-home',
+                  builder: (_, _) => const Text('tab-home'),
+                  routes: [
+                    GoRoute(
+                      path: 'detail',
+                      pageBuilder: (context, state) => Sdui.page(
+                        context,
+                        state,
+                        screenId: 'detail',
+                        child: SduiScreenPage(
+                          screenId: 'detail',
+                          loader: loader,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/tab-mission',
+                  builder: (_, _) => const Text('tab-mission'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+    version = 2;
+    router.go('/tab-home/detail');
+    await tester.pumpAndSettle();
+    expect(loader.calls, ['detail', 'detail']);
+    shell.goBranch(1);
+    await tester.pumpAndSettle();
+    shell.goBranch(0);
+    await tester.pumpAndSettle();
+    // Any later rebuild of the retained page must keep its first decision.
+    router.go('/tab-home/detail?revision=2');
+    await tester.pumpAndSettle();
+    expect(
+      _route(tester, 'detail').transitionDuration,
+      const Duration(milliseconds: 300),
+    );
+  });
+
+  testWidgets('router loader override owns content and transition', (
+    tester,
+  ) async {
+    final original = _Loader({
+      'home': () async =>
+          _screen('original', transition: {'type': 'fade', 'duration': 700}),
+    });
+    final override = _Loader({'home': () async => _screen('override')});
+    await _init(original, preload: ['home'], type: 'none');
+    final router = Sdui.router(loader: override);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+    expect(override.calls, ['home']);
+    expect(find.text('override'), findsOneWidget);
+    expect(_route(tester, 'override').transitionDuration, Duration.zero);
+    // An override must neither replace nor refresh another loader's preload.
+    await tester.pumpWidget(const SizedBox());
+    final defaultRouter = await _pump(tester);
+    expect(find.text('original'), findsOneWidget);
+    expect(
+      _route(tester, 'original').transitionDuration,
+      const Duration(milliseconds: 700),
+    );
+    expect(original.calls, ['home', 'home']);
+    defaultRouter.refresh();
+    await tester.pumpAndSettle();
+    expect(find.text('original'), findsOneWidget);
+  });
+
+  test('a loader other than the preload loader peeks nothing', () async {
+    final owner = _Loader();
+    await _init(owner, preload: ['detail']);
+    expect(SduiState.cache.peek('detail', owner), isNotNull);
+    expect(SduiState.cache.peek('detail', _Loader()), isNull);
+  });
+
+  testWidgets('an inline page loader keeps its page across rebuilds', (
+    tester,
+  ) async {
+    final original = _Loader({
+      'detail': () async =>
+          _screen('original', transition: {'type': 'fade', 'duration': 700}),
+    });
+    await _init(original, preload: ['detail'], type: 'none');
+    var loads = 0;
+    final router = await _pump(
+      tester,
+      routes: [
+        GoRoute(
+          path: '/custom',
+          pageBuilder: (context, state) {
+            // A new loader instance on every build, as an inline override.
+            final loader = _Loader({
+              'detail': () async => _screen('override-${++loads}'),
+            });
+            return Sdui.page(
+              context,
+              state,
+              screenId: 'detail',
+              loader: loader,
+              child: SduiScreenPage(screenId: 'detail', loader: loader),
+            );
+          },
+        ),
+      ],
+    );
+    router.go('/custom');
+    await tester.pumpAndSettle();
+    expect(find.text('override-1'), findsOneWidget);
+    expect(_route(tester, 'override-1').transitionDuration, Duration.zero);
+    router.go('/custom?revision=2');
+    await tester.pumpAndSettle();
+    expect(find.text('override-1'), findsOneWidget);
+    expect(_route(tester, 'override-1').transitionDuration, Duration.zero);
+    expect(loads, 1);
+  });
+
   test(
     'C24: initialize completes only after every warm load settles',
     () async {
@@ -1125,7 +1275,7 @@ void main() {
     router.push('/deferred/detail');
     await tester.pumpAndSettle();
     version = 2;
-    await SduiState.cache.refresh('detail', loader);
+    await SduiState.cache.refresh('detail');
     mounted.value = true;
     await tester.pumpAndSettle();
     expect(find.text('detail-v1'), findsOneWidget);
@@ -1152,12 +1302,12 @@ void main() {
             : Future.value(_screen('detail-v1')),
       });
       await _init(loader, preload: ['detail'], errors: errors);
-      final before = SduiState.cache.peek('detail');
+      final before = SduiState.cache.peek('detail', loader);
       fail = true;
-      await SduiState.cache.refresh('detail', loader);
-      expect(identical(SduiState.cache.peek('detail'), before), isTrue);
+      await SduiState.cache.refresh('detail');
+      expect(identical(SduiState.cache.peek('detail', loader), before), isTrue);
       expect(
-        SduiState.cache.peek('detail')!.screen.template['value'],
+        SduiState.cache.peek('detail', loader)!.screen.template['value'],
         'detail-v1',
       );
       expect(errors.errors.map((e) => (e.scope, e.screenId)), [
@@ -1178,10 +1328,8 @@ void main() {
     await _init(loader, preload: ['detail']);
     version = 2;
     var done = 0;
-    final first = SduiState.cache.refresh('detail', loader).then((_) => done++);
-    final second = SduiState.cache
-        .refresh('detail', loader)
-        .then((_) => done++);
+    final first = SduiState.cache.refresh('detail').then((_) => done++);
+    final second = SduiState.cache.refresh('detail').then((_) => done++);
     expect(loader.calls, ['detail', 'detail']);
     expect(done, 0);
     pending!.complete(_screen('detail-v2'));
@@ -1189,7 +1337,7 @@ void main() {
     expect(done, 2);
     expect(loader.calls, ['detail', 'detail']);
     expect(
-      SduiState.cache.peek('detail')!.screen.template['value'],
+      SduiState.cache.peek('detail', loader)!.screen.template['value'],
       'detail-v2',
     );
   });

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart' show MaterialApp, MaterialPage;
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
+import '../contract/screen_loader.dart';
 import '../ir/model/page_transition.dart';
 import '../runtime/engine_presentation.dart';
+import 'go_router_navigate.dart';
 import 'screen_cache.dart';
 import 'sdui_state.dart';
 import 'sdui_transition_page.dart';
@@ -16,17 +18,21 @@ import 'sdui_transition_page.dart';
 /// never change an open page. The cache entry captured with it (or its
 /// absence) is handed to [child] so content and transition stay paired.
 /// [child] is remounted whenever the page key's screen id changes.
+///
+/// [loader] is the one [child] loads with; only the preload loader's own
+/// cache entries are used. Defaults to [SduiState.screenLoader].
 Page<void> buildScreenPage(
   BuildContext context,
   GoRouterState state, {
   required String screenId,
   required Widget child,
+  ScreenLoader? loader,
 }) {
   final router = GoRouter.maybeOf(context);
   final frozen = router == null ? null : _decisions[router] ??= _Frozen(router);
   var decision = frozen?.byKey[state.pageKey];
   if (decision == null || decision.screenId != screenId) {
-    decision = _decide(context, screenId);
+    decision = _decide(context, screenId, loader ?? SduiState.screenLoader);
     frozen?.byKey[state.pageKey] = decision;
   }
 
@@ -35,6 +41,7 @@ Page<void> buildScreenPage(
   final page = ScreenSnapshot(
     key: ValueKey(screenId),
     screenId: screenId,
+    loader: decision.loader,
     screen: decision.screen,
     child: child,
   );
@@ -46,7 +53,8 @@ Page<void> buildScreenPage(
 final _decisions = Expando<_Frozen>();
 
 /// One router's frozen decisions. A decision lives while its page key is in
-/// the router configuration; reopening after it left decides afresh.
+/// the router configuration or retained by an inactive branch; reopening
+/// after it left decides afresh.
 final class _Frozen {
   _Frozen(GoRouter router) {
     final delegate = router.routerDelegate;
@@ -66,6 +74,7 @@ final class _Frozen {
     }
 
     walk(configuration.matches);
+    live.addAll(retainedPageKeys(configuration.matches));
     byKey.removeWhere((key, _) => !live.contains(key));
   }
 }
@@ -73,11 +82,16 @@ final class _Frozen {
 final class _Decision {
   const _Decision({
     required this.screenId,
+    required this.loader,
     required this.screen,
     required this.spec,
   });
 
   final String screenId;
+
+  /// The loader the decision was made for, kept with its cache entry;
+  /// `null` before `Sdui.initialize`.
+  final ScreenLoader? loader;
 
   /// The cache entry captured for this page; `null` is an explicit miss.
   final CachedScreen? screen;
@@ -89,11 +103,16 @@ final class _Decision {
 /// With transitions enabled, a cached screen uses its declared `_transition`
 /// and anything else the style's `defaultType`; reduced motion forces `none`
 /// when respected. `platform` and disabled transitions keep the host page.
-_Decision _decide(BuildContext context, String screenId) {
-  final screen = SduiState.cache.peek(screenId);
+_Decision _decide(BuildContext context, String screenId, ScreenLoader? loader) {
+  final screen = loader == null ? null : SduiState.cache.peek(screenId, loader);
   final style = EnginePresentation.value.transitions;
   if (!style.enabled) {
-    return _Decision(screenId: screenId, screen: screen, spec: null);
+    return _Decision(
+      screenId: screenId,
+      loader: loader,
+      screen: screen,
+      spec: null,
+    );
   }
 
   final reduced =
@@ -104,6 +123,7 @@ _Decision _decide(BuildContext context, String screenId) {
       : screen?.transition ?? PageTransitionSpec(type: style.defaultType);
   return _Decision(
     screenId: screenId,
+    loader: loader,
     screen: screen,
     spec: spec.type == 'platform' ? null : spec,
   );

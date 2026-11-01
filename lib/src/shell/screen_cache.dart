@@ -18,22 +18,30 @@ final class CachedScreen {
 
 /// SDK-owned in-memory screens listed at `Sdui.initialize(preloadScreens:)`.
 final class ScreenCache {
+  // The preload loader; entries are only served to it and refreshed with it.
+  ScreenLoader? _loader;
+
   final _entries = <String, CachedScreen>{};
   final _refreshing = <String, Future<void>>{};
 
   /// Loads every distinct id in parallel. Failures are reported as
   /// [SduiErrorScope.screenLoad] and leave that id uncached.
   Future<void> warm(List<String> ids, ScreenLoader loader) async {
+    _loader = loader;
     await Future.wait([for (final id in ids.toSet()) _fetch(id, loader)]);
   }
 
-  CachedScreen? peek(String id) => _entries[id];
+  /// The entry for [id] when [loader] is the preload loader; another loader
+  /// loads independently.
+  CachedScreen? peek(String id, ScreenLoader loader) =>
+      identical(loader, _loader) ? _entries[id] : null;
 
-  /// Reloads a cached [id] for the next open, coalescing concurrent calls.
-  /// A failure is reported and keeps the previous entry; pages already
-  /// showing the old entry are never touched.
-  Future<void> refresh(String id, ScreenLoader loader) {
-    if (!_entries.containsKey(id)) return Future.value();
+  /// Reloads a cached [id] with the preload loader for the next open,
+  /// coalescing concurrent calls. A failure is reported and keeps the
+  /// previous entry; pages already showing the old entry are never touched.
+  Future<void> refresh(String id) {
+    final loader = _loader;
+    if (loader == null || !_entries.containsKey(id)) return Future.value();
     return _refreshing[id] ??= _fetch(id, loader).whenComplete(() {
       _refreshing.remove(id);
     });
@@ -94,11 +102,15 @@ final class ScreenSnapshot extends InheritedWidget {
   const ScreenSnapshot({
     super.key,
     required this.screenId,
+    required this.loader,
     required this.screen,
     required super.child,
   });
 
   final String screenId;
+
+  /// The loader [screen] was looked up for.
+  final ScreenLoader? loader;
   final CachedScreen? screen;
 
   @override

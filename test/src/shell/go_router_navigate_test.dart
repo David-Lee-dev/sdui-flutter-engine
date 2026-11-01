@@ -34,6 +34,117 @@ Future<GoRouter> _pump(WidgetTester tester, GoRouter router) async {
 void main() {
   group('goRouterNavigateHandle', () {
     group('push', () {
+      for (final remove in [false, true]) {
+        testWidgets(
+          'retained branch push waits for actual exit remove=$remove',
+          (tester) async {
+            late StatefulNavigationShell shell;
+            final router = await _pump(
+              tester,
+              GoRouter(
+                initialLocation: '/a',
+                routes: [
+                  StatefulShellRoute.indexedStack(
+                    builder: (_, _, value) => shell = value,
+                    branches: [
+                      StatefulShellBranch(
+                        routes: [
+                          GoRoute(
+                            path: '/a',
+                            builder: (_, _) => const Text('a'),
+                            routes: [
+                              GoRoute(
+                                path: 'detail',
+                                builder: (_, _) => const Text('branch-detail'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      StatefulShellBranch(routes: [_page('b')]),
+                    ],
+                  ),
+                  _page('outside'),
+                ],
+              ),
+            );
+            addTearDown(router.dispose);
+            final push = _Push(
+              goRouterNavigateHandle(router).push!('/a/detail'),
+            );
+            await tester.pumpAndSettle();
+            shell.goBranch(1);
+            await tester.pumpAndSettle();
+            expect(find.text('b'), findsOneWidget);
+            expect(push.done, isFalse);
+            if (remove) {
+              router.go('/outside');
+            } else {
+              shell.goBranch(0);
+              await tester.pumpAndSettle();
+              expect(find.text('branch-detail'), findsOneWidget);
+              expect(push.done, isFalse);
+              router.pop('selected');
+            }
+            await tester.pumpAndSettle();
+            expect(push.done, isTrue);
+            expect(push.result, remove ? null : 'selected');
+          },
+        );
+      }
+
+      testWidgets('replace reusing the page key settles the displaced push', (
+        tester,
+      ) async {
+        final router = await _pump(tester, _router());
+        addTearDown(router.dispose);
+        final push = _Push(goRouterNavigateHandle(router).push!('/detail'));
+        await tester.pumpAndSettle();
+        router.replace('/mission');
+        await tester.pumpAndSettle();
+        expect(push.done, isTrue);
+        expect(push.result, isNull);
+      });
+
+      testWidgets(
+        'duplicate pushes without an intervening frame retain separate results',
+        (tester) async {
+          final router = await _pump(tester, _router());
+          addTearDown(router.dispose);
+          final navigate = goRouterNavigateHandle(router);
+          final first = _Push(navigate.push!('/detail'));
+          final second = _Push(navigate.push!('/detail'));
+          await tester.pumpAndSettle();
+          router.pop('second');
+          await tester.pumpAndSettle();
+          expect(second.result, 'second');
+          expect(first.done, isFalse);
+          router.pop('first');
+          await tester.pumpAndSettle();
+          expect(first.result, 'first');
+        },
+      );
+
+      testWidgets('a redirected push returns the destination pop result', (
+        tester,
+      ) async {
+        final router = await _pump(
+          tester,
+          _router(
+            redirect: (_, state) =>
+                state.uri.path == '/detail' ? '/mission' : null,
+          ),
+        );
+        addTearDown(router.dispose);
+        final push = _Push(goRouterNavigateHandle(router).push!('/detail'));
+        await tester.pumpAndSettle();
+        expect(find.text('mission'), findsOneWidget);
+        expect(push.done, isFalse);
+        router.pop('redirected-result');
+        await tester.pumpAndSettle();
+        expect(push.result, 'redirected-result');
+      });
+
       testWidgets('pop된 페이지의 결과로 완료된다', (tester) async {
         final router = await _pump(tester, _router());
         final push = _Push(goRouterNavigateHandle(router).push!('/detail'));

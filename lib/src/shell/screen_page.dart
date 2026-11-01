@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -74,9 +76,12 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     // An engine page hands over the entry its transition was decided from;
     // direct use reads the cache.
     final snapshot = context.getInheritedWidgetOfExactType<ScreenSnapshot>();
-    final cached = snapshot != null && snapshot.screenId == widget.screenId
+    final cached =
+        snapshot != null &&
+            snapshot.screenId == widget.screenId &&
+            identical(snapshot.loader, widget.loader)
         ? snapshot.screen
-        : SduiState.cache.peek(widget.screenId);
+        : SduiState.cache.peek(widget.screenId, widget.loader);
     if (cached == null) {
       _load();
       return;
@@ -84,11 +89,15 @@ final class _SduiScreenPageState extends State<SduiScreenPage> {
     _loaded = cached.screen;
     _screenViewId = ScreenVisit.begin(widget.screenId).id;
     final cache = SduiState.cache;
-    _refresh = () => cache.refresh(widget.screenId, widget.loader);
+    _refresh = () => cache.refresh(widget.screenId);
   }
 
   void _load() {
-    final future = widget.loader.load(widget.screenId);
+    // A synchronous throw takes the same error and retry path as a failed
+    // future.
+    final future = Future<LoadedScreen>.sync(
+      () => widget.loader.load(widget.screenId),
+    );
     _pending = future;
     future.then(
       (screen) {
