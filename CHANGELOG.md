@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.0
 
 - Fix: a template number that is `NaN` or infinite (for example
   `10.0 ** 400`) no longer crashes the node where a count, index, width
