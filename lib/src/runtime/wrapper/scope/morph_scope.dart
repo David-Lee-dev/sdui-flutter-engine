@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../environment/_base.dart';
@@ -63,16 +62,8 @@ class _MorphScopeState extends State<MorphScope>
     super.didUpdateWidget(oldWidget);
     final old = oldWidget.directive;
     if (identical(old, d)) return;
-    final sameCurve = old.curve is List && d.curve is List
-        ? listEquals(old.curve as List, d.curve as List)
-        : old.curve == d.curve;
-    final timingChanged =
-        old.durationMs != d.durationMs ||
-        !sameCurve ||
-        old.repeat != d.repeat ||
-        old.reverse != d.reverse;
     _rebind(_parent);
-    _retarget(force: timingChanged);
+    _retarget(force: !old.sameTiming(d));
   }
 
   @override

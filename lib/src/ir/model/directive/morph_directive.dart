@@ -43,6 +43,28 @@ final class MorphDirective extends Directive {
   final Directive child;
   final String path;
 
+  /// Whether [other] runs the same animation: duration, curve, repeat,
+  /// reverse and spring.
+  ///
+  /// [delayMs] is left out: it only delays the first run on mount, and a
+  /// later restart never waits for it, so a changed delay has nothing to
+  /// restart.
+  bool sameTiming(MorphDirective other) =>
+      other.durationMs == durationMs &&
+      _sameCurve(other.curve, curve) &&
+      other.repeat == repeat &&
+      other.reverse == reverse &&
+      other.spring == spring;
+
+  static bool _sameCurve(Object a, Object b) {
+    if (a is! List || b is! List) return a == b;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   /// Returns external binding roots used by this directive.
   ///
   /// The locally supplied [as] and [velocityAs] variables are excluded.
