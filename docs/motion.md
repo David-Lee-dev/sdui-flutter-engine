@@ -120,7 +120,7 @@ to it. `trigger` restarts and reduced motion are unaffected either way.
 | `rotate` | `begin` radians `0`, `end` `0`, `axis` `x|y|z` default `z`, `align` nine-direction default `center` | 2D Z rotation or perspective X/Y rotation; any non-`z`/`x` axis selects Y. |
 | `blur` | `begin` sigma `8`, `end` `0` | Image-filter blur; sigma below .01 returns the child unchanged. |
 | `tint` | `begin` color `#66000000`, `end` `#00000000`, `blend` | Color overlay; blend is `src_atop`, `modulate`, `overlay`, `color`, or `screen`; unknown defaults to `src_atop`. |
-| `reveal` | `direction` | Clip/align reveal: `up` (default), `down`, `left`, `right`. |
+| `reveal` | `direction` | Clip/align reveal: `up` (default), `down`, `left`, `right`. Only the reveal axis changes; the other axis keeps the child's size, so a vertical reveal hugs the child's width and a horizontal one its height. |
 | `saturate` | `begin` `0`, `end` `1` | Saturation matrix clamped to 0–2. |
 | `shimmer` | `base` `#00FFFFFF`, `highlight` `#8CFFFFFF` | Repeating left-to-right `srcATop` highlight shader. |
 

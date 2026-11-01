@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -1108,6 +1109,111 @@ void main() {
       expect(find.text('a'), findsOneWidget);
       expect(find.text('b'), findsOneWidget);
     });
+
+    // tuk home level bar: a stack holding a reveal_right progress bar under
+    // derived bones. The reveal made the incoming content claim its whole
+    // size while the bones still held theirs, so the slot jumped to their
+    // sum before settling.
+    for (final slow in const [true, false]) {
+      testWidgets('a reveal_right under derived bones keeps the slot within '
+          'the bones and content heights through a ${slow ? 'slow' : 'fast'} '
+          'swap', (tester) async {
+        await tester.pumpWidget(
+          _app(
+            _section({
+              '_type': 'column',
+              'cross_axis_alignment': 'stretch',
+              '_children': [
+                {
+                  '_type': 'padding',
+                  'padding': [16, 8],
+                  '_child': {
+                    '_type': 'column',
+                    '_skeleton': true,
+                    'cross_axis_alignment': 'start',
+                    '_children': [
+                      {'_type': 'text', 'value': r'level ${ready}'},
+                      {
+                        '_type': 'stack',
+                        '_skeleton': {
+                          '_type': 'sizedbox',
+                          'height': 24,
+                          '_child': {
+                            '_type': 'center',
+                            '_child': {
+                              '_type': 'skeleton',
+                              'height': 10,
+                              'shape': 'pill',
+                            },
+                          },
+                        },
+                        'clip_behavior': 'none',
+                        'alignment': 'center_left',
+                        '_children': [
+                          {
+                            '_type': 'container',
+                            '_motion': {
+                              'type': 'reveal_right',
+                              'duration': 800,
+                            },
+                            '_child': {
+                              '_type': 'row',
+                              '_children': [
+                                {
+                                  '_type': 'container',
+                                  'width': 150,
+                                  'height': 10,
+                                  'decoration': {'color': '#FF0000'},
+                                },
+                              ],
+                            },
+                          },
+                          {
+                            '_type': 'align',
+                            'alignment': 'center_right',
+                            '_child': {
+                              '_type': 'container',
+                              'width': 24,
+                              'height': 24,
+                            },
+                          },
+                          {
+                            '_type': 'positioned',
+                            'top': -20,
+                            'left': 0,
+                            '_child': {'_type': 'text', 'value': 'balloon'},
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          ),
+        );
+        final slot = find.byType(SkeletonScope).first;
+        await tester.pump(Duration(milliseconds: slow ? 300 : 100));
+        final bones = tester.getSize(slot).height;
+
+        openAll();
+        final heights = <double>[];
+        for (var i = 0; i < 120; i++) {
+          await tester.pump(const Duration(milliseconds: 16));
+          heights.add(tester.getSize(slot).height);
+        }
+        expect(tester.takeException(), isNull);
+        expect(find.byType(ShaderMask), findsNothing);
+        final content = heights.last;
+
+        final limit = math.max(bones, content);
+        expect(
+          heights.where((h) => h > limit + 0.01),
+          isEmpty,
+          reason: 'bones $bones, content $content, frames $heights',
+        );
+      });
+    }
 
     testWidgets('a legacy skeleton shows the content when its mount hook is '
         'replaced by a table without one', (tester) async {

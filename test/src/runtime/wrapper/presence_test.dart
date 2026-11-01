@@ -297,6 +297,48 @@ void main() {
       expect(_top(tester, 'below'), 20);
     });
 
+    testWidgets('an if/else swap into a branch holding a reveal stays '
+        'within A and B', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          {'show': true},
+          _content({
+            '_type': 'column',
+            '_children': [
+              {
+                '_type': 'cond',
+                '_children': [
+                  {..._box('A', height: 50), '_if': r'${show}'},
+                  {
+                    '_type': 'column',
+                    '_else': true,
+                    '_children': [
+                      {
+                        ..._box('B'),
+                        '_motion': {'type': 'reveal_right', 'duration': 800},
+                      },
+                    ],
+                  },
+                ],
+              },
+              _box('below'),
+            ],
+          }),
+        ),
+      );
+
+      _scope(tester).set('show', false);
+      final tops = <double>[];
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        tops.add(_top(tester, 'below'));
+      }
+      expect(tops.where((top) => top > 50 + 0.01), isEmpty, reason: '$tops');
+
+      await tester.pumpAndSettle();
+      expect(_top(tester, 'below'), 20);
+    });
+
     testWidgets('a switch case change swaps the same way', (tester) async {
       await tester.pumpWidget(
         _host(

@@ -30,7 +30,7 @@ void main() {
         expect(align(0).heightFactor, 0);
         expect(align(0.5).heightFactor, 0.5);
         expect(align(1).heightFactor, 1);
-        expect(align(0).widthFactor, isNull);
+        expect(align(0).widthFactor, 1); // 교차축은 자식 크기 그대로.
         expect(align(0).alignment, Alignment.bottomCenter);
         expect(align(-1).heightFactor, 0); // 잘못된 진행률도 안전하게 클램프.
       });
@@ -66,6 +66,42 @@ void main() {
         expect(align('bogus').alignment, Alignment.bottomCenter);
         expect(align('bogus').heightFactor, 0.5);
       });
+
+      // A bounded cross axis must not grow the reveal: only the reveal axis
+      // changes, the other keeps the child's size.
+      for (final direction in const ['right', 'left', 'up', 'down']) {
+        final horizontal = direction == 'right' || direction == 'left';
+        for (final t in const [0.5, 1.0]) {
+          testWidgets('$direction keeps the child cross-axis size under a '
+              'bounded cross axis at t=$t', (tester) async {
+            await tester.pumpWidget(
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Center(
+                  child: SizedBox(
+                    width: 300,
+                    height: 200,
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: Builder(
+                        builder: (context) => const RevealMotion().frame(
+                          context,
+                          t,
+                          const SizedBox(width: 100, height: 10),
+                          MotionParams({'direction': direction}),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+
+            final size = tester.getSize(find.byType(ClipRect));
+            expect(size, horizontal ? Size(100 * t, 10) : Size(100, 10 * t));
+          });
+        }
+      }
     });
   });
 }

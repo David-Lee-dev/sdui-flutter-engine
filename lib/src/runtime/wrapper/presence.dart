@@ -618,10 +618,12 @@ final class _Entry implements PresenceHandle {
   bool _plays(PresenceMember m) =>
       present ? m.phase != MotionPhase.exit : m.phase != MotionPhase.enter;
 
-  /// The share of its child's size the slot takes.
+  /// The share of its child's size the slot takes. A playing reveal owns the
+  /// space, except in a swap: the other output still holds its share, so the
+  /// slot blends the two by the run.
   double get size {
     if (!_group.widget.config.space) return present ? 1 : 0;
-    if (_members.any((m) => m.affectsLayout && _plays(m))) return 1;
+    if (!_swap && _members.any((m) => m.affectsLayout && _plays(m))) return 1;
     return value;
   }
 
