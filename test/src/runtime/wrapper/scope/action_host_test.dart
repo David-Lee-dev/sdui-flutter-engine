@@ -140,6 +140,17 @@ class _ExternalProbe extends ExternalCommand {
   }
 }
 
+class _PendingTelemetrySink extends _TelemetrySink {
+  final gate = Completer<TelemetryReservation>();
+  @override
+  Future<TelemetryReservation> reserve(TelemetryEvent event) {
+    events.add(event);
+    return gate.future;
+  }
+
+  void release() => gate.complete(_TelemetryCompletion(completions));
+}
+
 Command _set(String target, String expr) =>
     Command(type: 'set', params: {target: Expression.compile(expr)});
 
@@ -258,6 +269,93 @@ void main() {
         expect(probe.seen, hasLength(2));
         expect(probe.seen.every((i) => identical(i.event, event)), isTrue);
       });
+    }
+
+    for (final background in [false, true]) {
+      test(
+        'reserved command skips dispatch after disposal (background: $background)',
+        () async {
+          final sink = _PendingTelemetrySink();
+          Telemetry.install(sink);
+          final probe = _ExternalProbe(measured: true);
+          DriverRegistry.register(ExternalDriver(probe));
+          final env = ScopeEnvironment({
+            'then': false,
+            'error': false,
+            'always': false,
+            'dismiss': false,
+          });
+          final host = ActionHost(
+            actions: {
+              'run': _action(
+                Command(
+                  type: 'external_probe',
+                  background: background,
+                  then: [
+                    [_set('then', 'true')],
+                  ],
+                  onError: {
+                    '_': [
+                      [_set('error', 'true')],
+                    ],
+                  },
+                  always: [
+                    [_set('always', 'true')],
+                  ],
+                  dismiss: [
+                    [_set('dismiss', 'true')],
+                  ],
+                ),
+              ),
+            },
+            env: env,
+          );
+          final run = host.handleAwaitable('run');
+          expect(sink.events, hasLength(1));
+          expect(probe.seen, isEmpty);
+          host.dispose();
+          sink.release();
+          await run;
+          await Future<void>.delayed(Duration.zero);
+          expect(probe.seen, isEmpty);
+          expect(sink.completions, hasLength(1));
+          expect(sink.completions.single['outcome'], 'cancelled');
+          for (final key in ['then', 'error', 'always', 'dismiss']) {
+            expect(env.read(key), false);
+          }
+        },
+      );
+    }
+
+    for (final background in [false, true]) {
+      test(
+        'live reserved command completes once (background: $background)',
+        () async {
+          final sink = _PendingTelemetrySink();
+          Telemetry.install(sink);
+          final probe = _ExternalProbe(measured: true);
+          DriverRegistry.register(ExternalDriver(probe));
+          final host = ActionHost(
+            actions: {
+              'run': _action(
+                Command(type: 'external_probe', background: background),
+              ),
+            },
+            env: ScopeEnvironment(const {}),
+          );
+          final run = host.handleAwaitable('run');
+          expect(probe.seen, isEmpty);
+          if (background) await run;
+          sink.release();
+          await run;
+          await Future<void>.delayed(Duration.zero);
+          expect(probe.seen, hasLength(1));
+          expect(sink.completions, hasLength(1));
+          expect(sink.completions.single['outcome'], 'success');
+          host.dispose();
+          expect(sink.completions, hasLength(1));
+        },
+      );
     }
 
     group('command telemetry', () {

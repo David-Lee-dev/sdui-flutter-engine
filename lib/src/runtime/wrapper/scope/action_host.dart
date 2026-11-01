@@ -264,6 +264,10 @@ final class ActionHost implements ActionSink {
         final measurement = pending is CommandMeasurement
             ? pending
             : await pending;
+        if (_disposed) {
+          measurement.complete(outcome: 'cancelled');
+          return;
+        }
         try {
           data = await DriverRegistry.resolve(command.type).run(ctx);
           measurement.complete(outcome: _disposed ? 'cancelled' : 'success');
@@ -351,6 +355,10 @@ final class ActionHost implements ActionSink {
         ActionOrigin.background,
       );
       measurement = pending is CommandMeasurement ? pending : await pending;
+      if (_disposed) {
+        measurement.complete(outcome: 'cancelled');
+        return;
+      }
       final ctx = _context(params, invocation, ActionOrigin.background, event);
       await DriverRegistry.resolve(command.type).run(ctx);
       measurement.complete(outcome: _disposed ? 'cancelled' : 'success');

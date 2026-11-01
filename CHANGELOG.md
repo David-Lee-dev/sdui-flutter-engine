@@ -61,6 +61,11 @@
   found on a parent scope. It was always `null`. Overlapping runs each keep
   their own event, and a scope state key named `event` is not mistaken for
   it.
+- Fix: a measured command (`net`, or an `ExternalCommand` with `measured`)
+  whose scope is disposed while its telemetry span is being reserved no
+  longer runs. The span completes once as `cancelled`, and no `_then`,
+  `_error`, `_dismiss` or `_always` runs. This applies to background
+  commands too.
 
 ## 0.17.5
 
