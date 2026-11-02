@@ -7,6 +7,8 @@ import 'package:sdui_engine/sdui_engine.dart';
 import 'package:sdui_model_support/sdui_model_support.dart';
 import 'package:thermion_flutter/thermion_flutter.dart' hide Texture, View;
 
+import 'render_gate.dart';
+
 /// A [ModelSource] that renders each `model` natively with Filament (through
 /// `thermion_flutter`) into a Flutter `Texture`.
 ///
@@ -23,7 +25,8 @@ import 'package:thermion_flutter/thermion_flutter.dart' hide Texture, View;
 /// The view is an ordinary Flutter widget: it clips, transforms and fades
 /// with its parent. The engine owns gestures and auto-rotation and orbits
 /// the camera through [FilamentModelController.setCamera].
-/// [warmUp] creates the Filament engine ahead of the first mount.
+/// [warmUp] creates the Filament engine ahead of the first mount. Frames
+/// render only while some model changes or plays ([RenderGate]).
 ///
 /// [debugOverlay] (default: `--dart-define=SDUI_MODEL_DEBUG=true`) paints each
 /// view's load timeline, app memory and frame times over it for measurement.
@@ -66,6 +69,16 @@ final class FilamentModelSource extends ModelSource {
   int _mounts = 0;
   int? _warmUpMs;
 
+  /// Pauses Filament's frame loop while every model is still. A surface the
+  /// platform recreated while the app was hidden gets a frame on resume.
+  late final RenderGate _gate = () {
+    AppLifecycleListener(onResume: () => _gate.touch(this));
+    return RenderGate(
+      resume: ThermionFlutterPlugin.instance.resumeFrameScheduler,
+      pause: ThermionFlutterPlugin.instance.pauseFrameScheduler,
+    );
+  }();
+
   @override
   Future<SduiModelController> controllerFor(ModelRequest request) async =>
       FilamentModelController(request, this);
@@ -85,6 +98,7 @@ final class FilamentModelSource extends ModelSource {
     // it; later viewers attach to them.
     final viewer = await ThermionFlutterPlugin.createViewer();
     await viewer.dispose();
+    _gate.settle();
     await Future.wait(loads);
     _warmUpMs = clock.elapsedMilliseconds;
     debugPrint('[sdui_model_filament] warm-up took ${_warmUpMs}ms');
@@ -190,6 +204,7 @@ final class FilamentModelController implements SduiModelController {
 
       await _frame(_framedAspect ?? 1);
       await viewer.setRendering(true);
+      _touch();
       _ifAlive(() => stats.mark('ready'));
       debugPrint('[sdui_model_filament] ${stats.summary()}, clips: $_clips');
     } catch (error) {
@@ -201,6 +216,11 @@ final class FilamentModelController implements SduiModelController {
 
   void _ifAlive(VoidCallback action) {
     if (!_disposed) action();
+  }
+
+  /// Runs frames so this view's change reaches the screen.
+  void _touch() {
+    if (!_disposed && _viewer.value != null) _source._gate.touch(this);
   }
 
   /// Sets the zoom-1 distance so [_frameRadius] fits the narrower field of
@@ -253,6 +273,7 @@ final class FilamentModelController implements SduiModelController {
             d * math.cos(pitch) * math.cos(yaw),
           ),
         );
+        _touch();
       } while (_placeAgain && !_disposed);
     } finally {
       _placing = false;
@@ -291,12 +312,14 @@ final class FilamentModelController implements SduiModelController {
         if (_playing == index) {
           _clipEnd?.cancel();
           _playing = null;
+          _source._gate.hold(this, playing: false);
           await asset.stopGltfAnimation(index);
         }
         await asset.setGltfAnimationTime(
           index,
           time.inMicroseconds / Duration.microsecondsPerSecond,
         );
+        _touch();
       } while (_poseAgain && !_disposed);
     } finally {
       _posing = false;
@@ -324,6 +347,7 @@ final class FilamentModelController implements SduiModelController {
     );
     if (asset == null || index < 0) return;
     _playing = index;
+    _source._gate.hold(this, playing: true);
     await asset.playGltfAnimation(
       index,
       loop: loop,
@@ -337,13 +361,16 @@ final class FilamentModelController implements SduiModelController {
       Duration(
         microseconds: (seconds * Duration.microsecondsPerSecond).round(),
       ),
-      () => _update(
-        ModelPlayback(
-          clip: clip,
-          isPlaying: false,
-          completions: _playback.completions + 1,
-        ),
-      ),
+      () {
+        _source._gate.hold(this, playing: false);
+        _update(
+          ModelPlayback(
+            clip: clip,
+            isPlaying: false,
+            completions: _playback.completions + 1,
+          ),
+        );
+      },
     );
   }
 
@@ -354,6 +381,8 @@ final class FilamentModelController implements SduiModelController {
     final index = _clips.indexOf(_playback.clip ?? '');
     _playing = null;
     if (asset != null && index >= 0) await asset.stopGltfAnimation(index);
+    if (_viewer.value != null) _source._gate.hold(this, playing: false);
+    _touch();
     _update(
       ModelPlayback(
         clip: _playback.clip,
@@ -397,6 +426,7 @@ final class FilamentModelController implements SduiModelController {
     _viewer.value = null;
     _asset = null;
     if (viewer == null) return;
+    _source._gate.release(this);
     try {
       // The texture's render target refers to the view; release it before
       // the viewer destroys the view.
@@ -428,6 +458,8 @@ final class _FilamentView extends StatelessWidget {
         if (aspect != controller._framedAspect) {
           unawaited(controller._frame(aspect));
         }
+        // A new layout may recreate the texture, which needs a frame.
+        controller._touch();
         return ValueListenableBuilder<ThermionViewer?>(
           valueListenable: controller._viewer,
           builder: (context, viewer, _) => viewer == null
