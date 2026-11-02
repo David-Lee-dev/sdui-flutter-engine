@@ -78,6 +78,7 @@ final class ModelPlayhead {
     required TickerProvider vsync,
     required this.onPose,
     required this.onEnd,
+    required this.onArrive,
   }) {
     _ticker = vsync.createTicker(_tick);
   }
@@ -87,6 +88,11 @@ final class ModelPlayhead {
 
   /// Fires when the playhead arrives at the clip's end by moving there.
   final VoidCallback onEnd;
+
+  /// Fires when the playhead settles at a [retarget]ed target: after
+  /// playing there, at once for speed 0 or a target it already holds. A
+  /// target replaced mid-way never arrives; only the last one does.
+  final VoidCallback onArrive;
 
   late final Ticker _ticker;
   Duration _last = Duration.zero;
@@ -101,6 +107,9 @@ final class ModelPlayhead {
 
   /// Whether a loaded clip is attached.
   bool get attached => _duration != null;
+
+  /// Seconds into the clip the playhead shows.
+  double get position => _position;
 
   /// Attaches [progress]'s loaded clip of [duration] and shows its target at
   /// once; with [endIfThere], a target at the clip's end fires [onEnd]. A
@@ -138,7 +147,10 @@ final class ModelPlayhead {
     final duration = _duration;
     if (duration == null) return;
     final target = progress.target(duration);
-    if (target == _target && target == _position) return;
+    if (target == _target && target == _position) {
+      onArrive();
+      return;
+    }
     _target = target;
     if (progress.speed == 0) {
       _arrive();
@@ -177,6 +189,7 @@ final class ModelPlayhead {
     _position = _target;
     _emit();
     if (moved && _atEnd) onEnd();
+    onArrive();
   }
 
   void _emit() {

@@ -16,7 +16,9 @@
   a playhead the template sets — a tap counter can step through one long
   animation — playing toward each new target at the clip's pace (reversing
   when it moves back) and showing the first target after a load at once;
-  `on_progress_end` dispatches when the playhead arrives at the clip's end.
+  `on_progress_end` dispatches when the playhead arrives at the clip's end,
+  and `on_progress_arrive` (`{ clip, at }`) whenever it settles at a target
+  the template changed, so a template can ignore taps until a step lands.
   See docs/widgets/custom/model.md.
 - Added the `ModelSource` / `SduiModelController` / `ModelCamera` contract
   (renderers implement `setCamera`, `clipDuration` and `setPose`; their views

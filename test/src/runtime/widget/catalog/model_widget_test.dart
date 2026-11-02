@@ -692,14 +692,22 @@ void main() {
           if (action == 'done') (event! as Map)['clip'],
       ];
 
+      /// Every `on_progress_arrive` payload.
+      List<Object?> arrivals(_Sink sink) => [
+        for (final (action, event) in sink.calls)
+          if (action == 'arrived') event,
+      ];
+
       Map<String, Object?> props(
         Map<String, Object?> progress, {
         String? onEnd = 'done',
+        String? onArrive,
       }) => {
         'src': 'char.glb',
         'height': 100,
         'progress': {'clip': 'Wave', ...progress},
         'on_progress_end': ?onEnd,
+        'on_progress_arrive': ?onArrive,
       };
 
       Future<_FakeController> ready(
@@ -838,6 +846,134 @@ void main() {
         expect(ends(sink), ['Dance']);
       });
 
+      testWidgets('목표에 도착하면 on_progress_arrive를 한 번 보내고 첫 목표는 보내지 않는다', (
+        tester,
+      ) async {
+        final sink = _Sink();
+        final source = _RecordingModelSource();
+        ModelSourceRegistry.install(source);
+        Map<String, Object?> at(num seconds) =>
+            props({'at': seconds}, onEnd: null, onArrive: 'arrived');
+
+        await _pump(tester, at(1), dispatch: sink);
+        await tester.pumpAndSettle();
+        expect(arrivals(sink), isEmpty);
+
+        await _pump(tester, at(3), dispatch: sink);
+        await tester.pump(const Duration(seconds: 1));
+        expect(arrivals(sink), isEmpty);
+        await tester.pumpAndSettle();
+        expect(arrivals(sink), [
+          {'clip': 'Wave', 'at': 3.0},
+        ]);
+
+        // A target replaced mid-way does not arrive; only the last one does.
+        await _pump(tester, at(4), dispatch: sink);
+        await tester.pump(const Duration(milliseconds: 500));
+        await _pump(tester, at(5), dispatch: sink);
+        await tester.pumpAndSettle();
+        expect(arrivals(sink), [
+          {'clip': 'Wave', 'at': 3.0},
+          {'clip': 'Wave', 'at': 5.0},
+        ]);
+      });
+
+      testWidgets('끝에 도착하면 on_progress_end 다음에 on_progress_arrive를 보낸다', (
+        tester,
+      ) async {
+        final sink = _Sink();
+        await ready(tester, const {'at': 5}, sink: sink);
+
+        await _pump(
+          tester,
+          props(const {'at': 6}, onArrive: 'arrived'),
+          dispatch: sink,
+        );
+        await tester.pumpAndSettle();
+
+        expect(sink.calls.map((call) => call.$1), ['done', 'arrived']);
+      });
+
+      testWidgets('바로 옮기거나 움직일 게 없으면 바로 도착한다', (tester) async {
+        final sink = _Sink();
+        final controller = await ready(tester, const {'at': 2}, sink: sink);
+        Map<String, Object?> target(Map<String, Object?> progress) =>
+            props(progress, onEnd: null, onArrive: 'arrived');
+
+        // speed 0 jumps.
+        await _pump(
+          tester,
+          target(const {'at': 4, 'speed': 0}),
+          dispatch: sink,
+        );
+        // Only the speed changes: the playhead already holds the target.
+        await _pump(
+          tester,
+          target(const {'at': 4, 'speed': 2}),
+          dispatch: sink,
+        );
+        // A new clip is shown at its target at once.
+        await _pump(tester, {
+          ...target(const {}),
+          'progress': {'clip': 'Jump', 'value': 0.5},
+        }, dispatch: sink);
+        await tester.pump();
+
+        expect(controller.poses.last, (
+          'Jump',
+          const Duration(milliseconds: 500),
+        ));
+        expect(arrivals(sink), [
+          {'clip': 'Wave', 'at': 4.0},
+          {'clip': 'Wave', 'at': 4.0},
+          {'clip': 'Jump', 'at': 0.5},
+        ]);
+      });
+
+      testWidgets('렌더러가 없거나 클립이 없으면 목표가 바뀔 때마다 바로 도착한다', (tester) async {
+        final sink = _Sink();
+        Map<String, Object?> missing(Object at) => {
+          ...props(const {}, onEnd: null, onArrive: 'arrived'),
+          'progress': {'clip': 'Dance', 'at': at},
+        };
+
+        await _pump(tester, missing(0), dispatch: sink);
+        await _pump(tester, missing(1), dispatch: sink);
+        await tester.pumpAndSettle();
+        expect(arrivals(sink), [
+          {'clip': 'Dance', 'at': null},
+        ]);
+
+        await tester.pumpWidget(const SizedBox());
+        sink.calls.clear();
+        ModelSourceRegistry.install(_RecordingModelSource());
+        await _pump(tester, missing(0), dispatch: sink);
+        await tester.pumpAndSettle();
+        await _pump(tester, missing(1), dispatch: sink);
+        await tester.pumpAndSettle();
+        expect(arrivals(sink), [
+          {'clip': 'Dance', 'at': null},
+        ]);
+      });
+
+      testWidgets('로딩 중에 목표가 바뀌면 붙자마자 도착한다', (tester) async {
+        final gate = Completer<void>();
+        ModelSourceRegistry.install(_RecordingModelSource(gate: gate));
+        final sink = _Sink();
+        Map<String, Object?> at(num seconds) =>
+            props({'at': seconds}, onEnd: null, onArrive: 'arrived');
+
+        await _pump(tester, at(0), dispatch: sink);
+        await _pump(tester, at(2), dispatch: sink);
+        expect(arrivals(sink), isEmpty);
+        gate.complete();
+        await tester.pumpAndSettle();
+
+        expect(arrivals(sink), [
+          {'clip': 'Wave', 'at': 2.0},
+        ]);
+      });
+
       testWidgets('클립이 바뀌면 새 클립의 목표로 바로 옮긴다', (tester) async {
         final controller = await ready(tester, const {'at': 3});
 
@@ -959,6 +1095,47 @@ void main() {
         await tester.tap(find.byKey(const Key('model-view')));
         await tester.pumpAndSettle();
         expect(controller.seconds, 6);
+
+        await tester.tap(find.byKey(const Key('model-view')));
+        await tester.pumpAndSettle();
+        expect(controller.seconds, 6);
+      });
+
+      testWidgets('움직이는 동안의 탭은 무시하고 도착한 뒤의 탭만 진행한다', (tester) async {
+        final source = _RecordingModelSource();
+        ModelSourceRegistry.install(source);
+
+        await pumpEngineTemplate(tester, {
+          '_type': 'model',
+          'src': 'char.glb',
+          'height': 100,
+          'progress': {'clip': 'Wave', 'at': r'${[0, 2, 6][min(taps, 2)]}'},
+          'on_progress_arrive': 'arrived',
+          '_scope': {
+            '_state': {'taps': 0, 'moving': false},
+            '_action': {
+              'tap_egg': {
+                '_type': 'set',
+                '_when': r'${not moving}',
+                'taps': r'${taps + 1}',
+                'moving': true,
+              },
+              'arrived': {'_type': 'set', 'moving': false},
+            },
+          },
+          '_on': {
+            'tap': {'do': 'tap_egg', 'ripple': false},
+          },
+        });
+        await tester.pumpAndSettle();
+        final controller = source.controllers.single;
+
+        await tester.tap(find.byKey(const Key('model-view')));
+        await tester.pump(const Duration(milliseconds: 500));
+        // Mid-way to 2s: this tap is ignored.
+        await tester.tap(find.byKey(const Key('model-view')));
+        await tester.pumpAndSettle();
+        expect(controller.seconds, 2);
 
         await tester.tap(find.byKey(const Key('model-view')));
         await tester.pumpAndSettle();

@@ -22,6 +22,7 @@ Renders a policy-backed 3D model driven by a state → clip table.
 | `auto_rotate` | `number` or `flag` | — | `0` | Yes | degrees per second the camera orbits on its own; `true` is 30. Pauses while the user drags. |
 | `progress` | map | — | `null` | Yes | holds one clip at a playhead the template sets: `{ clip, at, value, speed }`; see [Progress](#progress). |
 | `on_progress_end` | `text` | — | `null` | Yes | action dispatched when the `progress` playhead arrives at the clip's end. The event payload is `{ clip }`. |
+| `on_progress_arrive` | `text` | — | `null` | Yes | action dispatched when the `progress` playhead settles at a target the template changed. The event payload is `{ clip, at }`; see [Progress](#progress). |
 | `on_state_end` | map | — | `{}` | Yes | state name → action dispatched when that state's non-looping clip ends. The event payload is `{ state }`. |
 | `on_ready` | `text` | — | `null` | Yes | action dispatched once the model is ready for the current `src`. |
 | `on_error` | `text` | — | `null` | Yes | action dispatched once if the model fails to load for the current `src`. |
@@ -88,13 +89,15 @@ Gestures go through Flutter's gesture arena. `rotate: horizontal` claims only ho
 - The first target after a load shows at once, without playing: a model that mounts with `taps: 3` from the server appears at stage 3.
 - A target that moves on while the playhead is still on its way (fast taps) is followed without a jump; a target behind the playhead plays backward.
 - Targets are clamped to the clip. `on_progress_end` dispatches when the playhead arrives at the clip's end by moving there — not when a model loads already at its end.
+- `on_progress_arrive` dispatches once the playhead settles at a target the template changed: after playing there, or at once when it jumps (`speed: 0`, a new `clip`), already holds the target, or has no clip to play (`at` is then `null`). A target replaced mid-way does not arrive; only the last one does. The first target after a load does not dispatch, but a target changed while loading does once the clip attaches. At the clip's end it follows `on_progress_end`.
+- To ignore taps while the motion plays, gate the step on a state the arrival clears (see the example below). The gate lives in the template, so it can instead queue taps, or give ignored taps their own haptic.
 - Drive the progress clip from `progress` only. `states` may play other clips at the same time when they animate other parts of the model.
 
 ## Animation never blocks a flow
 
 Animation is decoration. When no renderer is installed, the model fails to load, or the model lacks a state's clip, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. While the model is still loading, a state waits and plays once it is ready.
 
-The same holds for `progress`: without the clip, a `value` that changes to 1 or more dispatches `on_progress_end` at once. An `at` target cannot be judged without the clip's length, so it never ends there; prefer `value` when a flow waits on the end. A target that reaches the end while the model is loading dispatches once the clip attaches there.
+The same holds for `progress`: without the clip, a `value` that changes to 1 or more dispatches `on_progress_end` at once. An `at` target cannot be judged without the clip's length, so it never ends there; prefer `value` when a flow waits on the end. A target that reaches the end while the model is loading dispatches once the clip attaches there. `on_progress_arrive` likewise dispatches at once on every target change when the clip cannot play, so a template gated on it never stalls.
 
 ## Examples
 
@@ -141,7 +144,7 @@ controls: { rotate: horizontal, return_ms: 400 }
 auto_rotate: 20
 ```
 
-A dispenser whose lever moves one stage per tap, through stops placed at the animation's beats:
+A dispenser whose lever moves one stage per tap, through stops placed at the animation's beats. Every tap buzzes, but a tap only advances once the previous stage has landed:
 
 ```yaml
 _type: model
@@ -151,13 +154,21 @@ progress:
   clip: Sequence
   at: '${[0, 1.1, 2.25, 3.6, 3.8, 6.2][min(taps, 5)]}'
 on_progress_end: reward
+on_progress_arrive: landed
 _scope:
   _state:
     taps: 0
+    moving: false
   _action:
     tap_lever:
+      - { _type: sys_haptic, variant: chip, _background: true }
+      - _type: set
+        _when: '${not moving}'
+        taps: '${taps + 1}'
+        moving: true
+    landed:
       _type: set
-      taps: '${taps + 1}'
+      moving: false
 _on:
   tap: { do: tap_lever, ripple: false }
 ```

@@ -41,6 +41,7 @@ import 'model_progress.dart';
 /// - `auto_rotate` (`number` or `flag`, default `0`) — degrees per second the camera orbits on its own (`true` is 30); pauses while the user drags.
 /// - `progress` (`map`, default `null`) — holds one clip at a playhead the template sets: `{ clip, at, value, speed }`. `at` is seconds into the clip, `value` a 0–1 fraction (`at` wins); the playhead plays toward a changed target at `speed` (default 1, the clip's own pace; 0 jumps). The first target after a load shows at once.
 /// - `on_progress_end` (`text`, default `null`) — action dispatched when the `progress` playhead arrives at the clip's end.
+/// - `on_progress_arrive` (`text`, default `null`) — action dispatched, with `{clip, at}`, when the playhead settles at a target the template changed: after playing there, at once when it jumps or nothing can play. A target replaced mid-way does not arrive. Lets a template ignore taps until the motion lands.
 /// - `on_state_end` (`map`, default `{}`) — state name → action dispatched when that state's non-looping clip ends.
 /// - `on_ready` (`text`, default `null`) — action dispatched once the model is ready for the current `src`.
 /// - `on_error` (`text`, default `null`) — action dispatched once if the model fails to load for the current `src`.
@@ -88,6 +89,7 @@ final class ModelWidget {
       autoRotate: parseAutoRotate(props['auto_rotate']),
       progress: ModelProgress.parse(props['progress']),
       onProgressEnd: PropsResolver.text(props['on_progress_end']),
+      onProgressArrive: PropsResolver.text(props['on_progress_arrive']),
       onStateEnd: _actionsOf(props['on_state_end']),
       onReady: PropsResolver.text(props['on_ready']),
       onError: PropsResolver.text(props['on_error']),
@@ -155,6 +157,7 @@ class _ModelView extends StatefulWidget {
     required this.autoRotate,
     required this.progress,
     required this.onProgressEnd,
+    required this.onProgressArrive,
     required this.onStateEnd,
     required this.onReady,
     required this.onError,
@@ -177,6 +180,7 @@ class _ModelView extends StatefulWidget {
   final double autoRotate;
   final ModelProgress? progress;
   final String? onProgressEnd;
+  final String? onProgressArrive;
   final Map<String, String> onStateEnd;
   final String? onReady;
   final String? onError;
@@ -220,6 +224,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
       vsync: this,
       onPose: (clip, time) => _controller?.setPose(clip, time),
       onEnd: _endProgressSoon,
+      onArrive: _arriveSoon,
     );
     _load();
   }
@@ -331,8 +336,9 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
 
   /// Shows [progress]'s target on the loaded clip. Without that clip the
   /// playhead stays detached and a `value` end dispatches at once, so flows
-  /// never wait on the renderer.
-  void _attachProgress(ModelProgress? progress) {
+  /// never wait on the renderer. A target the template [changed] (or moved
+  /// while loading) arrives at once, since it is shown without playing.
+  void _attachProgress(ModelProgress? progress, {bool changed = false}) {
     final moved = _movedWhileLoading;
     _movedWhileLoading = false;
     if (progress == null) {
@@ -353,6 +359,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
     if (duration == null && moved && progress.endsWithoutClip) {
       _endProgressSoon();
     }
+    if (moved || changed) _arriveSoon();
   }
 
   void _updateProgress(ModelProgress? old, ModelProgress? progress) {
@@ -368,10 +375,11 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
     }
     if (old?.clip != progress.clip || !_playhead.attached) {
       if (old?.clip != progress.clip) {
-        _attachProgress(progress);
-      } else if (reachesEnd) {
-        _endProgressSoon();
+        _attachProgress(progress, changed: true);
+        return;
       }
+      if (reachesEnd) _endProgressSoon();
+      _arriveSoon();
       return;
     }
     _playhead.retarget(progress);
@@ -384,6 +392,19 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
     scheduleMicrotask(() {
       if (!_isCurrent(generation)) return;
       _dispatch(widget.onProgressEnd, event: {'clip': clip});
+    });
+  }
+
+  /// Dispatches `on_progress_arrive` with where the playhead settled; with
+  /// no clip attached, the target cannot be placed and `at` is null.
+  void _arriveSoon() {
+    final generation = _generation;
+    final clip = widget.progress?.clip;
+    if (clip == null || widget.onProgressArrive == null) return;
+    final at = _playhead.attached ? _playhead.position : null;
+    scheduleMicrotask(() {
+      if (!_isCurrent(generation)) return;
+      _dispatch(widget.onProgressArrive, event: {'clip': clip, 'at': at});
     });
   }
 
