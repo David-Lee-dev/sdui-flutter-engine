@@ -68,8 +68,8 @@ final class ViewerPage {
 /// The viewer page: one full-bleed transparent `<model-viewer>` configured
 /// from the query string, bridged to Dart through `flutter_inappwebview`
 /// handlers (`sduiReady`, `sduiError`, `sduiFinished`, `sduiPlaying`) and
-/// driven by `sduiPlay(clip, loop, crossfadeMs)`, `sduiStop()` and
-/// `sduiCamera(yaw, pitch, zoom)`. The page has no camera controls of its
+/// driven by `sduiPlay(clip, loop, crossfadeMs)`, `sduiStop()`,
+/// `sduiPose(clip, seconds)` and `sduiCamera(yaw, pitch, zoom)`. The page has no camera controls of its
 /// own: the engine handles gestures and places the camera.
 @visibleForTesting
 const viewerHtml = '''<!doctype html>
@@ -101,6 +101,16 @@ const viewerHtml = '''<!doctype html>
     m.play({ repetitions: loop ? Infinity : 1, pingpong: false });
   };
   window.sduiStop = () => m.pause();
+  // Holds a clip at a time: switch clips first (applied on the next update),
+  // then seek while paused.
+  window.sduiPose = async (clip, seconds) => {
+    if (m.animationName !== clip) {
+      m.animationName = clip;
+      await m.updateComplete;
+    }
+    if (!m.paused) m.pause();
+    m.currentTime = seconds;
+  };
   // 105% is model-viewer's framed radius; zoom divides it.
   window.sduiCamera = (yaw, pitch, zoom) => {
     m.cameraOrbit = yaw + 'deg ' + (90 - pitch) + 'deg ' + (105 / zoom) + '%';

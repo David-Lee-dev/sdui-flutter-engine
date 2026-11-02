@@ -178,6 +178,10 @@ final class WebModelController implements SduiModelController {
   InAppWebViewController? _web;
   Widget? _view;
   List<String> _clips = const [];
+  Map<String, Duration> _durations = const {};
+  (String, Duration)? _pose;
+  bool _posing = false;
+  bool _poseAgain = false;
   ModelPlayback _playback = const ModelPlayback();
   bool _disposed = false;
   ModelCamera _camera = const ModelCamera();
@@ -193,6 +197,41 @@ final class WebModelController implements SduiModelController {
 
   @override
   ModelPlayback get playback => _playback;
+
+  @override
+  Duration? clipDuration(String clip) =>
+      _clips.contains(clip) ? _durations[clip] : null;
+
+  @override
+  void setPose(String clip, Duration time) {
+    _pose = (clip, time);
+    unawaited(_applyPose());
+  }
+
+  /// Sends [_pose] to the page, collapsing poses that arrive while one is
+  /// crossing the bridge into one follow-up, like [_place].
+  Future<void> _applyPose() async {
+    final web = _web;
+    if (web == null || !_pageReady || _disposed) return;
+    if (_posing) {
+      _poseAgain = true;
+      return;
+    }
+    _posing = true;
+    try {
+      do {
+        _poseAgain = false;
+        final (clip, time) = _pose!;
+        await web.evaluateJavascript(
+          source:
+              'sduiPose(${jsonEncode(clip)}, '
+              '${time.inMicroseconds / Duration.microsecondsPerSecond})',
+        );
+      } while (_poseAgain && !_disposed);
+    } finally {
+      _posing = false;
+    }
+  }
 
   @override
   Future<void> play(
@@ -304,11 +343,21 @@ final class WebModelController implements SduiModelController {
     _mark('webview');
     web.addJavaScriptHandler(
       handlerName: 'sduiReady',
-      callback: (args) {
+      callback: (args) async {
         final clips = args.isEmpty ? null : args.first;
         _clips = clips is List
             ? List.unmodifiable(clips.whereType<String>())
             : const [];
+        // The page only knows the playing clip's length; the bytes it loaded
+        // are cached, and carry every clip's.
+        try {
+          _durations = gltfClipDurations(
+            await _source.models.load(_request.src),
+          );
+        } on Object {
+          _durations = const {};
+        }
+        if (_disposed) return;
         _pageReady = true;
         unawaited(_place());
         _mark('ready');

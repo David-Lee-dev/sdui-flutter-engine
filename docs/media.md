@@ -45,7 +45,7 @@ on_end: finished
 
 ## 3D models
 
-See the full [`model` widget reference](widgets/custom/model.md). `ModelSource.controllerFor(ModelRequest(src))` returns an unloaded `SduiModelController` — a renderer-free contract (the engine owns gestures and drives the camera through `setCamera`), so a webview `<model-viewer>`, Filament, or SceneKit implementation can back it. The package ships no renderer: `modelSource` is optional, and without it `model` renders its `poster` image only.
+See the full [`model` widget reference](widgets/custom/model.md). `ModelSource.controllerFor(ModelRequest(src))` returns an unloaded `SduiModelController` — a renderer-free contract (the engine owns gestures and drives the camera through `setCamera`, and owns the playhead of a `progress` clip, posing it through `setPose`), so a webview `<model-viewer>`, Filament, or SceneKit implementation can back it. The package ships no renderer: `modelSource` is optional, and without it `model` renders its `poster` image only.
 
 The widget maps template states to clips (`states: { idle: { clip: Idle, loop: true }, jump: { clip: Jump, next: idle } }`), crossfades between them, follows `next` when a non-looping clip ends, and dispatches `on_state_end`. The poster shows until the model is ready and replaces it when loading fails. When the renderer is missing, fails, or lacks a clip, non-looping states end immediately so template flows never wait on rendering. `ModelSource.warmUp()` runs in the background after boot for renderer setup such as creating a webview.
 

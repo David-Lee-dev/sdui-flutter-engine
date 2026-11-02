@@ -9,6 +9,7 @@ import '../../../util/props_resolver.dart';
 import '../../contract/action_sink.dart';
 import '../primitive/image_widget.dart';
 import 'model_camera_rig.dart';
+import 'model_progress.dart';
 
 /// `model` — Renders a policy-backed 3D model driven by a state → clip table.
 ///
@@ -38,6 +39,8 @@ import 'model_camera_rig.dart';
 /// - `interactive` (`flag`, default `false`) — shorthand for `controls: { rotate: free }` when `controls` is absent.
 /// - `camera` (`map`, default `{}`) — the resting camera `{ yaw, pitch, zoom, duration_ms }`: degrees around (0 = front, positive toward the model's right), degrees above the horizon, magnification (1 frames the whole model); changes ease over `duration_ms` (default 300).
 /// - `auto_rotate` (`number` or `flag`, default `0`) — degrees per second the camera orbits on its own (`true` is 30); pauses while the user drags.
+/// - `progress` (`map`, default `null`) — holds one clip at a playhead the template sets: `{ clip, at, value, speed }`. `at` is seconds into the clip, `value` a 0–1 fraction (`at` wins); the playhead plays toward a changed target at `speed` (default 1, the clip's own pace; 0 jumps). The first target after a load shows at once.
+/// - `on_progress_end` (`text`, default `null`) — action dispatched when the `progress` playhead arrives at the clip's end.
 /// - `on_state_end` (`map`, default `{}`) — state name → action dispatched when that state's non-looping clip ends.
 /// - `on_ready` (`text`, default `null`) — action dispatched once the model is ready for the current `src`.
 /// - `on_error` (`text`, default `null`) — action dispatched once if the model fails to load for the current `src`.
@@ -83,6 +86,8 @@ final class ModelWidget {
       camera: camera,
       cameraDuration: cameraDuration,
       autoRotate: parseAutoRotate(props['auto_rotate']),
+      progress: ModelProgress.parse(props['progress']),
+      onProgressEnd: PropsResolver.text(props['on_progress_end']),
       onStateEnd: _actionsOf(props['on_state_end']),
       onReady: PropsResolver.text(props['on_ready']),
       onError: PropsResolver.text(props['on_error']),
@@ -148,6 +153,8 @@ class _ModelView extends StatefulWidget {
     required this.camera,
     required this.cameraDuration,
     required this.autoRotate,
+    required this.progress,
+    required this.onProgressEnd,
     required this.onStateEnd,
     required this.onReady,
     required this.onError,
@@ -168,6 +175,8 @@ class _ModelView extends StatefulWidget {
   final ModelCamera camera;
   final Duration cameraDuration;
   final double autoRotate;
+  final ModelProgress? progress;
+  final String? onProgressEnd;
   final Map<String, String> onStateEnd;
   final String? onReady;
   final String? onError;
@@ -177,10 +186,14 @@ class _ModelView extends StatefulWidget {
   State<_ModelView> createState() => _ModelViewState();
 }
 
-class _ModelViewState extends State<_ModelView>
-    with SingleTickerProviderStateMixin {
+class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
   SduiModelController? _controller;
   late final ModelCameraRig _rig;
+  late final ModelPlayhead _playhead;
+
+  /// Whether `progress` changed while the model was loading: a target that
+  /// is the clip's end then still dispatches once the clip attaches there.
+  bool _movedWhileLoading = false;
   _Phase _phase = _Phase.loading;
   int _generation = 0;
 
@@ -203,6 +216,11 @@ class _ModelViewState extends State<_ModelView>
       autoRotate: widget.autoRotate,
       onChanged: (camera) => _controller?.setCamera(camera),
     );
+    _playhead = ModelPlayhead(
+      vsync: this,
+      onPose: (clip, time) => _controller?.setPose(clip, time),
+      onEnd: _endProgressSoon,
+    );
     _load();
   }
 
@@ -212,6 +230,8 @@ class _ModelViewState extends State<_ModelView>
     _phase = _Phase.loading;
     _active = widget.state;
     _played = false;
+    _playhead.detach();
+    _movedWhileLoading = false;
     final source = ModelSourceRegistry.current;
     final src = widget.src;
     if (source == null || src == null) {
@@ -241,12 +261,14 @@ class _ModelViewState extends State<_ModelView>
       await controller.initialize();
       if (!_isCurrent(generation)) return;
       setState(() => _phase = _Phase.ready);
+      _attachProgress(widget.progress);
       _dispatch(widget.onReady);
     } catch (error) {
       if (!_isCurrent(generation)) return;
       EngineLog.warn('model "$src" failed to load: $error', tag: 'model');
       _disposeController();
       setState(() => _phase = _Phase.unavailable);
+      _attachProgress(widget.progress);
       _dispatch(widget.onError);
     }
     _enter(_active);
@@ -307,6 +329,64 @@ class _ModelViewState extends State<_ModelView>
     });
   }
 
+  /// Shows [progress]'s target on the loaded clip. Without that clip the
+  /// playhead stays detached and a `value` end dispatches at once, so flows
+  /// never wait on the renderer.
+  void _attachProgress(ModelProgress? progress) {
+    final moved = _movedWhileLoading;
+    _movedWhileLoading = false;
+    if (progress == null) {
+      _playhead.detach();
+      return;
+    }
+    final controller = _controller;
+    final duration = controller != null && _phase == _Phase.ready
+        ? controller.clipDuration(progress.clip)
+        : null;
+    if (duration == null && controller != null && _phase == _Phase.ready) {
+      EngineLog.warn(
+        'model has no clip "${progress.clip}" for progress',
+        tag: 'model',
+      );
+    }
+    _playhead.attach(progress, duration, endIfThere: moved);
+    if (duration == null && moved && progress.endsWithoutClip) {
+      _endProgressSoon();
+    }
+  }
+
+  void _updateProgress(ModelProgress? old, ModelProgress? progress) {
+    if (progress == null) {
+      _playhead.detach();
+      return;
+    }
+    final reachesEnd =
+        progress.endsWithoutClip && !(old?.endsWithoutClip ?? false);
+    if (_phase == _Phase.loading) {
+      if (old != progress) _movedWhileLoading = true;
+      return;
+    }
+    if (old?.clip != progress.clip || !_playhead.attached) {
+      if (old?.clip != progress.clip) {
+        _attachProgress(progress);
+      } else if (reachesEnd) {
+        _endProgressSoon();
+      }
+      return;
+    }
+    _playhead.retarget(progress);
+  }
+
+  void _endProgressSoon() {
+    final generation = _generation;
+    final clip = widget.progress?.clip;
+    if (clip == null) return;
+    scheduleMicrotask(() {
+      if (!_isCurrent(generation)) return;
+      _dispatch(widget.onProgressEnd, event: {'clip': clip});
+    });
+  }
+
   void _dispatch(String? action, {Object? event}) {
     if (action != null) widget.dispatch?.handle(action, event: event);
   }
@@ -324,6 +404,9 @@ class _ModelViewState extends State<_ModelView>
     if (oldWidget.src != widget.src) {
       _load();
       return;
+    }
+    if (oldWidget.progress != widget.progress) {
+      _updateProgress(oldWidget.progress, widget.progress);
     }
     // A template that follows `next` (e.g. resets `mood` to idle in
     // on_state_end) catches up to a state already entered; only `state_key`
@@ -347,6 +430,7 @@ class _ModelViewState extends State<_ModelView>
   void dispose() {
     _disposeController();
     _rig.dispose();
+    _playhead.dispose();
     super.dispose();
   }
 

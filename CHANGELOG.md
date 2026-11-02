@@ -12,9 +12,15 @@
   pinch zoom, sensitivity, inertia, `return_ms`), `auto_rotate` (degrees per
   second) and the `interactive` shorthand turn into one `ModelCamera` per
   frame, so every renderer moves the same way. Without `controls`, gestures
-  pass to ancestors. See docs/widgets/custom/model.md.
+  pass to ancestors. `progress: { clip, at | value, speed }` holds one clip at
+  a playhead the template sets — a tap counter can step through one long
+  animation — playing toward each new target at the clip's pace (reversing
+  when it moves back) and showing the first target after a load at once;
+  `on_progress_end` dispatches when the playhead arrives at the clip's end.
+  See docs/widgets/custom/model.md.
 - Added the `ModelSource` / `SduiModelController` / `ModelCamera` contract
-  (renderers implement `setCamera`; their views never take pointers) and the
+  (renderers implement `setCamera`, `clipDuration` and `setPose`; their views
+  never take pointers) and the
   optional
   `Sdui.initialize(modelSource:)` / `Engine.initialize(modelSource:)` seam.
   The package ships no renderer; without a source `model` renders its

@@ -119,6 +119,13 @@ final class FilamentModelController implements SduiModelController {
   bool _placeAgain = false;
   Timer? _clipEnd;
   List<String> _clips = const [];
+  Map<String, Duration> _durations = const {};
+
+  /// The clip index a [play] started, until [stop] or a pose of that clip.
+  int? _playing;
+  (String, Duration)? _pose;
+  bool _posing = false;
+  bool _poseAgain = false;
   ModelPlayback _playback = const ModelPlayback();
   bool _disposed = false;
   Widget? _view;
@@ -168,7 +175,17 @@ final class FilamentModelController implements SduiModelController {
       if (_disposed) return;
       await asset.transformToUnitCube();
       _asset = asset;
-      _clips = List.unmodifiable(await asset.getGltfAnimationNames());
+      final clips = await asset.getGltfAnimationNames();
+      _clips = List.unmodifiable(clips);
+      _durations = {
+        for (var i = 0; i < clips.length; i++)
+          clips[i]: Duration(
+            microseconds:
+                (await asset.getGltfAnimationDuration(i) *
+                        Duration.microsecondsPerSecond)
+                    .round(),
+          ),
+      };
       stats.mark('asset');
 
       await _frame(_framedAspect ?? 1);
@@ -246,6 +263,47 @@ final class FilamentModelController implements SduiModelController {
   List<String> get clips => _clips;
 
   @override
+  Duration? clipDuration(String clip) => _durations[clip];
+
+  @override
+  void setPose(String clip, Duration time) {
+    _pose = (clip, time);
+    unawaited(_applyPose());
+  }
+
+  /// Holds the asset at [_pose]. Like [_place], placements in flight
+  /// collapse later poses into one follow-up with the latest.
+  Future<void> _applyPose() async {
+    final asset = _asset;
+    if (asset == null || _disposed) return;
+    if (_posing) {
+      _poseAgain = true;
+      return;
+    }
+    _posing = true;
+    try {
+      do {
+        _poseAgain = false;
+        final (clip, time) = _pose!;
+        final index = _clips.indexOf(clip);
+        if (index < 0) continue;
+        // A playing clip would overwrite the pose on its next frame.
+        if (_playing == index) {
+          _clipEnd?.cancel();
+          _playing = null;
+          await asset.stopGltfAnimation(index);
+        }
+        await asset.setGltfAnimationTime(
+          index,
+          time.inMicroseconds / Duration.microsecondsPerSecond,
+        );
+      } while (_poseAgain && !_disposed);
+    } finally {
+      _posing = false;
+    }
+  }
+
+  @override
   ModelPlayback get playback => _playback;
 
   @override
@@ -265,6 +323,7 @@ final class FilamentModelController implements SduiModelController {
       ),
     );
     if (asset == null || index < 0) return;
+    _playing = index;
     await asset.playGltfAnimation(
       index,
       loop: loop,
@@ -293,6 +352,7 @@ final class FilamentModelController implements SduiModelController {
     _clipEnd?.cancel();
     final asset = _asset;
     final index = _clips.indexOf(_playback.clip ?? '');
+    _playing = null;
     if (asset != null && index >= 0) await asset.stopGltfAnimation(index);
     _update(
       ModelPlayback(

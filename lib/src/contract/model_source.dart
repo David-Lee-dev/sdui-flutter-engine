@@ -79,6 +79,17 @@ abstract class SduiModelController {
   /// Stops animation playback.
   Future<void> stop();
 
+  /// The length of [clip] in the loaded model, or null when the model has no
+  /// such clip or is not loaded.
+  Duration? clipDuration(String clip);
+
+  /// Holds [clip] at [time] without playing it: the engine owns the playhead
+  /// of a `progress` clip and calls this on every frame it moves, after
+  /// [initialize]. A renderer stops its own playback of [clip] first, keeps
+  /// the latest value, and may drop intermediate values while one is being
+  /// applied.
+  void setPose(String clip, Duration time);
+
   /// Places the camera. The engine calls this once right after creation and
   /// then on every frame the camera moves, before and after [initialize]; a
   /// renderer keeps the latest value and applies it once the model is

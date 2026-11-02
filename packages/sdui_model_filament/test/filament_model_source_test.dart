@@ -67,4 +67,12 @@ void main() {
     expect(notified, 2);
     await model.dispose();
   });
+
+  test('로드 전에는 클립 길이가 없고 포즈는 실패 없이 무시한다', () async {
+    final model = await controller();
+
+    expect(model.clipDuration('Wave'), isNull);
+    model.setPose('Wave', const Duration(seconds: 1));
+    await model.dispose();
+  });
 }

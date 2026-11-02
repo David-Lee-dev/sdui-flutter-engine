@@ -20,6 +20,8 @@ Renders a policy-backed 3D model driven by a state → clip table.
 | `interactive` | `flag` | — | `false` | Yes | shorthand for `controls: { rotate: free }` when `controls` is absent. |
 | `camera` | map | — | `{}` | Yes | the resting camera `{ yaw, pitch, zoom, duration_ms }`; see [Camera and gestures](#camera-and-gestures). |
 | `auto_rotate` | `number` or `flag` | — | `0` | Yes | degrees per second the camera orbits on its own; `true` is 30. Pauses while the user drags. |
+| `progress` | map | — | `null` | Yes | holds one clip at a playhead the template sets: `{ clip, at, value, speed }`; see [Progress](#progress). |
+| `on_progress_end` | `text` | — | `null` | Yes | action dispatched when the `progress` playhead arrives at the clip's end. The event payload is `{ clip }`. |
 | `on_state_end` | map | — | `{}` | Yes | state name → action dispatched when that state's non-looping clip ends. The event payload is `{ state }`. |
 | `on_ready` | `text` | — | `null` | Yes | action dispatched once the model is ready for the current `src`. |
 | `on_error` | `text` | — | `null` | Yes | action dispatched once if the model fails to load for the current `src`. |
@@ -37,7 +39,8 @@ The engine ships no renderer. The app installs one through `Sdui.initialize(mode
 
 - `ModelSource.controllerFor(ModelRequest(src))` returns an unloaded `SduiModelController`.
 - The widget calls `initialize()`, reads `clips`, and drives `play(clip, loop:, crossfade:)`.
-- The widget calls `setCamera(ModelCamera(yaw, pitch, zoom))` right after creation and on every frame the camera moves. The renderer's view never receives pointers; the engine handles gestures, so every renderer moves the same way for the same template.
+- The widget calls `setCamera(ModelCamera(yaw, pitch, zoom))` right after creation and on every frame the camera moves.
+- For `progress`, the widget reads `clipDuration(clip)` once the model is ready and calls `setPose(clip, time)` on every frame the playhead moves. The renderer stops its own playback of that clip and holds the pose. The renderer's view never receives pointers; the engine handles gestures, so every renderer moves the same way for the same template.
 - A non-looping clip holds its last frame and advances `ModelPlayback.completions`; the engine detects a clip end by that counter.
 - `ModelSource.warmUp()` runs once in the background after boot, so a renderer can do its expensive first-time setup (such as creating a webview) before the first `model` mounts.
 
@@ -71,9 +74,27 @@ Bind `camera` to state to turn the model from an action, e.g. `camera: { yaw: '$
 
 Gestures go through Flutter's gesture arena. `rotate: horizontal` claims only horizontal drags, so an enclosing scroll view still scrolls vertically over the model. `free`, `vertical` and any `zoom` claim drags in their directions over the model, so use them where the model is not inside a scroll view in that direction. Taps are never claimed, so `_on: tap` on the model or an ancestor still fires.
 
+## Progress
+
+`progress` turns one long clip into steps the template controls, e.g. a lever that moves a stage per tap. The engine owns the playhead: it shows the clip at the target time and, when the target changes, plays toward it at the clip's own pace and stops there.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `clip` | — | the animation to hold; required. |
+| `at` | — | target in seconds into the clip. Wins over `value`. |
+| `value` | `0` | target as a fraction of the clip, 0 to 1. |
+| `speed` | `1` | clip seconds played per second toward a new target, in either direction; `0` jumps. |
+
+- The first target after a load shows at once, without playing: a model that mounts with `taps: 3` from the server appears at stage 3.
+- A target that moves on while the playhead is still on its way (fast taps) is followed without a jump; a target behind the playhead plays backward.
+- Targets are clamped to the clip. `on_progress_end` dispatches when the playhead arrives at the clip's end by moving there — not when a model loads already at its end.
+- Drive the progress clip from `progress` only. `states` may play other clips at the same time when they animate other parts of the model.
+
 ## Animation never blocks a flow
 
 Animation is decoration. When no renderer is installed, the model fails to load, or the model lacks a state's clip, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. While the model is still loading, a state waits and plays once it is ready.
+
+The same holds for `progress`: without the clip, a `value` that changes to 1 or more dispatches `on_progress_end` at once. An `at` target cannot be judged without the clip's length, so it never ends there; prefer `value` when a flow waits on the end. A target that reaches the end while the model is loading dispatches once the clip attaches there.
 
 ## Examples
 
@@ -118,6 +139,27 @@ height: 200
 camera: { pitch: 15 }
 controls: { rotate: horizontal, return_ms: 400 }
 auto_rotate: 20
+```
+
+A dispenser whose lever moves one stage per tap, through stops placed at the animation's beats:
+
+```yaml
+_type: model
+src: /assets/dispenser.glb
+height: 200
+progress:
+  clip: Sequence
+  at: '${[0, 1.1, 2.25, 3.6, 3.8, 6.2][min(taps, 5)]}'
+on_progress_end: reward
+_scope:
+  _state:
+    taps: 0
+  _action:
+    tap_lever:
+      _type: set
+      taps: '${taps + 1}'
+_on:
+  tap: { do: tap_lever, ripple: false }
 ```
 
 ## Pitfalls & related
