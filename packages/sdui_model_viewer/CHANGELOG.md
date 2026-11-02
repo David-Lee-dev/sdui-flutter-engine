@@ -16,3 +16,6 @@
 - `progress` poses: `setPose` pauses `<model-viewer>` on the clip and sets its
   `currentTime`; clip lengths come from the cached `.glb` through
   `gltfClipDurations`.
+- Models persist across launches through `ModelDiskCache` (`diskCache`,
+  default on): a model seen once opens from disk, revalidated in the
+  background.

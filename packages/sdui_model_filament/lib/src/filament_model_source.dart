@@ -28,6 +28,10 @@ import 'render_gate.dart';
 /// [warmUp] creates the Filament engine ahead of the first mount. Frames
 /// render only while some model changes or plays ([RenderGate]).
 ///
+/// Fetched models persist in the app's cache directory ([ModelDiskCache]),
+/// so a model seen once opens without the network on later launches;
+/// `diskCache: false` keeps them in memory only.
+///
 /// [debugOverlay] (default: `--dart-define=SDUI_MODEL_DEBUG=true`) paints each
 /// view's load timeline, app memory and frame times over it for measurement.
 final class FilamentModelSource extends ModelSource {
@@ -39,12 +43,14 @@ final class FilamentModelSource extends ModelSource {
     http.Client? client,
     AssetBundle? bundle,
     int cachedModels = 4,
+    bool diskCache = true,
     this.debugOverlay = const bool.fromEnvironment('SDUI_MODEL_DEBUG'),
   }) : models = ModelBytesCache(
          baseUrl: baseUrl,
          client: client,
          bundle: bundle,
          maxEntries: cachedModels,
+         disk: diskCache ? ModelDiskCache() : null,
        );
 
   /// Model srcs loaded into memory during [warmUp].

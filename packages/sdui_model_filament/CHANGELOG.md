@@ -13,3 +13,6 @@
   loop pauses 300 ms after the last camera move, pose or load and stays
   running while a clip plays. On a Galaxy S25 a still model went from ~126
   composited frames and ~80% of a core per second to ~2 frames and ~4–8%.
+- Models persist across launches through `ModelDiskCache` (`diskCache`,
+  default on): a model seen once opens from disk, revalidated in the
+  background.

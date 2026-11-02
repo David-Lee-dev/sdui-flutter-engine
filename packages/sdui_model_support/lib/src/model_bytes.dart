@@ -1,5 +1,10 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+
+import 'model_disk_cache.dart';
 
 /// Loads model files by template `src` and keeps the most recent ones in
 /// memory, so a prefetched or revisited model mounts without the network.
@@ -9,16 +14,26 @@ import 'package:http/http.dart' as http;
 /// - `/path` is resolved against [baseUrl] (e.g. the API origin serving
 ///   `/assets/...`) and fetched;
 /// - anything else is a bundled asset key.
+///
+/// With a [disk] cache, fetched models also persist across launches: a
+/// stored copy is served at once and revalidated in the background against
+/// the server's ETag / Last-Modified, so a file replaced at the same URL
+/// shows from the next launch.
 final class ModelBytesCache {
   ModelBytesCache({
     this.baseUrl,
     http.Client? client,
     AssetBundle? bundle,
     this.maxEntries = 4,
+    this.disk,
   }) : _client = client ?? http.Client(),
        _bundle = bundle;
 
   final Uri? baseUrl;
+
+  /// Where fetched models persist across launches; null keeps them in
+  /// memory only.
+  final ModelDiskCache? disk;
 
   /// How many models stay in memory; the least recently used one is dropped.
   final int maxEntries;
@@ -28,6 +43,9 @@ final class ModelBytesCache {
 
   /// Insertion-ordered: the first key is the least recently used.
   final _entries = <String, Future<Uint8List>>{};
+
+  /// Disk writes and revalidations still running.
+  final _background = <Future<void>>{};
 
   /// The network URL for [src], or null when [src] is a bundled asset.
   Uri? resolve(String src) {
@@ -72,10 +90,53 @@ final class ModelBytesCache {
       final data = await (_bundle ?? rootBundle).load(src);
       return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     }
+    final stored = await disk?.read(url);
+    if (stored != null) {
+      _inBackground(_revalidate(url, stored));
+      return stored.bytes;
+    }
     final response = await _client.get(url);
     if (response.statusCode != 200) {
       throw http.ClientException('HTTP ${response.statusCode}', url);
     }
+    _inBackground(_store(url, response));
     return response.bodyBytes;
+  }
+
+  /// Asks the server whether [stored] is current; a changed file replaces it
+  /// for the next launch. Offline, the stored copy stays.
+  Future<void> _revalidate(Uri url, StoredModel stored) async {
+    try {
+      final response = await _client.get(
+        url,
+        headers: {
+          'If-None-Match': ?stored.etag,
+          'If-Modified-Since': ?stored.lastModified,
+        },
+      );
+      if (response.statusCode == 200) await _store(url, response);
+    } on Object {
+      // Offline or failing: keep serving the stored copy.
+    }
+  }
+
+  Future<void> _store(Uri url, http.Response response) async => disk?.write(
+    url,
+    response.bodyBytes,
+    etag: response.headers['etag'],
+    lastModified: response.headers['last-modified'],
+  );
+
+  void _inBackground(Future<void> work) {
+    _background.add(work);
+    unawaited(work.whenComplete(() => _background.remove(work)));
+  }
+
+  /// Completes once disk writes and revalidations started so far finish.
+  @visibleForTesting
+  Future<void> settle() async {
+    while (_background.isNotEmpty) {
+      await Future.wait([..._background]);
+    }
   }
 }
