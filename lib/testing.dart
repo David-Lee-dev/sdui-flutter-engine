@@ -18,6 +18,7 @@ import 'src/contract/network_client.dart';
 import 'src/runtime/driver/net_driver.dart';
 import 'src/runtime/driver/driver_registry.dart';
 import 'src/runtime/media/image_source_registry.dart';
+import 'src/runtime/media/model_source_registry.dart';
 import 'src/runtime/media/shader_registry.dart';
 import 'src/runtime/media/video_source_registry.dart';
 import 'src/runtime/motion/motion_factory.dart';
@@ -59,5 +60,6 @@ void resetEngineForTest() {
   PageTransitionFactory.reset();
   ImageSourceRegistry.reset();
   VideoSourceRegistry.reset();
+  ModelSourceRegistry.reset();
   ShaderRegistry.reset();
 }

@@ -8,6 +8,7 @@ import '../contract/error_observer.dart';
 import '../contract/network_client.dart';
 import '../shell/sdui_service.dart';
 import '../contract/image_source.dart';
+import '../contract/model_source.dart';
 import '../contract/app_storage.dart';
 import '../contract/screen_loader.dart';
 import '../contract/secure_storage.dart';
@@ -73,6 +74,10 @@ final class Sdui {
   /// [ExternalCommand]s): each command `type` becomes a template-callable
   /// `{ _type: ... }` and the engine routes to it knowing nothing else.
   ///
+  /// [modelSource] is optional: it renders the `model` widget's 3D surface,
+  /// and without it `model` shows its poster only. Its warm-up runs in the
+  /// background after boot.
+  ///
   /// [preloadScreens] are loaded through [screenLoader] into an SDK-owned
   /// cache once configuration succeeds: a cached screen renders on its first
   /// frame and applies its root `_transition`. The returned future completes
@@ -87,6 +92,7 @@ final class Sdui {
     Map<String, NetworkClient> networkProtocols = const {},
     required ImageSource imageSource,
     required VideoSource videoSource,
+    ModelSource? modelSource,
     required AppStorage appStorage,
     required SecureStorage secureStorage,
     List<SduiService> services = const [],
@@ -117,6 +123,7 @@ final class Sdui {
     Engine.initialize(
       imageSource: imageSource,
       videoSource: videoSource,
+      modelSource: modelSource,
       appStorage: appStorage,
       secureStorage: secureStorage,
       networkClient: networkClient,

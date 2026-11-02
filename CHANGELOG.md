@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.21.0
+
+- Added the `model` widget: a policy-backed 3D model driven by a state → clip
+  table. `states` maps state names to `{ clip, loop, next }`; changing
+  `state` (or `state_key`, to replay the same state) plays that clip with a
+  `crossfade_ms` blend, `next` follows a finished non-looping clip, and
+  `on_state_end` dispatches per state. `poster` shows until the model is
+  ready and replaces it on failure. `interactive: false` (default) passes
+  gestures to ancestors. See docs/widgets/custom/model.md.
+- Added the `ModelSource` / `SduiModelController` contract and the optional
+  `Sdui.initialize(modelSource:)` / `Engine.initialize(modelSource:)` seam.
+  The package ships no renderer; without a source `model` renders its
+  poster, and non-looping states end at once so flows never wait on
+  rendering. `ModelSource.warmUp()` runs in the background after boot.
+  Existing apps need no changes.
+
 ## 0.20.4
 
 - A `cond` with only an `_else` branch, the layer templates use to nest

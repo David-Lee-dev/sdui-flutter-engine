@@ -1,6 +1,6 @@
 # Media
 
-The `image` and `video` widgets delegate source resolution to app-installed policies while retaining template-facing presentation behavior in the engine.
+The `image`, `video`, and `model` widgets delegate source resolution to app-installed policies while retaining template-facing presentation behavior in the engine.
 
 ## Images
 
@@ -43,3 +43,19 @@ fit: contain
 on_end: finished
 ```
 
+## 3D models
+
+See the full [`model` widget reference](widgets/custom/model.md). `ModelSource.controllerFor(ModelRequest(src, interactive, autoRotate))` returns an unloaded `SduiModelController` — a renderer-free contract, so a webview `<model-viewer>`, Filament, or SceneKit implementation can back it. The package ships no renderer: `modelSource` is optional, and without it `model` renders its `poster` image only.
+
+The widget maps template states to clips (`states: { idle: { clip: Idle, loop: true }, jump: { clip: Jump, next: idle } }`), crossfades between them, follows `next` when a non-looping clip ends, and dispatches `on_state_end`. The poster shows until the model is ready and replaces it when loading fails. When the renderer is missing, fails, or lacks a clip, non-looping states end immediately so template flows never wait on rendering. `ModelSource.warmUp()` runs in the background after boot for renderer setup such as creating a webview.
+
+```yaml
+_type: model
+src: /assets/character.glb
+poster: /assets/character.png
+height: 200
+state: '${mood}'
+states:
+  idle: { clip: Idle, loop: true }
+  jump: { clip: Jump, next: idle }
+```

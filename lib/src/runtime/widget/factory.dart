@@ -35,6 +35,7 @@ import 'catalog/custom/speech_balloon_widget.dart';
 import 'catalog/custom/serpentine_row_widget.dart';
 import 'catalog/custom/scratch_card_widget.dart';
 import 'catalog/custom/serpentine_widget.dart';
+import 'catalog/custom/model_widget.dart';
 import 'catalog/custom/shape_widget.dart';
 import 'catalog/custom/spin_grid_widget.dart';
 import 'catalog/primitive/divider_widget.dart';
@@ -224,6 +225,7 @@ final class WidgetFactory {
     'grid_view': EagerSpec(GridViewWidget.build),
     'page_view': ActionSpec(PageViewWidget.build),
     'video': ActionSpec(VideoWidget.build),
+    'model': ActionSpec(ModelWidget.build),
     'scrollbar': EagerSpec(ScrollbarWidget.build),
     'refresh_indicator': ActionSpec(RefreshIndicatorWidget.build),
     'dismissible': ActionSpec(DismissibleWidget.build),
