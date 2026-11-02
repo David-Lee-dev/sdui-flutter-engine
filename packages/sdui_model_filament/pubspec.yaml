@@ -15,7 +15,7 @@ dependencies:
   http: ^1.2.0
   thermion_flutter: ^0.5.0
   # Paths while the renderers and the `model` widget land together; switch to
-  # the hosted versions (sdui_engine ^0.15.0, sdui_model_support ^0.1.0)
+  # the hosted versions (sdui_engine ^0.21.0, sdui_model_support ^0.1.0)
   # before publishing.
   sdui_engine:
     path: ../..
