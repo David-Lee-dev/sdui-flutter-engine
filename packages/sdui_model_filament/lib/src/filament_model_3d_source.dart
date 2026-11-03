@@ -4,9 +4,11 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:sdui_engine/sdui_engine.dart';
-import 'package:sdui_model_support/sdui_model_support.dart';
 import 'package:thermion_flutter/thermion_flutter.dart' hide Texture, View;
 
+import 'load_stats.dart';
+import 'model_bytes.dart';
+import 'model_disk_cache.dart';
 import 'render_gate.dart';
 
 /// A [Model3dSource] that renders each `model_3d` natively with Filament (through
@@ -15,7 +17,8 @@ import 'render_gate.dart';
 /// ```dart
 /// Sdui.initialize(
 ///   model3dSource: FilamentModel3dSource(
-///     baseUrl: Uri.parse(apiUrl),       // resolves `/assets/...` srcs
+///     client: gateway.httpClient,       // the app's gateway client
+///     baseUrl: Uri.parse(apiUrl),       // the gateway origin for `/assets/...`
 ///     prefetch: ['/assets/character.glb'],
 ///   ),
 ///   ...
@@ -28,6 +31,10 @@ import 'render_gate.dart';
 /// [warmUp] creates the Filament engine ahead of the first mount. Frames
 /// render only while some model changes or plays ([RenderGate]).
 ///
+/// Models are fetched through `client`, the app's gateway client, and only
+/// from `baseUrl`'s origin, so they take the same pinned, authenticated route
+/// as the app's other requests; there is no default client.
+///
 /// Fetched models persist in the app's cache directory ([ModelDiskCache]),
 /// so a model seen once opens without the network on later launches;
 /// `diskCache: false` keeps them in memory only.
@@ -36,16 +43,16 @@ import 'render_gate.dart';
 /// view's load timeline, app memory and frame times over it for measurement.
 final class FilamentModel3dSource extends Model3dSource {
   FilamentModel3dSource({
-    Uri? baseUrl,
+    required http.Client client,
+    required Uri baseUrl,
     this.prefetch = const [],
     this.loadTimeout = const Duration(seconds: 30),
     this.iblIntensity = 30000,
-    http.Client? client,
     AssetBundle? bundle,
     int cachedModels = 4,
     bool diskCache = true,
     this.debugOverlay = const bool.fromEnvironment('SDUI_MODEL_DEBUG'),
-  }) : models = ModelBytesCache(
+  }) : _models = ModelBytesCache(
          baseUrl: baseUrl,
          client: client,
          bundle: bundle,
@@ -66,7 +73,7 @@ final class FilamentModel3dSource extends Model3dSource {
   /// Paints [ModelDebugOverlay] over every view.
   final bool debugOverlay;
 
-  final ModelBytesCache models;
+  final ModelBytesCache _models;
 
   /// Filament's neutral studio environment (`lightroom_ibl.ktx`, Apache-2.0).
   static const iblAsset =
@@ -102,7 +109,7 @@ final class FilamentModel3dSource extends Model3dSource {
   @override
   Future<void> warmUp() async {
     final clock = Stopwatch()..start();
-    final loads = [for (final src in prefetch) models.load(src)];
+    final loads = [for (final src in prefetch) _models.load(src)];
     // The first viewer creates the engine and render thread, which outlive
     // it; later viewers attach to them.
     final viewer = await ThermionFlutterPlugin.createViewer();
@@ -164,9 +171,9 @@ final class FilamentModel3dController implements SduiModel3dController {
   Future<void> _load() async {
     try {
       final src = _request.src;
-      final cached = _source.models.contains(src);
+      final cached = _source._models.contains(src);
       final bytesStarted = stats.elapsedMs;
-      final bytes = _source.models.load(src).then((data) {
+      final bytes = _source._models.load(src).then((data) {
         _ifAlive(
           () => stats.served(
             bytes: data.length,

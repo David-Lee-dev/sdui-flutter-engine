@@ -1,7 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:sdui_engine/sdui_engine.dart';
 import 'package:sdui_model_filament/sdui_model_filament.dart';
+import 'package:sdui_model_filament/src/load_stats.dart' show ModelDebugOverlay;
 
 void main() {
   // The Filament engine is native; these cover the Dart surface the `model_3d`
@@ -10,6 +13,8 @@ void main() {
     bool debugOverlay = false,
   }) async =>
       await FilamentModel3dSource(
+            client: MockClient((_) async => http.Response('', 404)),
+            baseUrl: Uri.parse('http://host/'),
             debugOverlay: debugOverlay,
           ).controllerFor(const Model3dRequest(src: '/a.glb'))
           as FilamentModel3dController;

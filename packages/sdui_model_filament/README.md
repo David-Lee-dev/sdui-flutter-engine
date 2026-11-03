@@ -7,7 +7,8 @@ through [`thermion_flutter`](https://pub.dev/packages/thermion_flutter) 0.5
 ```dart
 Sdui.initialize(
   model3dSource: FilamentModel3dSource(
-    baseUrl: Uri.parse(apiUrl),          // resolves `/assets/...` srcs
+    client: gateway.httpClient,          // the app's gateway client (NemoClient)
+    baseUrl: Uri.parse(apiUrl),          // the gateway origin for `/assets/...`
     prefetch: ['/assets/character.glb'], // loaded during warm-up
   ),
   // ...
@@ -19,8 +20,13 @@ Sdui.initialize(
 - The engine owns gestures and auto-rotation (`camera`, `controls`,
   `auto_rotate`); `setCamera` orbits Filament's camera around the model,
   collapsing per-frame calls while one is in flight.
-- Model bytes come from `ModelBytesCache` (`sdui_model_support`): `src`
-  resolution and prefetch match `sdui_model_viewer`.
+- Models download through `client`, the app's gateway client, so they take the
+  same pinned, authenticated route as the app's other requests. It is required:
+  there is no default client. `/path` srcs resolve against `baseUrl`; a full
+  URL loads only on `baseUrl`'s origin, so gateway credentials never reach
+  another host. Fetched models persist across launches in the app's cache
+  directory (64 MB, least recently used first), revalidated in the background
+  by ETag; `diskCache: false` keeps them in memory only.
 - Clips play with `crossfade`; Filament reports no end event, so a
   non-looping clip completes after its duration.
 - Lighting is Filament's neutral studio IBL (`assets/lightroom_ibl.ktx`,
@@ -40,5 +46,6 @@ Build: thermion uses Dart build hooks. The first build downloads prebuilt
 Filament static libraries from thermion's Cloudflare R2 bucket and caches
 them. iOS 13+.
 
-Status: Dart surface covered by widget tests (view before load, gesture
-arena, overlay, playback state). The native path has not yet run on a device.
+Status: Dart surface covered by widget tests (view before load, overlay,
+playback state, byte and disk caches, render gate). The native path runs on a
+Galaxy S25, a Galaxy A32 and an iPhone 13 mini.

@@ -2,7 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:sdui_model_support/sdui_model_support.dart';
+import 'package:sdui_model_filament/src/model_bytes.dart';
 
 final class _Bundle extends CachingAssetBundle {
   _Bundle(this.assets);
@@ -24,6 +24,7 @@ void main() {
     group('resolve', () {
       final cache = ModelBytesCache(
         baseUrl: Uri.parse('http://192.168.0.2:4103/'),
+        client: MockClient((_) async => http.Response('', 200)),
       );
 
       test('http(s) src는 그대로 쓴다', () {
@@ -42,11 +43,28 @@ void main() {
 
       test('그 밖의 src는 번들 에셋이다', () {
         expect(cache.resolve('assets/models/a.glb'), isNull);
-        expect(ModelBytesCache().resolve('/assets/a.glb'), isNull);
       });
     });
 
     group('load', () {
+      test('게이트웨이 origin 이 아닌 주소는 받지 않는다 — 게이트웨이 자격이 밖으로 새지 않게', () async {
+        var requests = 0;
+        final cache = ModelBytesCache(
+          baseUrl: Uri.parse('https://gateway.example.com/'),
+          client: MockClient((_) async {
+            requests++;
+            return http.Response.bytes([1], 200);
+          }),
+        );
+
+        await expectLater(
+          cache.load('https://cdn.example.com/a.glb'),
+          throwsA(isA<http.ClientException>()),
+        );
+        expect(await cache.load('https://gateway.example.com/b.glb'), [1]);
+        expect(requests, 1);
+      });
+
       test('같은 src는 한 번만 받는다', () async {
         var requests = 0;
         final cache = ModelBytesCache(
@@ -88,7 +106,12 @@ void main() {
           'b': [2],
           'c': [3],
         });
-        final cache = ModelBytesCache(bundle: bundle, maxEntries: 2);
+        final cache = ModelBytesCache(
+          baseUrl: Uri.parse('http://host/'),
+          client: MockClient((_) async => http.Response('', 404)),
+          bundle: bundle,
+          maxEntries: 2,
+        );
 
         await cache.load('a');
         await cache.load('b');

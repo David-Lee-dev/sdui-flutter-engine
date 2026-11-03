@@ -1,7 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sdui_model_support/sdui_model_support.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:sdui_model_filament/src/load_stats.dart';
+import 'package:sdui_model_filament/src/model_bytes.dart';
 
 void main() {
   group('ModelLoadStats', () {
@@ -68,7 +71,11 @@ void main() {
   });
 
   test('ModelBytesCache.contains는 받는 중이거나 받은 src를 안다', () async {
-    final cache = ModelBytesCache(bundle: _Bundle());
+    final cache = ModelBytesCache(
+      baseUrl: Uri.parse('http://host/'),
+      client: MockClient((_) async => http.Response('', 404)),
+      bundle: _Bundle(),
+    );
     expect(cache.contains('a'), isFalse);
     final load = cache.load('a');
     expect(cache.contains('a'), isTrue);

@@ -10,10 +10,15 @@ import 'model_disk_cache.dart';
 /// memory, so a prefetched or revisited model mounts without the network.
 ///
 /// `src` resolution:
-/// - `http(s)://...` is fetched as is;
-/// - `/path` is resolved against [baseUrl] (e.g. the API origin serving
+/// - `/path` is resolved against [baseUrl] (the gateway origin serving
 ///   `/assets/...`) and fetched;
+/// - `http(s)://...` is fetched as is, but only on [baseUrl]'s origin: the
+///   client carries the app's gateway credentials, so another host never
+///   receives it and the load fails;
 /// - anything else is a bundled asset key.
+///
+/// [client] is the app's gateway client (e.g. `NemoClient.httpClient`), so
+/// models travel the same pinned, authenticated route as other requests.
 ///
 /// With a [disk] cache, fetched models also persist across launches: a
 /// stored copy is served at once and revalidated in the background against
@@ -21,15 +26,15 @@ import 'model_disk_cache.dart';
 /// shows from the next launch.
 final class ModelBytesCache {
   ModelBytesCache({
-    this.baseUrl,
-    http.Client? client,
+    required this.baseUrl,
+    required http.Client client,
     AssetBundle? bundle,
     this.maxEntries = 4,
     this.disk,
-  }) : _client = client ?? http.Client(),
+  }) : _client = client,
        _bundle = bundle;
 
-  final Uri? baseUrl;
+  final Uri baseUrl;
 
   /// Where fetched models persist across launches; null keeps them in
   /// memory only.
@@ -53,8 +58,7 @@ final class ModelBytesCache {
     if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
       return uri;
     }
-    final base = baseUrl;
-    if (src.startsWith('/') && base != null) return base.resolve(src);
+    if (src.startsWith('/')) return baseUrl.resolve(src);
     return null;
   }
 
@@ -89,6 +93,9 @@ final class ModelBytesCache {
     if (url == null) {
       final data = await (_bundle ?? rootBundle).load(src);
       return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    }
+    if (url.origin != baseUrl.origin) {
+      throw http.ClientException('not on the gateway origin $baseUrl', url);
     }
     final stored = await disk?.read(url);
     if (stored != null) {

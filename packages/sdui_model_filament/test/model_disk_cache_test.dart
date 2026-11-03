@@ -4,7 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:sdui_model_support/sdui_model_support.dart';
+import 'package:sdui_model_filament/src/model_bytes.dart';
+import 'package:sdui_model_filament/src/model_disk_cache.dart';
 
 void main() {
   late Directory dir;
