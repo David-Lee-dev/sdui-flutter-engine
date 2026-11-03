@@ -6,7 +6,7 @@ import 'contract/image_source.dart';
 import 'contract/app_storage.dart';
 import 'contract/secure_storage.dart';
 import 'contract/telemetry_sink.dart';
-import 'contract/model_source.dart';
+import 'contract/model_3d_source.dart';
 import 'contract/video_source.dart';
 import 'runtime/driver/app_storage_driver.dart';
 import 'runtime/driver/secure_storage_driver.dart';
@@ -30,7 +30,7 @@ import 'runtime/engine_errors.dart';
 import 'runtime/log/engine_log.dart';
 import 'runtime/media/image_source_registry.dart';
 import 'runtime/media/shader_registry.dart';
-import 'runtime/media/model_source_registry.dart';
+import 'runtime/media/model_3d_source_registry.dart';
 import 'runtime/media/video_source_registry.dart';
 import 'runtime/telemetry/telemetry.dart';
 import 'runtime/widget/factory.dart';
@@ -51,8 +51,8 @@ final class Engine {
   /// [functions], never by registering drivers.
   ///
   /// @param telemetry Optional app-owned telemetry delivery boundary.
-  /// @param modelSource Optional 3D renderer for the `model` widget; without
-  ///   one, `model` renders its poster only. Its [ModelSource.warmUp] runs in
+  /// @param model3dSource Optional 3D renderer for the `model_3d` widget; without
+  ///   one, `model_3d` renders its poster only. Its [Model3dSource.warmUp] runs in
   ///   the background once boot completes.
   /// @param widgets App-owned widget specs keyed by their template `_type`.
   ///   Use this for widgets that need an SDK the engine must not depend on —
@@ -63,7 +63,7 @@ final class Engine {
     Map<String, NetworkClient> networkProtocols = const {},
     required ImageSource imageSource,
     required VideoSource videoSource,
-    ModelSource? modelSource,
+    Model3dSource? model3dSource,
     required AppStorage appStorage,
     required SecureStorage secureStorage,
     List<ExternalCommand> externalCommands = const [],
@@ -94,7 +94,7 @@ final class Engine {
     if (errorObserver != null) EngineErrors.observer = errorObserver;
     ImageSourceRegistry.install(imageSource);
     VideoSourceRegistry.install(videoSource);
-    if (modelSource != null) ModelSourceRegistry.install(modelSource);
+    if (model3dSource != null) Model3dSourceRegistry.install(model3dSource);
     DriverRegistry.installEngineOwned(
       NetDriver(client: networkClient, protocols: networkProtocols),
     );
@@ -120,14 +120,14 @@ final class Engine {
     // Shaders load in the background: shapes paint with the Path fallback
     // until their program is ready, so boot never waits on it.
     unawaited(ShaderRegistry.warmUp());
-    if (modelSource != null) unawaited(_warmUpModels(modelSource));
+    if (model3dSource != null) unawaited(_warmUpModel3d(model3dSource));
   }
 
-  static Future<void> _warmUpModels(ModelSource source) async {
+  static Future<void> _warmUpModel3d(Model3dSource source) async {
     try {
       await source.warmUp();
     } catch (error) {
-      EngineLog.warn('ModelSource.warmUp failed: $error', tag: 'model');
+      EngineLog.warn('Model3dSource.warmUp failed: $error', tag: 'model_3d');
     }
   }
 

@@ -1,12 +1,12 @@
 # sdui_model_filament
 
-Filament renderer for the [sdui_engine](../../README.md) `model` widget,
+Filament renderer for the [sdui_engine](../../README.md) `model_3d` widget,
 through [`thermion_flutter`](https://pub.dev/packages/thermion_flutter) 0.5
 (Filament 1.69.1).
 
 ```dart
 Sdui.initialize(
-  modelSource: FilamentModelSource(
+  model3dSource: FilamentModel3dSource(
     baseUrl: Uri.parse(apiUrl),          // resolves `/assets/...` srcs
     prefetch: ['/assets/character.glb'], // loaded during warm-up
   ),

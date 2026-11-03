@@ -4,15 +4,15 @@ import 'package:sdui_engine/sdui_engine.dart';
 import 'package:sdui_model_filament/sdui_model_filament.dart';
 
 void main() {
-  // The Filament engine is native; these cover the Dart surface the `model`
+  // The Filament engine is native; these cover the Dart surface the `model_3d`
   // widget sees before a viewer exists.
-  Future<FilamentModelController> controller({
+  Future<FilamentModel3dController> controller({
     bool debugOverlay = false,
   }) async =>
-      await FilamentModelSource(
+      await FilamentModel3dSource(
             debugOverlay: debugOverlay,
-          ).controllerFor(const ModelRequest(src: '/a.glb'))
-          as FilamentModelController;
+          ).controllerFor(const Model3dRequest(src: '/a.glb'))
+          as FilamentModel3dController;
 
   testWidgets('뷰어가 생기기 전에도 뷰를 그린다', (tester) async {
     final model = await controller();
@@ -33,7 +33,7 @@ void main() {
     await tester.pumpWidget(
       SizedBox(width: 300, height: 200, child: model.buildView()),
     );
-    model.setCamera(const ModelCamera(yaw: 45, pitch: 10, zoom: 1.5));
+    model.setCamera(const Model3dCamera(yaw: 45, pitch: 10, zoom: 1.5));
     await tester.pump();
 
     expect(find.byType(GestureDetector), findsNothing);

@@ -1,6 +1,6 @@
 # Media
 
-The `image`, `video`, and `model` widgets delegate source resolution to app-installed policies while retaining template-facing presentation behavior in the engine.
+The `image`, `video`, and `model_3d` widgets delegate source resolution to app-installed policies while retaining template-facing presentation behavior in the engine.
 
 ## Images
 
@@ -45,12 +45,12 @@ on_end: finished
 
 ## 3D models
 
-See the full [`model` widget reference](widgets/custom/model.md). `ModelSource.controllerFor(ModelRequest(src))` returns an unloaded `SduiModelController` — a renderer-free contract (the engine owns gestures and drives the camera through `setCamera`, and owns the playhead of a `progress` clip, posing it through `setPose`), so a webview `<model-viewer>`, Filament, or SceneKit implementation can back it. The package ships no renderer: `modelSource` is optional, and without it `model` renders its `poster` image only.
+See the full [`model_3d` widget reference](widgets/custom/model_3d.md). `Model3dSource.controllerFor(Model3dRequest(src))` returns an unloaded `SduiModel3dController` — a renderer-free contract (the engine owns gestures and drives the camera through `setCamera`, and owns the playhead of a `progress` clip, posing it through `setPose`), so a webview `<model-viewer>`, Filament, or SceneKit implementation can back it. The package ships no renderer: `model3dSource` is optional, and without it `model_3d` renders its `poster` image only.
 
-The widget maps template states to clips (`states: { idle: { clip: Idle, loop: true }, jump: { clip: Jump, next: idle } }`), crossfades between them, follows `next` when a non-looping clip ends, and dispatches `on_state_end`. The poster shows until the model is ready and replaces it when loading fails. When the renderer is missing, fails, or lacks a clip, non-looping states end immediately so template flows never wait on rendering. `ModelSource.warmUp()` runs in the background after boot for renderer setup such as creating a webview.
+The widget maps template states to clips (`states: { idle: { clip: Idle, loop: true }, jump: { clip: Jump, next: idle } }`), crossfades between them, follows `next` when a non-looping clip ends, and dispatches `on_state_end`. The poster shows until the model is ready and replaces it when loading fails. When the renderer is missing, fails, or lacks a clip, non-looping states end immediately so template flows never wait on rendering. `Model3dSource.warmUp()` runs in the background after boot for renderer setup such as creating a webview.
 
 ```yaml
-_type: model
+_type: model_3d
 src: /assets/character.glb
 poster: /assets/character.png
 height: 200

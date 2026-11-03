@@ -9,12 +9,12 @@ import 'package:thermion_flutter/thermion_flutter.dart' hide Texture, View;
 
 import 'render_gate.dart';
 
-/// A [ModelSource] that renders each `model` natively with Filament (through
+/// A [Model3dSource] that renders each `model_3d` natively with Filament (through
 /// `thermion_flutter`) into a Flutter `Texture`.
 ///
 /// ```dart
 /// Sdui.initialize(
-///   modelSource: FilamentModelSource(
+///   model3dSource: FilamentModel3dSource(
 ///     baseUrl: Uri.parse(apiUrl),       // resolves `/assets/...` srcs
 ///     prefetch: ['/assets/character.glb'],
 ///   ),
@@ -24,7 +24,7 @@ import 'render_gate.dart';
 ///
 /// The view is an ordinary Flutter widget: it clips, transforms and fades
 /// with its parent. The engine owns gestures and auto-rotation and orbits
-/// the camera through [FilamentModelController.setCamera].
+/// the camera through [FilamentModel3dController.setCamera].
 /// [warmUp] creates the Filament engine ahead of the first mount. Frames
 /// render only while some model changes or plays ([RenderGate]).
 ///
@@ -34,8 +34,8 @@ import 'render_gate.dart';
 ///
 /// [debugOverlay] (default: `--dart-define=SDUI_MODEL_DEBUG=true`) paints each
 /// view's load timeline, app memory and frame times over it for measurement.
-final class FilamentModelSource extends ModelSource {
-  FilamentModelSource({
+final class FilamentModel3dSource extends Model3dSource {
+  FilamentModel3dSource({
     Uri? baseUrl,
     this.prefetch = const [],
     this.loadTimeout = const Duration(seconds: 30),
@@ -84,13 +84,13 @@ final class FilamentModelSource extends ModelSource {
       resume: ThermionFlutterPlugin.instance.resumeFrameScheduler,
       pause: ThermionFlutterPlugin.instance.pauseFrameScheduler,
       render: (view, rendering) =>
-          (view as FilamentModelController)._setRendering(rendering),
+          (view as FilamentModel3dController)._setRendering(rendering),
     );
   }();
 
   @override
-  Future<SduiModelController> controllerFor(ModelRequest request) async =>
-      FilamentModelController(request, this);
+  Future<SduiModel3dController> controllerFor(Model3dRequest request) async =>
+      FilamentModel3dController(request, this);
 
   ModelLoadStats _statsFor(String src) => ModelLoadStats(
     src: src,
@@ -114,16 +114,16 @@ final class FilamentModelSource extends ModelSource {
   }
 }
 
-/// Drives one Filament viewer for the engine's `model` widget.
-final class FilamentModelController implements SduiModelController {
-  FilamentModelController(this._request, this._source)
+/// Drives one Filament viewer for the engine's `model_3d` widget.
+final class FilamentModel3dController implements SduiModel3dController {
+  FilamentModel3dController(this._request, this._source)
     : stats = _source._statsFor(_request.src);
 
-  final ModelRequest _request;
-  final FilamentModelSource _source;
+  final Model3dRequest _request;
+  final FilamentModel3dSource _source;
 
   /// This view's load timeline, also painted when
-  /// [FilamentModelSource.debugOverlay] is on.
+  /// [FilamentModel3dSource.debugOverlay] is on.
   final ModelLoadStats stats;
 
   /// Set once the viewer exists, so the view allocates its texture while the
@@ -133,7 +133,7 @@ final class FilamentModelController implements SduiModelController {
   Future<void>? _loading;
   ThermionAsset? _asset;
   double? _framedAspect;
-  ModelCamera _camera = const ModelCamera();
+  Model3dCamera _camera = const Model3dCamera();
 
   /// Camera distance that frames the model at zoom 1; set once the asset is
   /// loaded and the view's aspect is known.
@@ -149,7 +149,7 @@ final class FilamentModelController implements SduiModelController {
   (String, Duration)? _pose;
   bool _posing = false;
   bool _poseAgain = false;
-  ModelPlayback _playback = const ModelPlayback();
+  Model3dPlayback _playback = const Model3dPlayback();
   bool _disposed = false;
   Widget? _view;
 
@@ -190,7 +190,7 @@ final class FilamentModelController implements SduiModelController {
       await viewer.setPostProcessing(true);
       await viewer.setAntiAliasing(false, true, false);
       await viewer.loadIbl(
-        FilamentModelSource.iblAsset,
+        FilamentModel3dSource.iblAsset,
         intensity: _source.iblIntensity,
       );
 
@@ -254,7 +254,7 @@ final class FilamentModelController implements SduiModelController {
   }
 
   @override
-  void setCamera(ModelCamera camera) {
+  void setCamera(Model3dCamera camera) {
     _camera = camera;
     unawaited(_place());
   }
@@ -341,7 +341,7 @@ final class FilamentModelController implements SduiModelController {
   }
 
   @override
-  ModelPlayback get playback => _playback;
+  Model3dPlayback get playback => _playback;
 
   @override
   Future<void> play(
@@ -353,7 +353,7 @@ final class FilamentModelController implements SduiModelController {
     final index = _clips.indexOf(clip);
     _clipEnd?.cancel();
     _update(
-      ModelPlayback(
+      Model3dPlayback(
         clip: clip,
         isPlaying: true,
         completions: _playback.completions,
@@ -378,7 +378,7 @@ final class FilamentModelController implements SduiModelController {
       () {
         _source._gate.hold(this, playing: false);
         _update(
-          ModelPlayback(
+          Model3dPlayback(
             clip: clip,
             isPlaying: false,
             completions: _playback.completions + 1,
@@ -398,7 +398,7 @@ final class FilamentModelController implements SduiModelController {
     if (_viewer.value != null) _source._gate.hold(this, playing: false);
     _touch();
     _update(
-      ModelPlayback(
+      Model3dPlayback(
         clip: _playback.clip,
         isPlaying: false,
         completions: _playback.completions,
@@ -412,7 +412,7 @@ final class FilamentModelController implements SduiModelController {
   @override
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
 
-  void _update(ModelPlayback playback) {
+  void _update(Model3dPlayback playback) {
     if (_disposed) return;
     _playback = playback;
     for (final listener in [..._listeners]) {
@@ -453,11 +453,11 @@ final class FilamentModelController implements SduiModelController {
 }
 
 /// The Filament texture. It takes no pointers: the engine handles gestures
-/// and moves the camera through [FilamentModelController.setCamera].
+/// and moves the camera through [FilamentModel3dController.setCamera].
 final class _FilamentView extends StatelessWidget {
   const _FilamentView({required this.controller});
 
-  final FilamentModelController controller;
+  final FilamentModel3dController controller;
 
   @override
   Widget build(BuildContext context) {

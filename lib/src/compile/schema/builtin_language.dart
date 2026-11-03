@@ -124,7 +124,7 @@ abstract final class BuiltinLanguage {
   'unconstrained_box': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'vertical_divider': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'video': WidgetSchema(kind: WidgetKind.action, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
-  'model': WidgetSchema(kind: WidgetKind.action, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
+  'model_3d': WidgetSchema(kind: WidgetKind.action, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   'visibility': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box, passesChild: visibilityPassesChild),
   'wrap': WidgetSchema(kind: WidgetKind.eager, produces: LayoutProtocol.box, childProtocol: LayoutProtocol.box),
   };

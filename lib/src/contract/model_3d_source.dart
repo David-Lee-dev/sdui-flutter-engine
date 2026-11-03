@@ -5,21 +5,21 @@ import 'package:flutter/widgets.dart';
 /// The contract carries no renderer types: implementations decide the backing
 /// renderer (a webview `<model-viewer>`, Filament, SceneKit), source
 /// resolution, formats, and caching — everything beyond the surface the
-/// engine's `model` widget drives. The package ships no renderer; without an
+/// engine's `model_3d` widget drives. The package ships no renderer; without an
 /// installed source the widget shows its `poster`.
-abstract class ModelSource {
+abstract class Model3dSource {
   /// Creates a controller for [request] without loading the model.
-  Future<SduiModelController> controllerFor(ModelRequest request);
+  Future<SduiModel3dController> controllerFor(Model3dRequest request);
 
-  /// Prepares the renderer ahead of the first `model` mount (e.g. spins up a
+  /// Prepares the renderer ahead of the first `model_3d` mount (e.g. spins up a
   /// hidden webview). Called once in the background after engine boot; the
   /// default does nothing.
   Future<void> warmUp() async {}
 }
 
-/// Carries resolved model props to a [ModelSource].
-final class ModelRequest {
-  const ModelRequest({required this.src});
+/// Carries resolved model props to a [Model3dSource].
+final class Model3dRequest {
+  const Model3dRequest({required this.src});
 
   final String src;
 }
@@ -30,8 +30,8 @@ final class ModelRequest {
 /// template's `camera` into one of these per frame — so every renderer moves
 /// the same way for the same template. A renderer only places its camera.
 @immutable
-final class ModelCamera {
-  const ModelCamera({this.yaw = 0, this.pitch = 0, this.zoom = 1});
+final class Model3dCamera {
+  const Model3dCamera({this.yaw = 0, this.pitch = 0, this.zoom = 1});
 
   /// Degrees around the vertical axis. 0 looks at the model's front (+Z);
   /// positive moves the camera toward the model's right (+X).
@@ -46,7 +46,7 @@ final class ModelCamera {
 
   @override
   bool operator ==(Object other) =>
-      other is ModelCamera &&
+      other is Model3dCamera &&
       other.yaw == yaw &&
       other.pitch == pitch &&
       other.zoom == zoom;
@@ -55,12 +55,12 @@ final class ModelCamera {
   int get hashCode => Object.hash(yaw, pitch, zoom);
 
   @override
-  String toString() => 'ModelCamera(yaw: $yaw, pitch: $pitch, zoom: $zoom)';
+  String toString() => 'Model3dCamera(yaw: $yaw, pitch: $pitch, zoom: $zoom)';
 }
 
-/// The animation surface the engine's `model` widget drives — the whole
+/// The animation surface the engine's `model_3d` widget drives — the whole
 /// coupling between the engine and whatever renderer the app installs.
-abstract class SduiModelController {
+abstract class SduiModel3dController {
   /// Loads the model; must complete before [clips] and [play] are used.
   Future<void> initialize();
 
@@ -69,7 +69,7 @@ abstract class SduiModelController {
 
   /// Plays [clip], blending from the current clip over [crossfade]. A
   /// non-looping clip holds its last frame and increments
-  /// [ModelPlayback.completions] when it finishes.
+  /// [Model3dPlayback.completions] when it finishes.
   Future<void> play(
     String clip, {
     required bool loop,
@@ -94,7 +94,7 @@ abstract class SduiModelController {
   /// then on every frame the camera moves, before and after [initialize]; a
   /// renderer keeps the latest value and applies it once the model is
   /// loaded, and may drop intermediate values while one is being applied.
-  void setCamera(ModelCamera camera);
+  void setCamera(Model3dCamera camera);
 
   /// [listener] fires on any playback-state change ([playback]).
   void addListener(VoidCallback listener);
@@ -102,7 +102,7 @@ abstract class SduiModelController {
   void removeListener(VoidCallback listener);
 
   /// The current playback snapshot.
-  ModelPlayback get playback;
+  Model3dPlayback get playback;
 
   /// The rendered model surface, unsized — the engine sizes and clips it.
   /// It never receives pointer events: the engine handles gestures above it
@@ -118,14 +118,14 @@ abstract class SduiModelController {
 }
 
 /// One immutable snapshot of model playback state.
-final class ModelPlayback {
-  const ModelPlayback({
+final class Model3dPlayback {
+  const Model3dPlayback({
     this.clip,
     this.isPlaying = false,
     this.completions = 0,
   });
 
-  /// The clip last passed to [SduiModelController.play], or null.
+  /// The clip last passed to [SduiModel3dController.play], or null.
   final String? clip;
 
   final bool isPlaying;

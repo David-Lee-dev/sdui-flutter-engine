@@ -2,17 +2,17 @@ import 'dart:math' as math;
 
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
-import 'package:sdui_engine/src/contract/model_source.dart';
+import 'package:sdui_engine/src/contract/model_3d_source.dart';
 
-import '../../../util/props_resolver.dart';
+import '../../util/props_resolver.dart';
 
 /// Which drag axes rotate the camera.
-enum ModelRotate { none, horizontal, vertical, free }
+enum Model3dRotate { none, horizontal, vertical, free }
 
-/// The `controls` prop of a `model`: how gestures move the camera.
-final class ModelControls {
-  const ModelControls({
-    this.rotate = ModelRotate.none,
+/// The `controls` prop of a `model_3d`: how gestures move the camera.
+final class Model3dControls {
+  const Model3dControls({
+    this.rotate = Model3dRotate.none,
     this.minPitch = -60,
     this.maxPitch = 60,
     this.minZoom,
@@ -23,9 +23,9 @@ final class ModelControls {
   });
 
   /// Gestures off: the model passes every pointer to its ancestors.
-  static const none = ModelControls();
+  static const none = Model3dControls();
 
-  final ModelRotate rotate;
+  final Model3dRotate rotate;
 
   /// Pitch limits in degrees.
   final double minPitch;
@@ -51,11 +51,11 @@ final class ModelControls {
     return min != null && max != null && max > min;
   }
 
-  bool get active => rotate != ModelRotate.none || zooms;
+  bool get active => rotate != Model3dRotate.none || zooms;
 
   @override
   bool operator ==(Object other) =>
-      other is ModelControls &&
+      other is Model3dControls &&
       other.rotate == rotate &&
       other.minPitch == minPitch &&
       other.maxPitch == maxPitch &&
@@ -79,20 +79,22 @@ final class ModelControls {
 
   /// Parses `controls`; `interactive: true` without `controls` means free
   /// rotation.
-  static ModelControls parse(Object? raw, {required bool interactive}) {
+  static Model3dControls parse(Object? raw, {required bool interactive}) {
     if (raw is! Map) {
-      return interactive ? const ModelControls(rotate: ModelRotate.free) : none;
+      return interactive
+          ? const Model3dControls(rotate: Model3dRotate.free)
+          : none;
     }
     final rotate = switch (PropsResolver.text(raw['rotate'])) {
-      'none' => ModelRotate.none,
-      'horizontal' => ModelRotate.horizontal,
-      'vertical' => ModelRotate.vertical,
-      _ => ModelRotate.free,
+      'none' => Model3dRotate.none,
+      'horizontal' => Model3dRotate.horizontal,
+      'vertical' => Model3dRotate.vertical,
+      _ => Model3dRotate.free,
     };
     final pitch = _range(raw['pitch']);
     final zoom = _range(raw['zoom']);
     final returnMs = PropsResolver.integer(raw['return_ms']);
-    return ModelControls(
+    return Model3dControls(
       rotate: rotate,
       minPitch: pitch?.$1 ?? -60,
       maxPitch: pitch?.$2 ?? 60,
@@ -117,12 +119,12 @@ final class ModelControls {
 
 /// Parses the `camera` prop: the resting camera and how long a change to it
 /// takes.
-(ModelCamera, Duration) parseModelCamera(Object? raw) {
+(Model3dCamera, Duration) parseModel3dCamera(Object? raw) {
   if (raw is! Map) {
-    return (const ModelCamera(), const Duration(milliseconds: 300));
+    return (const Model3dCamera(), const Duration(milliseconds: 300));
   }
   return (
-    ModelCamera(
+    Model3dCamera(
       yaw: PropsResolver.number(raw['yaw']) ?? 0,
       pitch: PropsResolver.number(raw['pitch']) ?? 0,
       zoom: PropsResolver.number(raw['zoom']) ?? 1,
@@ -138,15 +140,15 @@ double parseAutoRotate(Object? raw) {
 }
 
 /// Turns gestures, inertia, auto-rotation and changes of the resting camera
-/// into one [ModelCamera] per frame.
+/// into one [Model3dCamera] per frame.
 ///
 /// The camera is the resting camera (`camera`, plus accumulated
 /// auto-rotation) with the user's offset on top. Gestures move the offset;
 /// `return_ms` eases it back to zero.
-final class ModelCameraRig {
-  ModelCameraRig({
+final class Model3dCameraRig {
+  Model3dCameraRig({
     required TickerProvider vsync,
-    required ModelCamera rest,
+    required Model3dCamera rest,
     required this.controls,
     required this.autoRotate,
     required this.onChanged,
@@ -162,18 +164,18 @@ final class ModelCameraRig {
   /// Fling velocity decay rate per second.
   static const _friction = 5.0;
 
-  ModelControls controls;
+  Model3dControls controls;
 
   /// Degrees per second; 0 is off.
   double autoRotate;
 
-  final ValueChanged<ModelCamera> onChanged;
+  final ValueChanged<Model3dCamera> onChanged;
 
   late final Ticker _ticker;
   Duration _last = Duration.zero;
 
-  ModelCamera _restFrom;
-  ModelCamera _restTo;
+  Model3dCamera _restFrom;
+  Model3dCamera _restTo;
   Duration _restDuration = Duration.zero;
   double _restT = 1;
 
@@ -191,11 +193,11 @@ final class ModelCameraRig {
   double _returnT = 1;
   (double, double, double) _returnFrom = (0, 0, 1);
 
-  ModelCamera? _sent;
+  Model3dCamera? _sent;
 
-  ModelCamera get rest {
+  Model3dCamera get rest {
     final t = Curves.easeInOut.transform(_restT);
-    return ModelCamera(
+    return Model3dCamera(
       yaw: _lerp(_restFrom.yaw, _restTo.yaw, t),
       pitch: _lerp(_restFrom.pitch, _restTo.pitch, t),
       zoom: _lerp(_restFrom.zoom, _restTo.zoom, t),
@@ -203,11 +205,11 @@ final class ModelCameraRig {
   }
 
   /// The camera to render now.
-  ModelCamera get camera {
+  Model3dCamera get camera {
     // The offsets are clamped as gestures set them, so the template's own
     // `camera` is never clamped.
     final base = rest;
-    return ModelCamera(
+    return Model3dCamera(
       yaw: _wrap(base.yaw + _spin + _yaw),
       pitch: base.pitch + _pitch,
       zoom: base.zoom * _zoom,
@@ -222,7 +224,7 @@ final class ModelCameraRig {
   }
 
   /// Moves the resting camera to [to] over [duration].
-  void setRest(ModelCamera to, Duration duration) {
+  void setRest(Model3dCamera to, Duration duration) {
     if (to == _restTo) return;
     _restFrom = rest;
     _restTo = to;
@@ -232,7 +234,7 @@ final class ModelCameraRig {
     _syncTicker();
   }
 
-  void update({required ModelControls controls, required double autoRotate}) {
+  void update({required Model3dControls controls, required double autoRotate}) {
     this.controls = controls;
     this.autoRotate = autoRotate;
     _emit();
@@ -295,12 +297,12 @@ final class ModelCameraRig {
   }
 
   bool get _rotatesYaw =>
-      controls.rotate == ModelRotate.horizontal ||
-      controls.rotate == ModelRotate.free;
+      controls.rotate == Model3dRotate.horizontal ||
+      controls.rotate == Model3dRotate.free;
 
   bool get _rotatesPitch =>
-      controls.rotate == ModelRotate.vertical ||
-      controls.rotate == ModelRotate.free;
+      controls.rotate == Model3dRotate.vertical ||
+      controls.rotate == Model3dRotate.free;
 
   bool get _coasting => _yawVelocity != 0 || _pitchVelocity != 0;
 
@@ -395,8 +397,8 @@ final class ModelCameraRig {
 ///
 /// It always builds one [GestureDetector], only swapping its callbacks, so
 /// enabling it never remounts the renderer's view below.
-final class ModelGestureLayer extends StatelessWidget {
-  const ModelGestureLayer({
+final class Model3dGestureLayer extends StatelessWidget {
+  const Model3dGestureLayer({
     super.key,
     required this.rig,
     required this.controls,
@@ -404,8 +406,8 @@ final class ModelGestureLayer extends StatelessWidget {
     required this.child,
   });
 
-  final ModelCameraRig rig;
-  final ModelControls controls;
+  final Model3dCameraRig rig;
+  final Model3dControls controls;
   final bool enabled;
   final Widget child;
 
@@ -413,10 +415,10 @@ final class ModelGestureLayer extends StatelessWidget {
   Widget build(BuildContext context) {
     final on = enabled && controls.active;
     final zooms = on && controls.zooms;
-    final rotate = on && !zooms ? controls.rotate : ModelRotate.none;
-    final horizontal = rotate == ModelRotate.horizontal;
-    final vertical = rotate == ModelRotate.vertical;
-    final free = rotate == ModelRotate.free;
+    final rotate = on && !zooms ? controls.rotate : Model3dRotate.none;
+    final horizontal = rotate == Model3dRotate.horizontal;
+    final vertical = rotate == Model3dRotate.vertical;
+    final free = rotate == Model3dRotate.free;
     return GestureDetector(
       behavior: on ? HitTestBehavior.opaque : HitTestBehavior.deferToChild,
       onScaleStart: zooms ? (_) => rig.dragStart() : null,

@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/contract/image_source.dart';
-import 'package:sdui_engine/src/contract/model_source.dart';
+import 'package:sdui_engine/src/contract/model_3d_source.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
-import 'package:sdui_engine/src/runtime/media/model_source_registry.dart';
-import 'package:sdui_engine/src/runtime/widget/catalog/custom/model_widget.dart';
+import 'package:sdui_engine/src/runtime/media/model_3d_source_registry.dart';
+import 'package:sdui_engine/src/runtime/widget/catalog/custom/model_3d_widget.dart';
 import 'package:sdui_engine/src/runtime/widget/contract/action_sink.dart';
 
 import '../../../../support/engine_harness.dart';
@@ -19,7 +19,7 @@ final class _Play {
   final Duration crossfade;
 }
 
-final class _FakeController implements SduiModelController {
+final class _FakeController implements SduiModel3dController {
   _FakeController({this.fail = false, this.gate});
 
   final bool fail;
@@ -29,7 +29,7 @@ final class _FakeController implements SduiModelController {
   @override
   final List<String> clips = const ['Idle', 'Jump', 'Wave'];
   final plays = <_Play>[];
-  final cameras = <ModelCamera>[];
+  final cameras = <Model3dCamera>[];
   final poses = <(String, Duration)>[];
   final _listeners = <VoidCallback>[];
   bool disposed = false;
@@ -64,7 +64,7 @@ final class _FakeController implements SduiModelController {
   Future<void> stop() async {}
 
   @override
-  void setCamera(ModelCamera camera) => cameras.add(camera);
+  void setCamera(Model3dCamera camera) => cameras.add(camera);
 
   /// Every clip lasts a second, except `Wave` at six.
   @override
@@ -84,8 +84,8 @@ final class _FakeController implements SduiModelController {
   void removeListener(VoidCallback listener) => _listeners.remove(listener);
 
   @override
-  ModelPlayback get playback =>
-      ModelPlayback(clip: _clip, isPlaying: true, completions: _completions);
+  Model3dPlayback get playback =>
+      Model3dPlayback(clip: _clip, isPlaying: true, completions: _completions);
 
   @override
   Widget buildView() => const SizedBox.expand(key: Key('model-view'));
@@ -94,16 +94,16 @@ final class _FakeController implements SduiModelController {
   Future<void> dispose() async => disposed = true;
 }
 
-final class _RecordingModelSource extends ModelSource {
-  _RecordingModelSource({this.fail = false, this.gate});
+final class _RecordingModel3dSource extends Model3dSource {
+  _RecordingModel3dSource({this.fail = false, this.gate});
 
   final bool fail;
   final Completer<void>? gate;
-  final requests = <ModelRequest>[];
+  final requests = <Model3dRequest>[];
   final controllers = <_FakeController>[];
 
   @override
-  Future<SduiModelController> controllerFor(ModelRequest request) async {
+  Future<SduiModel3dController> controllerFor(Model3dRequest request) async {
     requests.add(request);
     final controller = _FakeController(fail: fail, gate: gate);
     controllers.add(controller);
@@ -156,7 +156,7 @@ Future<void> _pump(
       child: Center(
         child: Builder(
           builder: (context) =>
-              ModelWidget.build(context, props, const [], dispatch),
+              Model3dWidget.build(context, props, const [], dispatch),
         ),
       ),
     ),
@@ -165,14 +165,14 @@ Future<void> _pump(
 }
 
 void main() {
-  group('ModelWidget', () {
+  group('Model3dWidget', () {
     setUp(() {
-      ModelSourceRegistry.reset();
+      Model3dSourceRegistry.reset();
       ImageSourceRegistry.reset();
       ImageSourceRegistry.install(const _TextImageSource());
     });
     tearDown(() {
-      ModelSourceRegistry.reset();
+      Model3dSourceRegistry.reset();
       ImageSourceRegistry.reset();
     });
 
@@ -199,8 +199,8 @@ void main() {
       testWidgets('로드가 끝나면 모델로 바꾸고 on_ready를 보내며 첫 클립은 crossfade 없이 튼다', (
         tester,
       ) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         final sink = _Sink();
 
         await _pump(tester, const {
@@ -225,7 +225,7 @@ void main() {
 
       testWidgets('로드 중에도 뷰를 poster 아래에 붙여 두고 제스처는 막는다', (tester) async {
         final gate = Completer<void>();
-        ModelSourceRegistry.install(_RecordingModelSource(gate: gate));
+        Model3dSourceRegistry.install(_RecordingModel3dSource(gate: gate));
 
         await _pump(tester, const {
           'src': 'char.glb',
@@ -253,8 +253,8 @@ void main() {
       });
 
       testWidgets('렌더러 뷰는 포인터를 받지 않고 요청에는 src만 싣는다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
 
         await _pump(tester, const {
           'src': 'char.glb',
@@ -278,8 +278,8 @@ void main() {
 
     group('states', () {
       testWidgets('state가 바뀌면 그 클립을 crossfade_ms로 섞어 튼다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         const base = {
           'src': 'char.glb',
           'height': 100,
@@ -300,8 +300,8 @@ void main() {
       testWidgets('한 번 재생 클립이 끝나면 on_state_end를 보내고 next 상태로 넘어간다', (
         tester,
       ) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         final sink = _Sink();
 
         await _pump(tester, const {
@@ -324,8 +324,8 @@ void main() {
       });
 
       testWidgets('반복 클립은 끝 신호가 와도 on_state_end를 보내지 않는다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         final sink = _Sink();
 
         await _pump(tester, const {
@@ -343,8 +343,8 @@ void main() {
       });
 
       testWidgets('state_key가 바뀌면 같은 state를 다시 재생한다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         const base = {
           'src': 'char.glb',
           'height': 100,
@@ -364,14 +364,14 @@ void main() {
       });
 
       testWidgets('로드 중에 받은 state는 준비된 뒤에 재생한다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
 
         await tester.pumpWidget(
           Directionality(
             textDirection: TextDirection.ltr,
             child: Builder(
-              builder: (context) => ModelWidget.build(
+              builder: (context) => Model3dWidget.build(
                 context,
                 const {
                   'src': 'char.glb',
@@ -411,8 +411,8 @@ void main() {
       testWidgets('로드에 실패하면 on_error를 보내고 poster를 유지하며 state를 끝낸다', (
         tester,
       ) async {
-        final source = _RecordingModelSource(fail: true);
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource(fail: true);
+        Model3dSourceRegistry.install(source);
         final sink = _Sink();
 
         await _pump(tester, const {
@@ -433,8 +433,8 @@ void main() {
       });
 
       testWidgets('모델에 없는 클립이면 재생하지 않고 state를 끝낸다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         final sink = _Sink();
 
         await _pump(tester, const {
@@ -453,16 +453,16 @@ void main() {
     });
 
     group('camera', () {
-      ModelCamera last(_RecordingModelSource source) =>
+      Model3dCamera last(_RecordingModel3dSource source) =>
           source.controllers.single.cameras.last;
 
-      Future<_RecordingModelSource> ready(
+      Future<_RecordingModel3dSource> ready(
         WidgetTester tester,
         Map<String, Object?> props, {
         bool settle = true,
       }) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         await _pump(tester, {
           'src': 'char.glb',
           'width': 200,
@@ -481,7 +481,7 @@ void main() {
 
       testWidgets('만들자마자 camera를 보낸다 (없으면 정면, 배율 1)', (tester) async {
         final plain = await ready(tester, const {});
-        expect(plain.controllers.single.cameras.first, const ModelCamera());
+        expect(plain.controllers.single.cameras.first, const Model3dCamera());
 
         await tester.pumpWidget(const SizedBox());
         final framed = await ready(tester, const {
@@ -489,7 +489,7 @@ void main() {
         });
         expect(
           framed.controllers.single.cameras.first,
-          const ModelCamera(yaw: 30, pitch: 15, zoom: 1.2),
+          const Model3dCamera(yaw: 30, pitch: 15, zoom: 1.2),
         );
       });
 
@@ -499,12 +499,12 @@ void main() {
         await tester.drag(view, const Offset(100, 50));
         await tester.pumpAndSettle();
 
-        expect(last(source), const ModelCamera());
+        expect(last(source), const Model3dCamera());
       });
 
       testWidgets('horizontal은 가로 드래그로 돌고 세로 드래그는 부모 스크롤로 간다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         final scroll = ScrollController();
         await tester.pumpWidget(
           Directionality(
@@ -513,7 +513,7 @@ void main() {
               controller: scroll,
               children: [
                 Builder(
-                  builder: (context) => ModelWidget.build(
+                  builder: (context) => Model3dWidget.build(
                     context,
                     const {
                       'src': 'char.glb',
@@ -715,8 +715,8 @@ void main() {
         Map<String, Object?> progress, {
         ActionSink? sink,
       }) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         await _pump(tester, props(progress), dispatch: sink);
         await tester.pumpAndSettle();
         return source.controllers.single;
@@ -806,8 +806,8 @@ void main() {
         tester,
       ) async {
         final gate = Completer<void>();
-        final source = _RecordingModelSource(gate: gate);
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource(gate: gate);
+        Model3dSourceRegistry.install(source);
         final sink = _Sink();
 
         await _pump(tester, props(const {'at': 0}), dispatch: sink);
@@ -832,8 +832,8 @@ void main() {
 
         await tester.pumpWidget(const SizedBox());
         sink.calls.clear();
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         Map<String, Object?> missing(Object value) => {
           ...props(const {}),
           'progress': {'clip': 'Dance', 'value': value},
@@ -850,8 +850,8 @@ void main() {
         tester,
       ) async {
         final sink = _Sink();
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
         Map<String, Object?> at(num seconds) =>
             props({'at': seconds}, onEnd: null, onArrive: 'arrived');
 
@@ -946,7 +946,7 @@ void main() {
 
         await tester.pumpWidget(const SizedBox());
         sink.calls.clear();
-        ModelSourceRegistry.install(_RecordingModelSource());
+        Model3dSourceRegistry.install(_RecordingModel3dSource());
         await _pump(tester, missing(0), dispatch: sink);
         await tester.pumpAndSettle();
         await _pump(tester, missing(1), dispatch: sink);
@@ -958,7 +958,7 @@ void main() {
 
       testWidgets('로딩 중에 목표가 바뀌면 붙자마자 도착한다', (tester) async {
         final gate = Completer<void>();
-        ModelSourceRegistry.install(_RecordingModelSource(gate: gate));
+        Model3dSourceRegistry.install(_RecordingModel3dSource(gate: gate));
         final sink = _Sink();
         Map<String, Object?> at(num seconds) =>
             props({'at': seconds}, onEnd: null, onArrive: 'arrived');
@@ -991,8 +991,8 @@ void main() {
 
     group('lifecycle', () {
       testWidgets('src가 바뀌면 이전 컨트롤러를 버리고 새로 만든다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
 
         await _pump(tester, const {'src': 'a.glb', 'height': 100});
         await tester.pumpAndSettle();
@@ -1005,8 +1005,8 @@ void main() {
       });
 
       testWidgets('위젯이 사라지면 컨트롤러를 버린다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
 
         await _pump(tester, const {'src': 'a.glb', 'height': 100});
         await tester.pumpAndSettle();
@@ -1020,11 +1020,11 @@ void main() {
       testWidgets(
         '탭 → set → state_key 변화로 같은 state를 다시 재생하고 끝나면 액션이 state를 되돌린다',
         (tester) async {
-          final source = _RecordingModelSource();
-          ModelSourceRegistry.install(source);
+          final source = _RecordingModel3dSource();
+          Model3dSourceRegistry.install(source);
 
           await pumpEngineTemplate(tester, {
-            '_type': 'model',
+            '_type': 'model_3d',
             'src': 'char.glb',
             'height': 100,
             'state': r'${mood}',
@@ -1066,11 +1066,11 @@ void main() {
       );
 
       testWidgets('탭 횟수로 progress를 한 칸씩 진행한다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
 
         await pumpEngineTemplate(tester, {
-          '_type': 'model',
+          '_type': 'model_3d',
           'src': 'char.glb',
           'height': 100,
           'progress': {'clip': 'Wave', 'at': r'${[0, 2.5, 6][min(taps, 2)]}'},
@@ -1102,11 +1102,11 @@ void main() {
       });
 
       testWidgets('움직이는 동안의 탭은 무시하고 도착한 뒤의 탭만 진행한다', (tester) async {
-        final source = _RecordingModelSource();
-        ModelSourceRegistry.install(source);
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
 
         await pumpEngineTemplate(tester, {
-          '_type': 'model',
+          '_type': 'model_3d',
           'src': 'char.glb',
           'height': 100,
           'progress': {'clip': 'Wave', 'at': r'${[0, 2, 6][min(taps, 2)]}'},

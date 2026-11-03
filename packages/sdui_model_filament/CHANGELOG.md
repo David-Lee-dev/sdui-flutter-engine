@@ -2,8 +2,8 @@
 
 ## 0.1.0
 
-- `FilamentModelSource` / `FilamentModelController`: a `ModelSource` for the
-  sdui_engine 0.21 `model` widget rendering with Filament through
+- `FilamentModel3dSource` / `FilamentModel3dController`: a `Model3dSource` for the
+  sdui_engine 0.21 `model_3d` widget rendering with Filament through
   `thermion_flutter` 0.5, with a transparent background, the bundled studio
   IBL, the engine-driven camera (`setCamera`), clip playback with crossfade,
   `progress` poses (`setPose` through `setGltfAnimationTime`, stopping that

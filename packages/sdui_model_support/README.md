@@ -1,7 +1,7 @@
 # sdui_model_support
 
 Renderer-agnostic helpers shared by the renderers of the
-[sdui_engine](../../README.md) `model` widget
+[sdui_engine](../../README.md) `model_3d` widget
 ([`sdui_model_viewer`](../sdui_model_viewer), webview;
 [`sdui_model_filament`](../sdui_model_filament), Filament). Apps install a
 renderer, not this package.

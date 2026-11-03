@@ -1,12 +1,12 @@
 # sdui_model_viewer
 
-WebView renderer for the [sdui_engine](../../README.md) `model` widget, backed
+WebView renderer for the [sdui_engine](../../README.md) `model_3d` widget, backed
 by Google's [`<model-viewer>`](https://modelviewer.dev) 3.5.0 (bundled — no
 CDN at runtime).
 
 ```dart
 Sdui.initialize(
-  modelSource: WebModelSource(
+  model3dSource: WebModel3dSource(
     baseUrl: Uri.parse(apiUrl),          // resolves `/assets/...` srcs
     prefetch: ['/assets/character.glb'], // loaded during warm-up
   ),

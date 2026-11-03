@@ -2,7 +2,7 @@
 
 ## 0.21.0
 
-- Added the `model` widget: a policy-backed 3D model driven by a state → clip
+- Added the `model_3d` widget: a policy-backed 3D model driven by a state → clip
   table. `states` maps state names to `{ clip, loop, next }`; changing
   `state` (or `state_key`, to replay the same state) plays that clip with a
   `crossfade_ms` blend, `next` follows a finished non-looping clip, and
@@ -10,7 +10,7 @@
   ready and replaces it on failure. The engine owns the camera: `camera`
   (yaw, pitch, zoom, eased changes), `controls` (rotate axes, pitch limits,
   pinch zoom, sensitivity, inertia, `return_ms`), `auto_rotate` (degrees per
-  second) and the `interactive` shorthand turn into one `ModelCamera` per
+  second) and the `interactive` shorthand turn into one `Model3dCamera` per
   frame, so every renderer moves the same way. Without `controls`, gestures
   pass to ancestors. `progress: { clip, at | value, speed }` holds one clip at
   a playhead the template sets — a tap counter can step through one long
@@ -19,15 +19,15 @@
   `on_progress_end` dispatches when the playhead arrives at the clip's end,
   and `on_progress_arrive` (`{ clip, at }`) whenever it settles at a target
   the template changed, so a template can ignore taps until a step lands.
-  See docs/widgets/custom/model.md.
-- Added the `ModelSource` / `SduiModelController` / `ModelCamera` contract
+  See docs/widgets/custom/model_3d.md.
+- Added the `Model3dSource` / `SduiModel3dController` / `Model3dCamera` contract
   (renderers implement `setCamera`, `clipDuration` and `setPose`; their views
   never take pointers) and the
   optional
-  `Sdui.initialize(modelSource:)` / `Engine.initialize(modelSource:)` seam.
-  The package ships no renderer; without a source `model` renders its
+  `Sdui.initialize(model3dSource:)` / `Engine.initialize(model3dSource:)` seam.
+  The package ships no renderer; without a source `model_3d` renders its
   poster, and non-looping states end at once so flows never wait on
-  rendering. `ModelSource.warmUp()` runs in the background after boot.
+  rendering. `Model3dSource.warmUp()` runs in the background after boot.
   Existing apps need no changes.
 
 ## 0.20.4

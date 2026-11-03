@@ -10,12 +10,12 @@ import 'package:sdui_model_support/sdui_model_support.dart';
 
 import 'viewer_page.dart';
 
-/// A [ModelSource] that renders each `model` in a transparent webview
+/// A [Model3dSource] that renders each `model_3d` in a transparent webview
 /// running Google's `<model-viewer>` (bundled, no CDN).
 ///
 /// ```dart
 /// Sdui.initialize(
-///   modelSource: WebModelSource(
+///   model3dSource: WebModel3dSource(
 ///     baseUrl: Uri.parse(apiUrl),       // resolves `/assets/...` srcs
 ///     prefetch: ['/assets/character.glb'],
 ///   ),
@@ -34,8 +34,8 @@ import 'viewer_page.dart';
 ///
 /// [debugOverlay] (default: `--dart-define=SDUI_MODEL_DEBUG=true`) paints each
 /// view's load timeline, app memory and frame times over it for measurement.
-final class WebModelSource extends ModelSource {
-  WebModelSource({
+final class WebModel3dSource extends Model3dSource {
+  WebModel3dSource({
     Uri? baseUrl,
     this.prefetch = const [],
     this.loadTimeout = const Duration(seconds: 30),
@@ -77,8 +77,8 @@ final class WebModelSource extends ModelSource {
       : Uri.parse('sdui-model://app/');
 
   @override
-  Future<SduiModelController> controllerFor(ModelRequest request) async =>
-      WebModelController(request, this);
+  Future<SduiModel3dController> controllerFor(Model3dRequest request) async =>
+      WebModel3dController(request, this);
 
   ModelLoadStats _statsFor(String src) => ModelLoadStats(
     src: src,
@@ -165,21 +165,21 @@ final class WebModelSource extends ModelSource {
   }
 }
 
-/// Drives one `<model-viewer>` webview for the engine's `model` widget.
-final class WebModelController implements SduiModelController {
-  WebModelController(this._request, this._source)
+/// Drives one `<model-viewer>` webview for the engine's `model_3d` widget.
+final class WebModel3dController implements SduiModel3dController {
+  WebModel3dController(this._request, this._source)
     : stats = _source._statsFor(_request.src) {
     // A load error may land before the engine awaits [initialize].
     _ready.future.ignore();
   }
 
-  final ModelRequest _request;
-  final WebModelSource _source;
+  final Model3dRequest _request;
+  final WebModel3dSource _source;
   final _ready = Completer<void>();
   final _listeners = <VoidCallback>[];
 
   /// This view's load timeline, also painted when
-  /// [WebModelSource.debugOverlay] is on.
+  /// [WebModel3dSource.debugOverlay] is on.
   final ModelLoadStats stats;
   InAppWebViewController? _web;
   Widget? _view;
@@ -188,9 +188,9 @@ final class WebModelController implements SduiModelController {
   (String, Duration)? _pose;
   bool _posing = false;
   bool _poseAgain = false;
-  ModelPlayback _playback = const ModelPlayback();
+  Model3dPlayback _playback = const Model3dPlayback();
   bool _disposed = false;
-  ModelCamera _camera = const ModelCamera();
+  Model3dCamera _camera = const Model3dCamera();
   bool _pageReady = false;
   bool _placing = false;
   bool _placeAgain = false;
@@ -202,7 +202,7 @@ final class WebModelController implements SduiModelController {
   List<String> get clips => _clips;
 
   @override
-  ModelPlayback get playback => _playback;
+  Model3dPlayback get playback => _playback;
 
   @override
   Duration? clipDuration(String clip) =>
@@ -246,7 +246,7 @@ final class WebModelController implements SduiModelController {
     Duration crossfade = Duration.zero,
   }) async {
     _update(
-      ModelPlayback(
+      Model3dPlayback(
         clip: clip,
         isPlaying: true,
         completions: _playback.completions,
@@ -264,7 +264,7 @@ final class WebModelController implements SduiModelController {
   }
 
   @override
-  void setCamera(ModelCamera camera) {
+  void setCamera(Model3dCamera camera) {
     _camera = camera;
     unawaited(_place());
   }
@@ -313,9 +313,9 @@ final class WebModelController implements SduiModelController {
     onWebViewCreated: _attach,
     onLoadStop: (_, _) => _mark('page'),
     onLoadResourceWithCustomScheme: (_, request) async =>
-        WebModelSource._custom(await _serve(request.url)),
+        WebModel3dSource._custom(await _serve(request.url)),
     shouldInterceptRequest: (_, request) async =>
-        WebModelSource._intercept(await _serve(request.url)),
+        WebModel3dSource._intercept(await _serve(request.url)),
     onReceivedError: (_, request, error) {
       if (request.isForMainFrame ?? false) {
         _fail('page failed: ${error.description}');
@@ -378,7 +378,7 @@ final class WebModelController implements SduiModelController {
     web.addJavaScriptHandler(
       handlerName: 'sduiFinished',
       callback: (_) => _update(
-        ModelPlayback(
+        Model3dPlayback(
           clip: _playback.clip,
           isPlaying: false,
           completions: _playback.completions + 1,
@@ -391,7 +391,7 @@ final class WebModelController implements SduiModelController {
         final playing = args.isNotEmpty && args.first == true;
         if (playing == _playback.isPlaying) return;
         _update(
-          ModelPlayback(
+          Model3dPlayback(
             clip: _playback.clip,
             isPlaying: playing,
             completions: _playback.completions,
@@ -407,7 +407,7 @@ final class WebModelController implements SduiModelController {
     if (!_ready.isCompleted) _ready.completeError(StateError(reason));
   }
 
-  void _update(ModelPlayback playback) {
+  void _update(Model3dPlayback playback) {
     if (_disposed) return;
     _playback = playback;
     for (final listener in [..._listeners]) {

@@ -1,4 +1,4 @@
-/// Renderer-agnostic helpers shared by sdui_engine `model` renderers.
+/// Renderer-agnostic helpers shared by sdui_engine `model_3d` renderers.
 library;
 
 export 'src/gltf_clips.dart' show gltfClipDurations;

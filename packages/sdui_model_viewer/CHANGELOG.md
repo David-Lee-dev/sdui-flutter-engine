@@ -2,8 +2,8 @@
 
 ## 0.1.0
 
-- `WebModelSource` / `WebModelController`: a `ModelSource` for the
-  sdui_engine 0.21 `model` widget rendering through a transparent
+- `WebModel3dSource` / `WebModel3dController`: a `Model3dSource` for the
+  sdui_engine 0.21 `model_3d` widget rendering through a transparent
   `<model-viewer>` webview, with a Dart-side model byte cache, prefetch and a
   headless warm-up.
 - `ModelLoadStats` load timeline per view (logged on ready) and

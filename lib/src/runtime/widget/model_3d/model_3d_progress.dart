@@ -3,13 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../../util/props_resolver.dart';
+import '../../util/props_resolver.dart';
 
-/// The `progress` prop of a `model`: one clip held at a playhead the
+/// The `progress` prop of a `model_3d`: one clip held at a playhead the
 /// template sets, e.g. a tap counter stepping through a long animation.
 @immutable
-final class ModelProgress {
-  const ModelProgress({
+final class Model3dProgress {
+  const Model3dProgress({
     required this.clip,
     this.at,
     this.value,
@@ -29,12 +29,12 @@ final class ModelProgress {
   final double speed;
 
   /// Parses `progress`; null without a `clip`.
-  static ModelProgress? parse(Object? raw) {
+  static Model3dProgress? parse(Object? raw) {
     if (raw is! Map) return null;
     final clip = PropsResolver.text(raw['clip']);
     if (clip == null || clip.isEmpty) return null;
     final speed = PropsResolver.number(raw['speed']);
-    return ModelProgress(
+    return Model3dProgress(
       clip: clip,
       at: PropsResolver.number(raw['at']),
       value: PropsResolver.number(raw['value']),
@@ -56,7 +56,7 @@ final class ModelProgress {
 
   @override
   bool operator ==(Object other) =>
-      other is ModelProgress &&
+      other is Model3dProgress &&
       other.clip == clip &&
       other.at == at &&
       other.value == value &&
@@ -73,8 +73,8 @@ final class ModelProgress {
 /// that mounts mid-way (the server sent `taps: 3`) appears there without
 /// replaying. Later targets play toward from wherever the playhead is, so a
 /// target that moves on mid-way (fast taps) continues without a jump.
-final class ModelPlayhead {
-  ModelPlayhead({
+final class Model3dPlayhead {
+  Model3dPlayhead({
     required TickerProvider vsync,
     required this.onPose,
     required this.onEnd,
@@ -97,7 +97,7 @@ final class ModelPlayhead {
   late final Ticker _ticker;
   Duration _last = Duration.zero;
 
-  ModelProgress? _progress;
+  Model3dProgress? _progress;
 
   /// Clip length in seconds; null while no clip is attached.
   double? _duration;
@@ -115,7 +115,7 @@ final class ModelPlayhead {
   /// once; with [endIfThere], a target at the clip's end fires [onEnd]. A
   /// null [duration] (no such clip) detaches.
   void attach(
-    ModelProgress progress,
+    Model3dProgress progress,
     Duration? duration, {
     bool endIfThere = false,
   }) {
@@ -142,7 +142,7 @@ final class ModelPlayhead {
   }
 
   /// Moves toward [progress]'s target on the attached clip.
-  void retarget(ModelProgress progress) {
+  void retarget(Model3dProgress progress) {
     _progress = progress;
     final duration = _duration;
     if (duration == null) return;

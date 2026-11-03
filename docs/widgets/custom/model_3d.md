@@ -1,4 +1,4 @@
-# model
+# model_3d
 
 Renders a policy-backed 3D model driven by a state → clip table.
 
@@ -36,16 +36,16 @@ This widget produces the **box** layout protocol and takes no children. See [Con
 
 ## Rendering contract
 
-The engine ships no renderer. The app installs one through `Sdui.initialize(modelSource: ...)` — a webview `<model-viewer>`, Filament, SceneKit, or anything that implements `ModelSource`:
+The engine ships no renderer. The app installs one through `Sdui.initialize(model3dSource: ...)` — a webview `<model-viewer>`, Filament, SceneKit, or anything that implements `Model3dSource`:
 
-- `ModelSource.controllerFor(ModelRequest(src))` returns an unloaded `SduiModelController`.
+- `Model3dSource.controllerFor(Model3dRequest(src))` returns an unloaded `SduiModel3dController`.
 - The widget calls `initialize()`, reads `clips`, and drives `play(clip, loop:, crossfade:)`.
-- The widget calls `setCamera(ModelCamera(yaw, pitch, zoom))` right after creation and on every frame the camera moves.
+- The widget calls `setCamera(Model3dCamera(yaw, pitch, zoom))` right after creation and on every frame the camera moves.
 - For `progress`, the widget reads `clipDuration(clip)` once the model is ready and calls `setPose(clip, time)` on every frame the playhead moves. The renderer stops its own playback of that clip and holds the pose. The renderer's view never receives pointers; the engine handles gestures, so every renderer moves the same way for the same template.
-- A non-looping clip holds its last frame and advances `ModelPlayback.completions`; the engine detects a clip end by that counter.
-- `ModelSource.warmUp()` runs once in the background after boot, so a renderer can do its expensive first-time setup (such as creating a webview) before the first `model` mounts.
+- A non-looping clip holds its last frame and advances `Model3dPlayback.completions`; the engine detects a clip end by that counter.
+- `Model3dSource.warmUp()` runs once in the background after boot, so a renderer can do its expensive first-time setup (such as creating a webview) before the first `model_3d` mounts.
 
-Without an installed source, `model` renders `poster` only. A `src` change disposes and replaces the controller; `state`, `camera`, `controls` and `auto_rotate` changes reuse it.
+Without an installed source, `model_3d` renders `poster` only. A `src` change disposes and replaces the controller; `state`, `camera`, `controls` and `auto_rotate` changes reuse it.
 
 ## Camera and gestures
 
@@ -104,7 +104,7 @@ The same holds for `progress`: without the clip, a `value` that changes to 1 or 
 A character that idles, jumps on tap, and returns to idle:
 
 ```yaml
-_type: model
+_type: model_3d
 src: /assets/character.glb
 poster: /assets/character.png
 height: 200
@@ -136,7 +136,7 @@ _on:
 A model in a scrolling feed that turns sideways, springs back, and spins slowly:
 
 ```yaml
-_type: model
+_type: model_3d
 src: /assets/egg.glb
 height: 200
 camera: { pitch: 15 }
@@ -147,7 +147,7 @@ auto_rotate: 20
 A dispenser whose lever moves one stage per tap, through stops placed at the animation's beats. Every tap buzzes, but a tap only advances once the previous stage has landed:
 
 ```yaml
-_type: model
+_type: model_3d
 src: /assets/dispenser.glb
 height: 200
 progress:

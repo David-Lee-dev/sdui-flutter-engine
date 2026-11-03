@@ -40,7 +40,7 @@ server URL baked in has NO default — it is required; the rest defaults.
 | `apiClient` | `ApiClient` | **required** — installed as the `api` command |
 | `keyValueStore` / `secureStore` | storage contracts | in-memory |
 | `imageSource` / `videoSource` | media contracts | bundled assets (`AssetImageSource` / `AssetVideoSource`); network sources are app implementations (the loading polish — `fadeInImageFrame`, `shimmerPlaceholder`, `loadingImageTransition` — is exported for reuse) |
-| `modelSource` | `ModelSource` | none — optional 3D renderer for the `model` widget; without it `model` shows its `poster` image |
+| `model3dSource` | `Model3dSource` | none — optional 3D renderer for the `model_3d` widget; without it `model_3d` shows its `poster` image |
 | `telemetry` | `TelemetrySink` | `NoopTelemetrySink` — observes nothing; runtime toggle via `Sdui.telemetryEnabled` |
 | `services` | `SduiService` | none — the ONLY extension channel: a service bundles the `ExternalCommand`s of one integration (ads SDK, support chat, clipboard, ...) with an `onRegister` setup hook. Drivers cannot be injected — every driver (`set`, `api`, `navigate`, `toast`, `modal`, `scroll`, `sys_haptic`, ...) is engine-owned and locked; `api` routes to the injected `ApiClient` |
 | `widgets` | `WidgetSpec` | app-owned widget types |

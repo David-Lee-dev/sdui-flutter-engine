@@ -1,20 +1,20 @@
-import 'package:sdui_engine/src/contract/model_source.dart';
+import 'package:sdui_engine/src/contract/model_3d_source.dart';
 
 /// Defines the process-wide policy for creating model controllers.
-final class ModelSourceRegistry {
-  const ModelSourceRegistry._();
+final class Model3dSourceRegistry {
+  const Model3dSourceRegistry._();
 
-  static ModelSource? _current;
+  static Model3dSource? _current;
 
   /// Returns the installed model policy, or null when the app installed none
-  /// (the `model` widget then renders its poster only).
-  static ModelSource? get current => _current;
+  /// (the `model_3d` widget then renders its poster only).
+  static Model3dSource? get current => _current;
 
   static bool _frozen = false;
 
   /// Installs [source], or throws [StateError] after [freeze] has been called.
-  static void install(ModelSource source) {
-    if (_frozen) throw StateError('ModelSource is frozen');
+  static void install(Model3dSource source) {
+    if (_frozen) throw StateError('Model3dSource is frozen');
     _current = source;
   }
 

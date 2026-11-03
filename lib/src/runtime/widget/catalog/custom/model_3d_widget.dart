@@ -1,20 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:sdui_engine/src/contract/model_source.dart';
+import 'package:sdui_engine/src/contract/model_3d_source.dart';
 
 import '../../../log/engine_log.dart';
-import '../../../media/model_source_registry.dart';
+import '../../../media/model_3d_source_registry.dart';
 import '../../../util/props_resolver.dart';
 import '../../contract/action_sink.dart';
+import '../../model_3d/model_3d_camera_rig.dart';
+import '../../model_3d/model_3d_progress.dart';
 import '../primitive/image_widget.dart';
-import 'model_camera_rig.dart';
-import 'model_progress.dart';
 
-/// `model` — Renders a policy-backed 3D model driven by a state → clip table.
+/// `model_3d` — Renders a policy-backed 3D model driven by a state → clip table.
 ///
 /// ```yaml
-/// _type: model
+/// _type: model_3d
 /// src: /assets/character.glb
 /// poster: /assets/character.png
 /// height: 200
@@ -52,8 +52,8 @@ import 'model_progress.dart';
 /// decoration: when no renderer is installed, loading fails, or a clip is
 /// missing, a non-looping state ends immediately, so `on_state_end` and
 /// `next` still run and template flows never wait on the renderer.
-final class ModelWidget {
-  const ModelWidget._();
+final class Model3dWidget {
+  const Model3dWidget._();
 
   static Widget build(
     BuildContext context,
@@ -66,8 +66,8 @@ final class ModelWidget {
     if ((src == null || src.isEmpty) && (poster == null || poster.isEmpty)) {
       return const SizedBox.shrink();
     }
-    final (camera, cameraDuration) = parseModelCamera(props['camera']);
-    return _ModelView(
+    final (camera, cameraDuration) = parseModel3dCamera(props['camera']);
+    return _Model3dView(
       src: src == null || src.isEmpty ? null : src,
       poster: poster == null || poster.isEmpty ? null : poster,
       fit: PropsResolver.text(props['fit']) ?? 'contain',
@@ -80,14 +80,14 @@ final class ModelWidget {
       crossfade: Duration(
         milliseconds: PropsResolver.integer(props['crossfade_ms']) ?? 200,
       ),
-      controls: ModelControls.parse(
+      controls: Model3dControls.parse(
         props['controls'],
         interactive: PropsResolver.flag(props['interactive']) ?? false,
       ),
       camera: camera,
       cameraDuration: cameraDuration,
       autoRotate: parseAutoRotate(props['auto_rotate']),
-      progress: ModelProgress.parse(props['progress']),
+      progress: Model3dProgress.parse(props['progress']),
       onProgressEnd: PropsResolver.text(props['on_progress_end']),
       onProgressArrive: PropsResolver.text(props['on_progress_arrive']),
       onStateEnd: _actionsOf(props['on_state_end']),
@@ -97,17 +97,17 @@ final class ModelWidget {
     );
   }
 
-  static Map<String, _ModelStateEntry> _statesOf(Object? raw) {
+  static Map<String, _Model3dStateEntry> _statesOf(Object? raw) {
     if (raw is! Map) return const {};
-    final states = <String, _ModelStateEntry>{};
+    final states = <String, _Model3dStateEntry>{};
     for (final MapEntry(:key, :value) in raw.entries) {
       if (key is! String || value is! Map) continue;
       final clip = PropsResolver.text(value['clip']);
       if (clip == null || clip.isEmpty) {
-        EngineLog.warn('model state "$key" has no clip', tag: 'model');
+        EngineLog.warn('model state "$key" has no clip', tag: 'model_3d');
         continue;
       }
-      states[key] = _ModelStateEntry(
+      states[key] = _Model3dStateEntry(
         clip: clip,
         loop: PropsResolver.flag(value['loop']) ?? false,
         next: PropsResolver.text(value['next']),
@@ -125,8 +125,8 @@ final class ModelWidget {
   }
 }
 
-final class _ModelStateEntry {
-  const _ModelStateEntry({
+final class _Model3dStateEntry {
+  const _Model3dStateEntry({
     required this.clip,
     required this.loop,
     required this.next,
@@ -139,8 +139,8 @@ final class _ModelStateEntry {
 
 enum _Phase { loading, ready, unavailable }
 
-class _ModelView extends StatefulWidget {
-  const _ModelView({
+class _Model3dView extends StatefulWidget {
+  const _Model3dView({
     required this.src,
     required this.poster,
     required this.fit,
@@ -172,13 +172,13 @@ class _ModelView extends StatefulWidget {
   final double aspectRatio;
   final String? state;
   final Object? stateKey;
-  final Map<String, _ModelStateEntry> states;
+  final Map<String, _Model3dStateEntry> states;
   final Duration crossfade;
-  final ModelControls controls;
-  final ModelCamera camera;
+  final Model3dControls controls;
+  final Model3dCamera camera;
   final Duration cameraDuration;
   final double autoRotate;
-  final ModelProgress? progress;
+  final Model3dProgress? progress;
   final String? onProgressEnd;
   final String? onProgressArrive;
   final Map<String, String> onStateEnd;
@@ -187,13 +187,14 @@ class _ModelView extends StatefulWidget {
   final ActionSink? dispatch;
 
   @override
-  State<_ModelView> createState() => _ModelViewState();
+  State<_Model3dView> createState() => _Model3dViewState();
 }
 
-class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
-  SduiModelController? _controller;
-  late final ModelCameraRig _rig;
-  late final ModelPlayhead _playhead;
+class _Model3dViewState extends State<_Model3dView>
+    with TickerProviderStateMixin {
+  SduiModel3dController? _controller;
+  late final Model3dCameraRig _rig;
+  late final Model3dPlayhead _playhead;
 
   /// Whether `progress` changed while the model was loading: a target that
   /// is the clip's end then still dispatches once the clip attaches there.
@@ -204,7 +205,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
   /// The state the view is in — set by the template or advanced by `next`.
   String? _active;
 
-  /// [ModelPlayback.completions] when the active clip started.
+  /// [Model3dPlayback.completions] when the active clip started.
   int _baseline = 0;
 
   /// The first clip after a load starts without a crossfade.
@@ -213,14 +214,14 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _rig = ModelCameraRig(
+    _rig = Model3dCameraRig(
       vsync: this,
       rest: widget.camera,
       controls: widget.controls,
       autoRotate: widget.autoRotate,
       onChanged: (camera) => _controller?.setCamera(camera),
     );
-    _playhead = ModelPlayhead(
+    _playhead = Model3dPlayhead(
       vsync: this,
       onPose: (clip, time) => _controller?.setPose(clip, time),
       onEnd: _endProgressSoon,
@@ -237,7 +238,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
     _played = false;
     _playhead.detach();
     _movedWhileLoading = false;
-    final source = ModelSourceRegistry.current;
+    final source = Model3dSourceRegistry.current;
     final src = widget.src;
     if (source == null || src == null) {
       _phase = _Phase.unavailable;
@@ -251,9 +252,9 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
 
   bool _isCurrent(int generation) => mounted && generation == _generation;
 
-  Future<void> _create(ModelSource source, String src, int generation) async {
+  Future<void> _create(Model3dSource source, String src, int generation) async {
     try {
-      final controller = await source.controllerFor(ModelRequest(src: src));
+      final controller = await source.controllerFor(Model3dRequest(src: src));
       if (!_isCurrent(generation)) {
         await controller.dispose();
         return;
@@ -270,7 +271,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
       _dispatch(widget.onReady);
     } catch (error) {
       if (!_isCurrent(generation)) return;
-      EngineLog.warn('model "$src" failed to load: $error', tag: 'model');
+      EngineLog.warn('model "$src" failed to load: $error', tag: 'model_3d');
       _disposeController();
       setState(() => _phase = _Phase.unavailable);
       _attachProgress(widget.progress);
@@ -286,7 +287,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
     if (state == null) return;
     final entry = widget.states[state];
     if (entry == null) {
-      EngineLog.warn('model has no state "$state"', tag: 'model');
+      EngineLog.warn('model has no state "$state"', tag: 'model_3d');
       return;
     }
     if (_phase == _Phase.loading) return;
@@ -303,7 +304,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
       }
       EngineLog.warn(
         'model has no clip "${entry.clip}" for state "$state"',
-        tag: 'model',
+        tag: 'model_3d',
       );
     }
     if (!entry.loop) _finishSoon(state);
@@ -338,7 +339,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
   /// playhead stays detached and a `value` end dispatches at once, so flows
   /// never wait on the renderer. A target the template [changed] (or moved
   /// while loading) arrives at once, since it is shown without playing.
-  void _attachProgress(ModelProgress? progress, {bool changed = false}) {
+  void _attachProgress(Model3dProgress? progress, {bool changed = false}) {
     final moved = _movedWhileLoading;
     _movedWhileLoading = false;
     if (progress == null) {
@@ -352,7 +353,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
     if (duration == null && controller != null && _phase == _Phase.ready) {
       EngineLog.warn(
         'model has no clip "${progress.clip}" for progress',
-        tag: 'model',
+        tag: 'model_3d',
       );
     }
     _playhead.attach(progress, duration, endIfThere: moved);
@@ -362,7 +363,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
     if (moved || changed) _arriveSoon();
   }
 
-  void _updateProgress(ModelProgress? old, ModelProgress? progress) {
+  void _updateProgress(Model3dProgress? old, Model3dProgress? progress) {
     if (progress == null) {
       _playhead.detach();
       return;
@@ -413,7 +414,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
   }
 
   @override
-  void didUpdateWidget(_ModelView oldWidget) {
+  void didUpdateWidget(_Model3dView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controls != widget.controls ||
         oldWidget.autoRotate != widget.autoRotate) {
@@ -490,7 +491,7 @@ class _ModelViewState extends State<_ModelView> with TickerProviderStateMixin {
         ),
       ],
     );
-    final content = ModelGestureLayer(
+    final content = Model3dGestureLayer(
       rig: _rig,
       controls: widget.controls,
       enabled: ready,
