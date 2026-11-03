@@ -91,29 +91,25 @@ final class Model3dControls {
       'vertical' => Model3dRotate.vertical,
       _ => Model3dRotate.free,
     };
-    final pitch = _range(raw['pitch']);
-    final zoom = _range(raw['zoom']);
-    final returnMs = PropsResolver.integer(raw['return_ms']);
+    final minPitch = PropsResolver.number(raw['min_pitch']) ?? -60;
+    final maxPitch = PropsResolver.number(raw['max_pitch']) ?? 60;
+    // Either bound turns pinch on; the absent one is the framed view (1).
+    final minZoom = PropsResolver.number(raw['min_zoom']);
+    final maxZoom = PropsResolver.number(raw['max_zoom']);
+    final zooms = minZoom != null || maxZoom != null;
+    final returnMs = PropsResolver.integer(raw['return_duration']);
     return Model3dControls(
       rotate: rotate,
-      minPitch: pitch?.$1 ?? -60,
-      maxPitch: pitch?.$2 ?? 60,
-      minZoom: zoom?.$1,
-      maxZoom: zoom?.$2,
+      minPitch: math.min(minPitch, maxPitch),
+      maxPitch: math.max(minPitch, maxPitch),
+      minZoom: zooms ? math.min(minZoom ?? 1, maxZoom ?? 1) : null,
+      maxZoom: zooms ? math.max(minZoom ?? 1, maxZoom ?? 1) : null,
       sensitivity: PropsResolver.number(raw['sensitivity']) ?? 1,
       inertia: PropsResolver.flag(raw['inertia']) ?? true,
       returnAfter: returnMs == null || returnMs <= 0
           ? null
           : Duration(milliseconds: returnMs),
     );
-  }
-
-  static (double, double)? _range(Object? raw) {
-    if (raw is! List || raw.length != 2) return null;
-    final a = PropsResolver.number(raw[0]);
-    final b = PropsResolver.number(raw[1]);
-    if (a == null || b == null) return null;
-    return a <= b ? (a, b) : (b, a);
   }
 }
 
@@ -129,7 +125,7 @@ final class Model3dControls {
       pitch: PropsResolver.number(raw['pitch']) ?? 0,
       zoom: PropsResolver.number(raw['zoom']) ?? 1,
     ),
-    Duration(milliseconds: PropsResolver.integer(raw['duration_ms']) ?? 300),
+    Duration(milliseconds: PropsResolver.integer(raw['duration']) ?? 300),
   );
 }
 
@@ -144,7 +140,7 @@ double parseAutoRotate(Object? raw) {
 ///
 /// The camera is the resting camera (`camera`, plus accumulated
 /// auto-rotation) with the user's offset on top. Gestures move the offset;
-/// `return_ms` eases it back to zero.
+/// `return_duration` eases it back to zero.
 final class Model3dCameraRig {
   Model3dCameraRig({
     required TickerProvider vsync,

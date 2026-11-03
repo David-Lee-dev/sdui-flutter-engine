@@ -4,15 +4,15 @@
 
 - Added the `model_3d` widget: a policy-backed 3D model driven by a state → clip
   table. `states` maps state names to `{ clip, loop, next }`; changing
-  `state` (or `state_key`, to replay the same state) plays that clip with a
-  `crossfade_ms` blend, `next` follows a finished non-looping clip, and
-  `on_state_end` dispatches per state. `poster` shows until the model is
+  `state` (or `state_trigger`, to replay the same state) plays that clip with a
+  `crossfade_duration` blend, `next` follows a finished non-looping clip, and
+  `on_state_end` dispatches with `{ state }`. `poster` shows until the model is
   ready and replaces it on failure. The engine owns the camera: `camera`
-  (yaw, pitch, zoom, eased changes), `controls` (rotate axes, pitch limits,
-  pinch zoom, sensitivity, inertia, `return_ms`), `auto_rotate` (degrees per
+  (yaw, pitch, zoom, eased changes), `controls` (rotate axes, `min_pitch`/`max_pitch`,
+  `min_zoom`/`max_zoom`, sensitivity, inertia, `return_duration`), `auto_rotate` (degrees per
   second) and the `interactive` shorthand turn into one `Model3dCamera` per
   frame, so every renderer moves the same way. Without `controls`, gestures
-  pass to ancestors. `progress: { clip, at | value, speed }` holds one clip at
+  pass to ancestors. `progress: { clip, at | value, speed }` (`at` in milliseconds) holds one clip at
   a playhead the template sets — a tap counter can step through one long
   animation — playing toward each new target at the clip's pace (reversing
   when it moves back) and showing the first target after a load at once;

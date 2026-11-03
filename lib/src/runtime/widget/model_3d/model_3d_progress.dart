@@ -18,7 +18,8 @@ final class Model3dProgress {
 
   final String clip;
 
-  /// Target in seconds into the clip; wins over [value].
+  /// Target in seconds into the clip (the template's `at` is in
+  /// milliseconds); wins over [value].
   final double? at;
 
   /// Target as a fraction of the clip, 0 to 1.
@@ -34,9 +35,10 @@ final class Model3dProgress {
     final clip = PropsResolver.text(raw['clip']);
     if (clip == null || clip.isEmpty) return null;
     final speed = PropsResolver.number(raw['speed']);
+    final at = PropsResolver.number(raw['at']);
     return Model3dProgress(
       clip: clip,
-      at: PropsResolver.number(raw['at']),
+      at: at == null ? null : at / 1000,
       value: PropsResolver.number(raw['value']),
       speed: speed == null || !speed.isFinite || speed < 0 ? 1 : speed,
     );

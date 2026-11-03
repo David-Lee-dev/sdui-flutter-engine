@@ -32,17 +32,17 @@ import '../primitive/image_widget.dart';
 /// - `height` (`size` (scaled by EngineMetrics), default `null`) — sets the box height.
 /// - `aspect_ratio` (`number`, default `1`) — width-to-height ratio used unless both `width` and `height` are set.
 /// - `state` (`text`, default `null`) — the state to enter; changing it plays that state's clip.
-/// - `state_key` (`any`, default `null`) — re-enters `state` whenever this value changes, so the same state can replay (e.g. bind a tap counter).
+/// - `state_trigger` (`any`, default `null`) — re-enters `state` whenever this value changes, so the same state can replay (e.g. bind a tap counter).
 /// - `states` (`map`, default `{}`) — state name → `{ clip, loop, next }`. `clip` names an animation in the model; `loop` (default `false`) repeats it; `next` is the state entered when a non-looping clip ends.
-/// - `crossfade_ms` (`integer`, default `200`) — blend time between clips in milliseconds.
-/// - `controls` (`map`, default `null`) — how gestures move the camera: `{ rotate, pitch, zoom, sensitivity, inertia, return_ms }`. `rotate` is none | horizontal | vertical | free (default free); `pitch` is `[min, max]` degrees (default `[-60, 60]`); `zoom` is `[min, max]` pinch magnification (no pinch when absent); `sensitivity` multiplies half a degree per pixel (default 1); `inertia` keeps a fling turning (default true); `return_ms` eases back to `camera` after release (stays put when absent). Without it, gestures pass through to ancestors.
+/// - `crossfade_duration` (`integer`, default `200`) — blend time between clips in milliseconds.
+/// - `controls` (`map`, default `null`) — how gestures move the camera: `{ rotate, min_pitch, max_pitch, min_zoom, max_zoom, sensitivity, inertia, return_duration }`. `rotate` is none | horizontal | vertical | free (default free); `min_pitch`/`max_pitch` limit pitch in degrees (default -60/60); `min_zoom`/`max_zoom` limit pinch magnification (no pinch when both are absent, an absent one is 1); `sensitivity` multiplies half a degree per pixel (default 1); `inertia` keeps a fling turning (default true); `return_duration` eases back to `camera` over that many milliseconds after release (stays put when absent). Without it, gestures pass through to ancestors.
 /// - `interactive` (`flag`, default `false`) — shorthand for `controls: { rotate: free }` when `controls` is absent.
-/// - `camera` (`map`, default `{}`) — the resting camera `{ yaw, pitch, zoom, duration_ms }`: degrees around (0 = front, positive toward the model's right), degrees above the horizon, magnification (1 frames the whole model); changes ease over `duration_ms` (default 300).
+/// - `camera` (`map`, default `{}`) — the resting camera `{ yaw, pitch, zoom, duration }`: degrees around (0 = front, positive toward the model's right), degrees above the horizon, magnification (1 frames the whole model); changes ease over `duration` milliseconds (default 300).
 /// - `auto_rotate` (`number` or `flag`, default `0`) — degrees per second the camera orbits on its own (`true` is 30); pauses while the user drags.
-/// - `progress` (`map`, default `null`) — holds one clip at a playhead the template sets: `{ clip, at, value, speed }`. `at` is seconds into the clip, `value` a 0–1 fraction (`at` wins); the playhead plays toward a changed target at `speed` (default 1, the clip's own pace; 0 jumps). The first target after a load shows at once.
+/// - `progress` (`map`, default `null`) — holds one clip at a playhead the template sets: `{ clip, at, value, speed }`. `at` is milliseconds into the clip, `value` a 0–1 fraction (`at` wins); the playhead plays toward a changed target at `speed` (default 1, the clip's own pace; 0 jumps). The first target after a load shows at once.
 /// - `on_progress_end` (`text`, default `null`) — action dispatched when the `progress` playhead arrives at the clip's end.
-/// - `on_progress_arrive` (`text`, default `null`) — action dispatched, with `{clip, at}`, when the playhead settles at a target the template changed: after playing there, at once when it jumps or nothing can play. A target replaced mid-way does not arrive. Lets a template ignore taps until the motion lands.
-/// - `on_state_end` (`map`, default `{}`) — state name → action dispatched when that state's non-looping clip ends.
+/// - `on_progress_arrive` (`text`, default `null`) — action dispatched, with `{clip, at}` (`at` in milliseconds), when the playhead settles at a target the template changed: after playing there, at once when it jumps or nothing can play. A target replaced mid-way does not arrive. Lets a template ignore taps until the motion lands.
+/// - `on_state_end` (`text`, default `null`) — action dispatched, with `{state}`, when a state's non-looping clip ends.
 /// - `on_ready` (`text`, default `null`) — action dispatched once the model is ready for the current `src`.
 /// - `on_error` (`text`, default `null`) — action dispatched once if the model fails to load for the current `src`.
 ///
@@ -75,10 +75,10 @@ final class Model3dWidget {
       height: PropsResolver.size(context, props['height']),
       aspectRatio: PropsResolver.number(props['aspect_ratio']) ?? 1,
       state: PropsResolver.text(props['state']),
-      stateKey: props['state_key'],
+      stateTrigger: props['state_trigger'],
       states: _statesOf(props['states']),
       crossfade: Duration(
-        milliseconds: PropsResolver.integer(props['crossfade_ms']) ?? 200,
+        milliseconds: PropsResolver.integer(props['crossfade_duration']) ?? 200,
       ),
       controls: Model3dControls.parse(
         props['controls'],
@@ -90,7 +90,7 @@ final class Model3dWidget {
       progress: Model3dProgress.parse(props['progress']),
       onProgressEnd: PropsResolver.text(props['on_progress_end']),
       onProgressArrive: PropsResolver.text(props['on_progress_arrive']),
-      onStateEnd: _actionsOf(props['on_state_end']),
+      onStateEnd: PropsResolver.text(props['on_state_end']),
       onReady: PropsResolver.text(props['on_ready']),
       onError: PropsResolver.text(props['on_error']),
       dispatch: dispatch,
@@ -114,14 +114,6 @@ final class Model3dWidget {
       );
     }
     return states;
-  }
-
-  static Map<String, String> _actionsOf(Object? raw) {
-    if (raw is! Map) return const {};
-    return {
-      for (final MapEntry(:key, :value) in raw.entries)
-        if (key is String && value is String) key: value,
-    };
   }
 }
 
@@ -148,7 +140,7 @@ class _Model3dView extends StatefulWidget {
     required this.height,
     required this.aspectRatio,
     required this.state,
-    required this.stateKey,
+    required this.stateTrigger,
     required this.states,
     required this.crossfade,
     required this.controls,
@@ -171,7 +163,7 @@ class _Model3dView extends StatefulWidget {
   final double? height;
   final double aspectRatio;
   final String? state;
-  final Object? stateKey;
+  final Object? stateTrigger;
   final Map<String, _Model3dStateEntry> states;
   final Duration crossfade;
   final Model3dControls controls;
@@ -181,7 +173,7 @@ class _Model3dView extends StatefulWidget {
   final Model3dProgress? progress;
   final String? onProgressEnd;
   final String? onProgressArrive;
-  final Map<String, String> onStateEnd;
+  final String? onStateEnd;
   final String? onReady;
   final String? onError;
   final ActionSink? dispatch;
@@ -328,7 +320,7 @@ class _Model3dViewState extends State<_Model3dView>
     final generation = _generation;
     scheduleMicrotask(() {
       if (!_isCurrent(generation) || _active != state) return;
-      _dispatch(widget.onStateEnd[state], event: {'state': state});
+      _dispatch(widget.onStateEnd, event: {'state': state});
       if (_active != state) return;
       final next = widget.states[state]?.next;
       if (next != null) _enter(next);
@@ -405,7 +397,10 @@ class _Model3dViewState extends State<_Model3dView>
     final at = _playhead.attached ? _playhead.position : null;
     scheduleMicrotask(() {
       if (!_isCurrent(generation)) return;
-      _dispatch(widget.onProgressArrive, event: {'clip': clip, 'at': at});
+      _dispatch(
+        widget.onProgressArrive,
+        event: {'clip': clip, 'at': at == null ? null : (at * 1000).round()},
+      );
     });
   }
 
@@ -431,9 +426,9 @@ class _Model3dViewState extends State<_Model3dView>
       _updateProgress(oldWidget.progress, widget.progress);
     }
     // A template that follows `next` (e.g. resets `mood` to idle in
-    // on_state_end) catches up to a state already entered; only `state_key`
+    // on_state_end) catches up to a state already entered; only `state_trigger`
     // forces a replay.
-    if (oldWidget.stateKey != widget.stateKey ||
+    if (oldWidget.stateTrigger != widget.stateTrigger ||
         (oldWidget.state != widget.state && widget.state != _active)) {
       _enter(widget.state);
     }

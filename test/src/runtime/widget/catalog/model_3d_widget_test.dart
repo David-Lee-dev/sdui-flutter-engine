@@ -8,6 +8,8 @@ import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
 import 'package:sdui_engine/src/runtime/media/model_3d_source_registry.dart';
 import 'package:sdui_engine/src/runtime/widget/catalog/custom/model_3d_widget.dart';
 import 'package:sdui_engine/src/runtime/widget/contract/action_sink.dart';
+import 'package:sdui_engine/src/runtime/widget/model_3d/model_3d_camera_rig.dart';
+import 'package:sdui_engine/src/runtime/widget/model_3d/model_3d_progress.dart';
 
 import '../../../../support/engine_harness.dart';
 
@@ -277,14 +279,16 @@ void main() {
     });
 
     group('states', () {
-      testWidgets('state가 바뀌면 그 클립을 crossfade_ms로 섞어 튼다', (tester) async {
+      testWidgets('state가 바뀌면 그 클립을 crossfade_duration으로 섞어 튼다', (
+        tester,
+      ) async {
         final source = _RecordingModel3dSource();
         Model3dSourceRegistry.install(source);
         const base = {
           'src': 'char.glb',
           'height': 100,
           'states': _states,
-          'crossfade_ms': 300,
+          'crossfade_duration': 300,
         };
 
         await _pump(tester, {...base, 'state': 'idle'});
@@ -309,7 +313,7 @@ void main() {
           'height': 100,
           'state': 'jump',
           'states': _states,
-          'on_state_end': {'jump': 'landed'},
+          'on_state_end': 'landed',
         }, dispatch: sink);
         await tester.pumpAndSettle();
         final controller = source.controllers.single;
@@ -333,7 +337,7 @@ void main() {
           'height': 100,
           'state': 'idle',
           'states': _states,
-          'on_state_end': {'idle': 'never'},
+          'on_state_end': 'never',
         }, dispatch: sink);
         await tester.pumpAndSettle();
         source.controllers.single.finish();
@@ -342,7 +346,7 @@ void main() {
         expect(sink.calls, isEmpty);
       });
 
-      testWidgets('state_key가 바뀌면 같은 state를 다시 재생한다', (tester) async {
+      testWidgets('state_trigger가 바뀌면 같은 state를 다시 재생한다', (tester) async {
         final source = _RecordingModel3dSource();
         Model3dSourceRegistry.install(source);
         const base = {
@@ -352,10 +356,10 @@ void main() {
           'states': _states,
         };
 
-        await _pump(tester, {...base, 'state_key': 1});
+        await _pump(tester, {...base, 'state_trigger': 1});
         await tester.pumpAndSettle();
-        await _pump(tester, {...base, 'state_key': 1});
-        await _pump(tester, {...base, 'state_key': 2});
+        await _pump(tester, {...base, 'state_trigger': 1});
+        await _pump(tester, {...base, 'state_trigger': 2});
 
         expect(source.controllers.single.plays.map((p) => p.clip), [
           'Wave',
@@ -400,7 +404,7 @@ void main() {
           'height': 100,
           'state': 'jump',
           'states': _states,
-          'on_state_end': {'jump': 'landed'},
+          'on_state_end': 'landed',
         }, dispatch: sink);
         await tester.pump();
 
@@ -422,7 +426,7 @@ void main() {
           'state': 'jump',
           'states': _states,
           'on_error': 'failed',
-          'on_state_end': {'jump': 'landed'},
+          'on_state_end': 'landed',
         }, dispatch: sink);
         await tester.pumpAndSettle();
 
@@ -442,7 +446,7 @@ void main() {
           'height': 100,
           'state': 'dance',
           'states': _states,
-          'on_state_end': {'dance': 'danced'},
+          'on_state_end': 'danced',
         }, dispatch: sink);
         await tester.pumpAndSettle();
 
@@ -544,11 +548,14 @@ void main() {
         expect(last(source), turned);
       });
 
-      testWidgets('free는 세로 드래그로 기울고 pitch 범위에서 멈춘다', (tester) async {
+      testWidgets('free는 세로 드래그로 기울고 min_pitch·max_pitch 에서 멈춘다', (
+        tester,
+      ) async {
         final source = await ready(tester, const {
           'controls': {
             'rotate': 'free',
-            'pitch': [-10, 20],
+            'min_pitch': -10,
+            'max_pitch': 20,
             'inertia': false,
           },
         });
@@ -576,10 +583,10 @@ void main() {
         expect(last(source).pitch, greaterThan(0));
       });
 
-      testWidgets('return_ms가 있으면 놓은 뒤 camera로 돌아온다', (tester) async {
+      testWidgets('return_duration이 있으면 놓은 뒤 camera로 돌아온다', (tester) async {
         final source = await ready(tester, const {
           'camera': {'yaw': 10},
-          'controls': {'rotate': 'horizontal', 'return_ms': 300},
+          'controls': {'rotate': 'horizontal', 'return_duration': 300},
         });
 
         await tester.drag(view, const Offset(100, 0));
@@ -611,11 +618,12 @@ void main() {
         expect(last(stopped).yaw, atRelease);
       });
 
-      testWidgets('zoom 범위 안에서 핀치로 확대한다', (tester) async {
+      testWidgets('min_zoom·max_zoom 안에서 핀치로 확대한다', (tester) async {
         final source = await ready(tester, const {
           'controls': {
             'rotate': 'free',
-            'zoom': [0.5, 2],
+            'min_zoom': 0.5,
+            'max_zoom': 2,
             'inertia': false,
           },
         });
@@ -664,16 +672,16 @@ void main() {
         await tester.pumpWidget(const SizedBox());
       });
 
-      testWidgets('camera가 바뀌면 duration_ms 동안 옮겨 간다', (tester) async {
+      testWidgets('camera가 바뀌면 duration 동안 옮겨 간다', (tester) async {
         final source = await ready(tester, const {
-          'camera': {'yaw': 0, 'duration_ms': 400},
+          'camera': {'yaw': 0, 'duration': 400},
         });
 
         await _pump(tester, const {
           'src': 'char.glb',
           'width': 200,
           'height': 200,
-          'camera': {'yaw': 90, 'duration_ms': 400},
+          'camera': {'yaw': 90, 'duration': 400},
         });
         await tester.pump(const Duration(milliseconds: 200));
         final halfway = last(source).yaw;
@@ -724,7 +732,7 @@ void main() {
 
       testWidgets('로드 후 첫 목표는 재생 없이 그 자리에 바로 보인다', (tester) async {
         final sink = _Sink();
-        final controller = await ready(tester, const {'at': 3}, sink: sink);
+        final controller = await ready(tester, const {'at': 3000}, sink: sink);
 
         expect(controller.poses, [('Wave', const Duration(seconds: 3))]);
         expect(controller.plays, isEmpty);
@@ -732,9 +740,9 @@ void main() {
       });
 
       testWidgets('목표가 바뀌면 클립 속도로 재생해 가서 멈춘다', (tester) async {
-        final controller = await ready(tester, const {'at': 1});
+        final controller = await ready(tester, const {'at': 1000});
 
-        await _pump(tester, props(const {'at': 3}));
+        await _pump(tester, props(const {'at': 3000}));
         await tester.pump(const Duration(seconds: 1));
         expect(controller.seconds, closeTo(2, 0.05));
 
@@ -748,9 +756,9 @@ void main() {
       testWidgets('재생 중에 목표가 더 멀어지면 끊기지 않고 이어 간다', (tester) async {
         final controller = await ready(tester, const {'at': 0});
 
-        await _pump(tester, props(const {'at': 1}));
+        await _pump(tester, props(const {'at': 1000}));
         await tester.pump(const Duration(milliseconds: 500));
-        await _pump(tester, props(const {'at': 4}));
+        await _pump(tester, props(const {'at': 4000}));
         await tester.pumpAndSettle();
 
         final times = [for (final (_, time) in controller.poses) time];
@@ -761,15 +769,15 @@ void main() {
       });
 
       testWidgets('목표가 앞으로 돌아가면 거꾸로 재생하고 speed는 속도를 바꾼다', (tester) async {
-        final controller = await ready(tester, const {'at': 4, 'speed': 2});
+        final controller = await ready(tester, const {'at': 4000, 'speed': 2});
 
-        await _pump(tester, props(const {'at': 2, 'speed': 2}));
+        await _pump(tester, props(const {'at': 2000, 'speed': 2}));
         await tester.pump(const Duration(milliseconds: 500));
         expect(controller.seconds, closeTo(3, 0.05));
         await tester.pumpAndSettle();
         expect(controller.seconds, 2);
 
-        await _pump(tester, props(const {'at': 5, 'speed': 0}));
+        await _pump(tester, props(const {'at': 5000, 'speed': 0}));
         await tester.pump();
         expect(controller.poses.last, ('Wave', const Duration(seconds: 5)));
       });
@@ -811,7 +819,7 @@ void main() {
         final sink = _Sink();
 
         await _pump(tester, props(const {'at': 0}), dispatch: sink);
-        await _pump(tester, props(const {'at': 6}), dispatch: sink);
+        await _pump(tester, props(const {'at': 6000}), dispatch: sink);
         gate.complete();
         await tester.pumpAndSettle();
 
@@ -853,7 +861,7 @@ void main() {
         final source = _RecordingModel3dSource();
         Model3dSourceRegistry.install(source);
         Map<String, Object?> at(num seconds) =>
-            props({'at': seconds}, onEnd: null, onArrive: 'arrived');
+            props({'at': seconds * 1000}, onEnd: null, onArrive: 'arrived');
 
         await _pump(tester, at(1), dispatch: sink);
         await tester.pumpAndSettle();
@@ -864,7 +872,7 @@ void main() {
         expect(arrivals(sink), isEmpty);
         await tester.pumpAndSettle();
         expect(arrivals(sink), [
-          {'clip': 'Wave', 'at': 3.0},
+          {'clip': 'Wave', 'at': 3000},
         ]);
 
         // A target replaced mid-way does not arrive; only the last one does.
@@ -873,8 +881,8 @@ void main() {
         await _pump(tester, at(5), dispatch: sink);
         await tester.pumpAndSettle();
         expect(arrivals(sink), [
-          {'clip': 'Wave', 'at': 3.0},
-          {'clip': 'Wave', 'at': 5.0},
+          {'clip': 'Wave', 'at': 3000},
+          {'clip': 'Wave', 'at': 5000},
         ]);
       });
 
@@ -882,11 +890,11 @@ void main() {
         tester,
       ) async {
         final sink = _Sink();
-        await ready(tester, const {'at': 5}, sink: sink);
+        await ready(tester, const {'at': 5000}, sink: sink);
 
         await _pump(
           tester,
-          props(const {'at': 6}, onArrive: 'arrived'),
+          props(const {'at': 6000}, onArrive: 'arrived'),
           dispatch: sink,
         );
         await tester.pumpAndSettle();
@@ -896,20 +904,20 @@ void main() {
 
       testWidgets('바로 옮기거나 움직일 게 없으면 바로 도착한다', (tester) async {
         final sink = _Sink();
-        final controller = await ready(tester, const {'at': 2}, sink: sink);
+        final controller = await ready(tester, const {'at': 2000}, sink: sink);
         Map<String, Object?> target(Map<String, Object?> progress) =>
             props(progress, onEnd: null, onArrive: 'arrived');
 
         // speed 0 jumps.
         await _pump(
           tester,
-          target(const {'at': 4, 'speed': 0}),
+          target(const {'at': 4000, 'speed': 0}),
           dispatch: sink,
         );
         // Only the speed changes: the playhead already holds the target.
         await _pump(
           tester,
-          target(const {'at': 4, 'speed': 2}),
+          target(const {'at': 4000, 'speed': 2}),
           dispatch: sink,
         );
         // A new clip is shown at its target at once.
@@ -924,9 +932,9 @@ void main() {
           const Duration(milliseconds: 500),
         ));
         expect(arrivals(sink), [
-          {'clip': 'Wave', 'at': 4.0},
-          {'clip': 'Wave', 'at': 4.0},
-          {'clip': 'Jump', 'at': 0.5},
+          {'clip': 'Wave', 'at': 4000},
+          {'clip': 'Wave', 'at': 4000},
+          {'clip': 'Jump', 'at': 500},
         ]);
       });
 
@@ -961,7 +969,7 @@ void main() {
         Model3dSourceRegistry.install(_RecordingModel3dSource(gate: gate));
         final sink = _Sink();
         Map<String, Object?> at(num seconds) =>
-            props({'at': seconds}, onEnd: null, onArrive: 'arrived');
+            props({'at': seconds * 1000}, onEnd: null, onArrive: 'arrived');
 
         await _pump(tester, at(0), dispatch: sink);
         await _pump(tester, at(2), dispatch: sink);
@@ -970,12 +978,12 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(arrivals(sink), [
-          {'clip': 'Wave', 'at': 2.0},
+          {'clip': 'Wave', 'at': 2000},
         ]);
       });
 
       testWidgets('클립이 바뀌면 새 클립의 목표로 바로 옮긴다', (tester) async {
-        final controller = await ready(tester, const {'at': 3});
+        final controller = await ready(tester, const {'at': 3000});
 
         await _pump(tester, {
           ...props(const {}),
@@ -1018,7 +1026,7 @@ void main() {
 
     group('template', () {
       testWidgets(
-        '탭 → set → state_key 변화로 같은 state를 다시 재생하고 끝나면 액션이 state를 되돌린다',
+        '탭 → set → state_trigger 변화로 같은 state를 다시 재생하고 끝나면 액션이 state를 되돌린다',
         (tester) async {
           final source = _RecordingModel3dSource();
           Model3dSourceRegistry.install(source);
@@ -1028,9 +1036,9 @@ void main() {
             'src': 'char.glb',
             'height': 100,
             'state': r'${mood}',
-            'state_key': r'${taps}',
+            'state_trigger': r'${taps}',
             'states': _states,
-            'on_state_end': {'jump': 'landed'},
+            'on_state_end': 'landed',
             '_scope': {
               '_state': {'mood': 'idle', 'taps': 0},
               '_action': {
@@ -1073,7 +1081,10 @@ void main() {
           '_type': 'model_3d',
           'src': 'char.glb',
           'height': 100,
-          'progress': {'clip': 'Wave', 'at': r'${[0, 2.5, 6][min(taps, 2)]}'},
+          'progress': {
+            'clip': 'Wave',
+            'at': r'${[0, 2500, 6000][min(taps, 2)]}',
+          },
           '_scope': {
             '_state': {'taps': 0},
             '_action': {
@@ -1109,7 +1120,10 @@ void main() {
           '_type': 'model_3d',
           'src': 'char.glb',
           'height': 100,
-          'progress': {'clip': 'Wave', 'at': r'${[0, 2, 6][min(taps, 2)]}'},
+          'progress': {
+            'clip': 'Wave',
+            'at': r'${[0, 2000, 6000][min(taps, 2)]}',
+          },
           'on_progress_arrive': 'arrived',
           '_scope': {
             '_state': {'taps': 0, 'moving': false},
@@ -1141,6 +1155,47 @@ void main() {
         await tester.pumpAndSettle();
         expect(controller.seconds, 6);
       });
+    });
+  });
+
+  group('Model3dWidget 속성 해석', () {
+    test('controls 의 범위는 min_·max_ 짝으로 받고, 뒤집혀 오면 바로잡는다', () {
+      final controls = Model3dControls.parse(const {
+        'min_pitch': 30,
+        'max_pitch': -10,
+        'min_zoom': 0.5,
+        'max_zoom': 2,
+      }, interactive: false);
+
+      expect((controls.minPitch, controls.maxPitch), (-10, 30));
+      expect((controls.minZoom, controls.maxZoom), (0.5, 2));
+      expect(controls.zooms, isTrue);
+    });
+
+    test('줌 한쪽만 주면 나머지는 1이고 핀치가 켜진다', () {
+      final out = Model3dControls.parse(const {
+        'max_zoom': 2,
+      }, interactive: false);
+      expect((out.minZoom, out.maxZoom, out.zooms), (1, 2, true));
+
+      final none = Model3dControls.parse(const {}, interactive: false);
+      expect(none.zooms, isFalse);
+    });
+
+    test('시간은 밀리초: return_duration·camera duration·progress at', () {
+      final controls = Model3dControls.parse(const {
+        'return_duration': 400,
+      }, interactive: false);
+      expect(controls.returnAfter, const Duration(milliseconds: 400));
+
+      final (_, ease) = parseModel3dCamera(const {'duration': 250});
+      expect(ease, const Duration(milliseconds: 250));
+
+      final progress = Model3dProgress.parse(const {
+        'clip': 'Wave',
+        'at': 2340,
+      });
+      expect(progress!.at, closeTo(2.34, 1e-9));
     });
   });
 }
