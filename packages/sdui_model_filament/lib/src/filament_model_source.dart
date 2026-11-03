@@ -75,13 +75,16 @@ final class FilamentModelSource extends ModelSource {
   int _mounts = 0;
   int? _warmUpMs;
 
-  /// Pauses Filament's frame loop while every model is still. A surface the
-  /// platform recreated while the app was hidden gets a frame on resume.
+  /// Renders only the models that change or play, and pauses Filament's
+  /// frame loop while every model is still. Surfaces the platform recreated
+  /// while the app was hidden get a frame on resume.
   late final RenderGate _gate = () {
-    AppLifecycleListener(onResume: () => _gate.touch(this));
+    AppLifecycleListener(onResume: () => _gate.wake());
     return RenderGate(
       resume: ThermionFlutterPlugin.instance.resumeFrameScheduler,
       pause: ThermionFlutterPlugin.instance.pauseFrameScheduler,
+      render: (view, rendering) =>
+          (view as FilamentModelController)._setRendering(rendering),
     );
   }();
 
@@ -209,7 +212,6 @@ final class FilamentModelController implements SduiModelController {
       stats.mark('asset');
 
       await _frame(_framedAspect ?? 1);
-      await viewer.setRendering(true);
       _touch();
       _ifAlive(() => stats.mark('ready'));
       debugPrint('[sdui_model_filament] ${stats.summary()}, clips: $_clips');
@@ -227,6 +229,12 @@ final class FilamentModelController implements SduiModelController {
   /// Runs frames so this view's change reaches the screen.
   void _touch() {
     if (!_disposed && _viewer.value != null) _source._gate.touch(this);
+  }
+
+  /// Adds this view to Filament's frames, or leaves it out ([RenderGate]).
+  void _setRendering(bool rendering) {
+    final viewer = _viewer.value;
+    if (!_disposed && viewer != null) unawaited(viewer.setRendering(rendering));
   }
 
   /// Sets the zoom-1 distance so [_frameRadius] fits the narrower field of

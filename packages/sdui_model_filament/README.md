@@ -30,7 +30,8 @@ Sdui.initialize(
 - Frames render only while a model changes: Filament's frame loop runs while
   the camera moves, a pose changes or a clip plays, and pauses 300 ms after the
   last change (`RenderGate`). A still model keeps its last frame on screen and
-  costs no frames.
+  costs no frames. Each model renders on its own: with several on screen, only
+  the ones that change or play are drawn in a frame.
 - `debugOverlay: true`, or `--dart-define=SDUI_MODEL_DEBUG=true`, paints each
   view's load timeline (`viewer → model → asset → ready`), app RSS (Filament
   runs in-process, so it is included) and frame times since ready.
