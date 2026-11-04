@@ -47,6 +47,8 @@ The engine ships no renderer. The app installs one through `Sdui.initialize(mode
 
 Without an installed source, `model_3d` renders `poster` only. A `src` change disposes and replaces the controller; `state`, `camera`, `controls` and `auto_rotate` changes reuse it.
 
+While an inactive tab or a covering route hides the view (`TickerMode` off), the widget stops a looping state's clip with `stop()` and plays it again once the view shows, so a hidden loop does not keep the renderer drawing. Camera motion, `progress` and `auto_rotate` run on tickers and pause on their own; a non-looping clip plays to its end and its state ends as usual.
+
 ## Camera and gestures
 
 The camera orbits the model's centre. Its angles are in degrees, unlike the radians of 2D `transform` and motion `rotate`, since 3D cameras are conventionally set in degrees. The engine computes it each frame from the resting `camera`, accumulated `auto_rotate`, and the user's gesture offset, and hands it to the renderer.
@@ -97,7 +99,7 @@ Gestures go through Flutter's gesture arena. `rotate: horizontal` claims only ho
 
 ## Animation never blocks a flow
 
-Animation is decoration. When no renderer is installed, the model fails to load, or the model lacks a state's clip, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. While the model is still loading, a state waits and plays once it is ready.
+Animation is decoration. When no renderer is installed, the model fails to load, the model lacks a state's clip, or the clip fails to play, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. While the model is still loading, a state waits and plays once it is ready.
 
 The same holds for `progress`: without the clip, a `value` that changes to 1 or more dispatches `on_progress_end` at once. An `at` target cannot be judged without the clip's length, so it never ends there; prefer `value` when a flow waits on the end. A target that reaches the end while the model is loading dispatches once the clip attaches there. `on_progress_arrive` likewise dispatches at once on every target change when the clip cannot play, so a template gated on it never stalls.
 

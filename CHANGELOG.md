@@ -33,6 +33,8 @@
   is called, a failed `initialize` is final, and `dispose` may arrive while
   calls are in flight. A play that fails ends its non-looping state, and a
   state's end never ends a later entry of the same state.
+  While an inactive tab or a covering route hides the view (`TickerMode`
+  off), a looping state's clip stops and plays again once the view shows.
   Existing apps need no changes.
 
 ## 0.20.4

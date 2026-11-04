@@ -36,6 +36,7 @@ final class _FakeController implements SduiModel3dController {
   final poses = <(String, Duration)>[];
   final _listeners = <VoidCallback>[];
   bool disposed = false;
+  int stops = 0;
   String? _clip;
   int _completions = 0;
 
@@ -65,7 +66,7 @@ final class _FakeController implements SduiModel3dController {
   }
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async => stops++;
 
   @override
   void setCamera(Model3dCamera camera) => cameras.add(camera);
@@ -162,14 +163,18 @@ Future<void> _pump(
   WidgetTester tester,
   Map<String, Object?> props, {
   ActionSink? dispatch,
+  bool shown = true,
 }) async {
   await tester.pumpWidget(
-    Directionality(
-      textDirection: TextDirection.ltr,
-      child: Center(
-        child: Builder(
-          builder: (context) =>
-              Model3dWidget.build(context, props, const [], dispatch),
+    TickerMode(
+      enabled: shown,
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: Builder(
+            builder: (context) =>
+                Model3dWidget.build(context, props, const [], dispatch),
+          ),
         ),
       ),
     ),
@@ -485,6 +490,65 @@ void main() {
         expect(source.controllers.single.clips, isNot(contains('Dance')));
         expect(source.controllers.single.plays, isEmpty);
         expect(sink.calls.map((c) => c.$1), ['danced']);
+      });
+    });
+
+    group('visibility', () {
+      const idle = {
+        'src': 'char.glb',
+        'height': 100,
+        'state': 'idle',
+        'states': _states,
+      };
+
+      testWidgets('가려지면 반복 클립을 멈추고 다시 보이면 다시 튼다', (tester) async {
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
+
+        await _pump(tester, idle);
+        await tester.pumpAndSettle();
+        final controller = source.controllers.single;
+        expect(controller.plays.map((p) => p.clip), ['Idle']);
+
+        await _pump(tester, idle, shown: false);
+        expect(controller.stops, 1);
+        await _pump(tester, idle, shown: false);
+        expect(controller.stops, 1);
+
+        await _pump(tester, idle);
+        expect(controller.plays.map((p) => p.clip), ['Idle', 'Idle']);
+      });
+
+      testWidgets('가려진 동안 들어온 반복 state는 보일 때 튼다', (tester) async {
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
+        final wave = {...idle, 'state': 'wave'};
+
+        await _pump(tester, wave);
+        await tester.pumpAndSettle();
+        await _pump(tester, idle, shown: false);
+        final controller = source.controllers.single;
+        expect(controller.plays.map((p) => p.clip), ['Wave']);
+
+        await _pump(tester, idle);
+        expect(controller.plays.map((p) => p.clip), ['Wave', 'Idle']);
+      });
+
+      testWidgets('한 번 재생 클립은 가려져도 끝까지 두고 끝나면 흐름을 잇는다', (tester) async {
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
+        final sink = _Sink();
+        final wave = {...idle, 'state': 'wave', 'on_state_end': 'waved'};
+
+        await _pump(tester, wave, dispatch: sink);
+        await tester.pumpAndSettle();
+        await _pump(tester, wave, dispatch: sink, shown: false);
+        final controller = source.controllers.single;
+        expect(controller.stops, 0);
+
+        controller.finish();
+        await tester.pump();
+        expect(sink.calls.map((c) => c.$1), ['waved']);
       });
     });
 

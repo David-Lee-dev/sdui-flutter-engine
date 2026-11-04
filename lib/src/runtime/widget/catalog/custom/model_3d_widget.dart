@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sdui_engine/src/contract/model_3d_source.dart';
 
@@ -207,6 +208,13 @@ class _Model3dViewState extends State<_Model3dView>
   /// The first clip after a load starts without a crossfade.
   bool _played = false;
 
+  /// Off while an inactive tab or a covering route hides the view.
+  ValueListenable<bool>? _shown;
+
+  /// Whether the active looping clip is stopped until the view shows again:
+  /// a hidden loop would keep the renderer drawing frames nobody sees.
+  bool _held = false;
+
   @override
   void initState() {
     super.initState();
@@ -280,6 +288,7 @@ class _Model3dViewState extends State<_Model3dView>
   /// loads, and otherwise ends a non-looping state at once.
   void _enter(String? state) {
     _active = state;
+    _held = false;
     final entered = ++_entered;
     if (state == null) return;
     final entry = widget.states[state];
@@ -291,6 +300,10 @@ class _Model3dViewState extends State<_Model3dView>
     final controller = _controller;
     if (_phase == _Phase.ready && controller != null) {
       if (controller.clips.contains(entry.clip)) {
+        if (entry.loop && !_isShown) {
+          _held = true;
+          return;
+        }
         _baseline = controller.playback.completions;
         final crossfade = _played ? widget.crossfade : Duration.zero;
         _played = true;
@@ -457,6 +470,47 @@ class _Model3dViewState extends State<_Model3dView>
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final shown = TickerMode.getNotifier(context);
+    if (shown == _shown) return;
+    _shown?.removeListener(_onShown);
+    _shown = shown..addListener(_onShown);
+    _onShown();
+  }
+
+  bool get _isShown => _shown?.value ?? true;
+
+  /// Stops the active looping clip while the view is hidden and plays it
+  /// again once it shows. Camera, progress and auto-rotation run on tickers,
+  /// which [TickerMode] already stops; a non-looping clip ends by itself.
+  void _onShown() {
+    if (_isShown) {
+      if (_held) _enter(_active);
+      return;
+    }
+    final controller = _controller;
+    final state = _active;
+    if (_held || _phase != _Phase.ready || controller == null) return;
+    final entry = state == null ? null : widget.states[state];
+    if (entry == null ||
+        !entry.loop ||
+        !controller.clips.contains(entry.clip)) {
+      return;
+    }
+    _held = true;
+    unawaited(
+      controller.stop().then(
+        (_) {},
+        onError: (Object error) => EngineLog.warn(
+          'model clip "${entry.clip}" failed to stop: $error',
+          tag: 'model_3d',
+        ),
+      ),
+    );
+  }
+
   void _disposeController() {
     _generation++;
     final controller = _controller;
@@ -468,6 +522,7 @@ class _Model3dViewState extends State<_Model3dView>
 
   @override
   void dispose() {
+    _shown?.removeListener(_onShown);
     _disposeController();
     _rig.dispose();
     _playhead.dispose();
