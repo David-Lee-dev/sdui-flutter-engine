@@ -32,78 +32,7 @@ All non-structural property values are recursively expression-bindable. Structur
 
 ## Protocol
 
-This widget produces the **box** layout protocol and takes no children. See [Concepts](../../concepts.md#box-and-sliver-protocols).
-
-## Rendering contract
-
-The engine ships no renderer. The app installs one through `Sdui.initialize(model3dSource: ...)` — a webview `<model-viewer>`, Filament, SceneKit, or anything that implements `Model3dSource`:
-
-- `Model3dSource.controllerFor(Model3dRequest(src))` returns an unloaded `SduiModel3dController`.
-- The widget calls `initialize()`, reads `clips`, and drives `play(clip, loop:, crossfade:)`.
-- The widget calls `setCamera(Model3dCamera(yaw, pitch, zoom))` right after creation and on every frame the camera moves.
-- For `progress`, the widget reads `clipDuration(clip)` once the model is ready and calls `setPose(clip, time)` on every frame the playhead moves. The renderer stops its own playback of that clip and holds the pose. The renderer's view never receives pointers; the engine handles gestures, so every renderer moves the same way for the same template.
-- A non-looping clip holds its last frame and advances `Model3dPlayback.completions`; the engine detects a clip end by that counter.
-- `Model3dSource.warmUp()` runs once in the background after boot, so a renderer can do its expensive first-time setup (such as creating a webview) before the first `model_3d` mounts.
-
-Without an installed source, `model_3d` renders `poster` only. A `src` change disposes and replaces the controller; `state`, `camera`, `controls` and `auto_rotate` changes reuse it.
-
-A failed load shows `poster` and is tried again with a new controller when the view shows again or the app returns to the foreground — a weak network may have dropped the download. Each retry plays `state` from the start once it loads.
-
-While an inactive tab or a covering route hides the view (`TickerMode` off), the widget stops a looping state's clip with `stop()` and plays it again once the view shows, so a hidden loop does not keep the renderer drawing. Camera motion, `progress` and `auto_rotate` run on tickers and pause on their own; a non-looping clip plays to its end and its state ends as usual.
-
-## Camera and gestures
-
-The camera orbits the model's centre. Its angles are in degrees, unlike the radians of 2D `transform` and motion `rotate`, since 3D cameras are conventionally set in degrees. The engine computes it each frame from the resting `camera`, accumulated `auto_rotate`, and the user's gesture offset, and hands it to the renderer.
-
-`camera`:
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `yaw` | `0` | degrees around the vertical axis; 0 faces the model's front, positive moves the camera toward the model's right. |
-| `pitch` | `0` | degrees above the horizon; positive looks down on the model. |
-| `zoom` | `1` | magnification; 1 frames the whole model, 2 is twice as close. |
-| `duration` | `300` | how long a change to `camera` takes to ease in, in milliseconds. |
-
-Bind `camera` to state to turn the model from an action, e.g. `camera: { yaw: '${facing}' }` with a `set` that changes `facing`.
-
-`controls`:
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `rotate` | `free` | `none`, `horizontal`, `vertical` or `free`: which drag axes turn the camera. |
-| `min_pitch` | `-60` | lowest pitch in degrees for vertical dragging. |
-| `max_pitch` | `60` | highest pitch in degrees for vertical dragging. |
-| `min_zoom` | none | smallest pinch magnification. |
-| `max_zoom` | none | largest pinch magnification. Pinch is off unless `min_zoom` or `max_zoom` is set; the one left out is `1`. |
-| `sensitivity` | `1` | multiplies the base rate of half a degree per logical pixel. |
-| `inertia` | `true` | a fling keeps the camera turning and slowing down. |
-| `return_duration` | none | after release, ease back to `camera` over this many milliseconds; without it the camera stays where it was left. |
-
-Gestures go through Flutter's gesture arena. `rotate: horizontal` claims only horizontal drags, so an enclosing scroll view still scrolls vertically over the model. `free`, `vertical` and pinch zoom claim drags in their directions over the model, so use them where the model is not inside a scroll view in that direction. Taps are never claimed, so `_on: tap` on the model or an ancestor still fires.
-
-## Progress
-
-`progress` turns one long clip into steps the template controls, e.g. a lever that moves a stage per tap. The engine owns the playhead: it shows the clip at the target time and, when the target changes, plays toward it at the clip's own pace and stops there.
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `clip` | — | the animation to hold; required. |
-| `at` | — | target in milliseconds into the clip. Wins over `value`. |
-| `value` | `0` | target as a fraction of the clip, 0 to 1. |
-| `speed` | `1` | playback rate toward a new target, in either direction: `1` is the clip's own pace, `2` twice as fast; `0` jumps. |
-
-- The first target after a load shows at once, without playing: a model that mounts with `taps: 3` from the server appears at stage 3.
-- A target that moves on while the playhead is still on its way (fast taps) is followed without a jump; a target behind the playhead plays backward.
-- Targets are clamped to the clip. `on_progress_end` dispatches when the playhead arrives at the clip's end by moving there — not when a model loads already at its end.
-- `on_progress_arrive` dispatches once the playhead settles at a target the template changed: after playing there, or at once when it jumps (`speed: 0`, a new `clip`), already holds the target, or has no clip to play (`at` is then `null`). A target replaced mid-way does not arrive; only the last one does. The first target after a load does not dispatch, but a target changed while loading does once the clip attaches. At the clip's end it follows `on_progress_end`.
-- To ignore taps while the motion plays, gate the step on a state the arrival clears (see the example below). The gate lives in the template, so it can instead queue taps, or give ignored taps their own haptic.
-- Drive the progress clip from `progress` only. `states` may play other clips at the same time when they animate other parts of the model.
-
-## Animation never blocks a flow
-
-Animation is decoration. When no renderer is installed, the model fails to load, the model lacks a state's clip, or the clip fails to play, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. While the model is still loading, a state waits and plays once it is ready.
-
-The same holds for `progress`: without the clip, a `value` that changes to 1 or more dispatches `on_progress_end` at once. An `at` target cannot be judged without the clip's length, so it never ends there; prefer `value` when a flow waits on the end. A target that reaches the end while the model is loading dispatches once the clip attaches there. `on_progress_arrive` likewise dispatches at once on every target change when the clip cannot play, so a template gated on it never stalls.
+This widget produces the **box** layout protocol. Its positional children must produce box. This type is not selected directly by `_loop._wrap`; `_loop` may still wrap this widget node as the repeated item. See [Concepts](../../concepts.md#box-and-sliver-protocols) and [Loops](../../loops.md).
 
 ## Examples
 
@@ -178,10 +107,71 @@ _on:
   tap: { do: tap_lever, ripple: false }
 ```
 
+## Camera and gestures
+
+The camera orbits the model's centre. Its angles are in degrees, unlike the radians of 2D `transform` and motion `rotate`, since 3D cameras are conventionally set in degrees. The engine computes it each frame from the resting `camera`, accumulated `auto_rotate`, and the user's gesture offset, and hands it to the renderer.
+
+`camera`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `yaw` | `0` | degrees around the vertical axis; 0 faces the model's front, positive moves the camera toward the model's right. |
+| `pitch` | `0` | degrees above the horizon; positive looks down on the model. |
+| `zoom` | `1` | magnification; 1 frames the whole model, 2 is twice as close. |
+| `duration` | `300` | how long a change to `camera` takes to ease in, in milliseconds. |
+
+Bind `camera` to state to turn the model from an action, e.g. `camera: { yaw: '${facing}' }` with a `set` that changes `facing`.
+
+`controls`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `rotate` | `free` | `none`, `horizontal`, `vertical` or `free`: which drag axes turn the camera. |
+| `min_pitch` | `-60` | lowest pitch in degrees for vertical dragging. |
+| `max_pitch` | `60` | highest pitch in degrees for vertical dragging. |
+| `min_zoom` | none | smallest pinch magnification. |
+| `max_zoom` | none | largest pinch magnification. Pinch is off unless `min_zoom` or `max_zoom` is set; the one left out is `1`. |
+| `sensitivity` | `1` | multiplies the base rate of half a degree per logical pixel. |
+| `inertia` | `true` | a fling keeps the camera turning and slowing down. |
+| `return_duration` | none | after release, ease back to `camera` over this many milliseconds; without it the camera stays where it was left. |
+
+Gestures go through Flutter's gesture arena. `rotate: horizontal` claims only horizontal drags, so an enclosing scroll view still scrolls vertically over the model. `free`, `vertical` and pinch zoom claim drags in their directions over the model, so use them where the model is not inside a scroll view in that direction. Taps are never claimed, so `_on: tap` on the model or an ancestor still fires.
+
+## Progress
+
+`progress` turns one long clip into steps the template controls, e.g. a lever that moves a stage per tap. The engine owns the playhead: it shows the clip at the target time and, when the target changes, plays toward it at the clip's own pace and stops there.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `clip` | — | the animation to hold; required. |
+| `at` | — | target in milliseconds into the clip. Wins over `value`. |
+| `value` | `0` | target as a fraction of the clip, 0 to 1. |
+| `speed` | `1` | playback rate toward a new target, in either direction: `1` is the clip's own pace, `2` twice as fast; `0` jumps. |
+
+- The first target after a load shows at once, without playing: a model that mounts with `taps: 3` from the server appears at stage 3.
+- A target that moves on while the playhead is still on its way (fast taps) is followed without a jump; a target behind the playhead plays backward.
+- Targets are clamped to the clip. `on_progress_end` dispatches when the playhead arrives at the clip's end by moving there — not when a model loads already at its end.
+- `on_progress_arrive` dispatches once the playhead settles at a target the template changed: after playing there, or at once when it jumps (`speed: 0`, a new `clip`), already holds the target, or has no clip to play (`at` is then `null`). A target replaced mid-way does not arrive; only the last one does. The first target after a load does not dispatch, but a target changed while loading does once the clip attaches. At the clip's end it follows `on_progress_end`.
+- To ignore taps while the motion plays, gate the step on a state the arrival clears (see the dispenser in [Examples](#examples)). The gate lives in the template, so it can instead queue taps, or give ignored taps their own haptic.
+- Drive the progress clip from `progress` only. `states` may play other clips at the same time when they animate other parts of the model.
+
+## Loading, failure and visibility
+
+The app installs the renderer (see [Media](../../media.md#3d-models)). Without one, `model_3d` renders `poster` only. `poster` shows until the model is ready and fades out above it. A `src` change replaces the model; `state`, `camera`, `controls` and `auto_rotate` changes keep it.
+
+A failed load keeps `poster` and is tried again when the view shows again or the app returns to the foreground — a weak network may have dropped the download. Each retry dispatches `on_error` if it fails, or `on_ready` and plays `state` from the start once it loads.
+
+Animation is decoration. When no renderer is installed, the model fails to load, the model lacks a state's clip, or the clip fails to play, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. While the model is still loading, a state waits and plays once it is ready.
+
+The same holds for `progress`: without the clip, a `value` that changes to 1 or more dispatches `on_progress_end` at once. An `at` target cannot be judged without the clip's length, so it never ends there; prefer `value` when a flow waits on the end. A target that reaches the end while the model is loading dispatches once the clip attaches there. `on_progress_arrive` likewise dispatches at once on every target change when the clip cannot play, so a template gated on it never stalls.
+
+While an inactive tab or a covering route hides the view, a looping state's clip stops and plays again once the view shows, so a hidden loop does not keep the renderer drawing. Camera motion, `progress` and `auto_rotate` pause on their own; a non-looping clip plays to its end and its state ends as usual.
+
 ## Pitfalls & related
 
-- Keep one or two models per screen: renderer views are heavy, and webview-backed renderers cost memory per instance.
+- Use only the documented positional child form; `_slots` are rejected for this specification kind.
+- Set `poster`: without it the box stays empty while the model loads and after a failed load. Keep it the same framing as the model's first frame so the swap is not noticeable.
+- Keep one or two models per screen: renderer views are heavy.
 - Inside a vertical scroll view, use `controls: { rotate: horizontal }` so vertical drags keep scrolling.
-- Keep `poster` the same framing as the model's first frame so the swap from poster to model is not noticeable.
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
-- See [Media](../../media.md) for the image and video policies, and return to the [widget catalog](../README.md).
+- See [Media](../../media.md#3d-models) for the renderer contract, and return to the [widget catalog](../README.md).

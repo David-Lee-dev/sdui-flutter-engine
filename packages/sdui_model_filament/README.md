@@ -27,6 +27,8 @@ Sdui.initialize(
   another host. Fetched models persist across launches in the app's cache
   directory (64 MB, least recently used first), revalidated in the background
   by ETag; `diskCache: false` keeps them in memory only.
+- Models are glTF binary (`.glb`). The clip names a template's `states` and
+  `progress` use are the GLB's animation names, matched exactly.
 - Clips play with `crossfade`; Filament reports no end event, so a
   non-looping clip completes after its duration.
 - Lighting is Filament's neutral studio IBL (`assets/lightroom_ibl.ktx`,
