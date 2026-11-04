@@ -106,7 +106,8 @@ final class _RecordingModel3dSource extends Model3dSource {
     this.gate,
   });
 
-  final bool fail;
+  /// Whether controllers created from now on fail to load.
+  bool fail;
   final bool failPlay;
   final Completer<void>? gate;
   final requests = <Model3dRequest>[];
@@ -490,6 +491,94 @@ void main() {
         expect(source.controllers.single.clips, isNot(contains('Dance')));
         expect(source.controllers.single.plays, isEmpty);
         expect(sink.calls.map((c) => c.$1), ['danced']);
+      });
+    });
+
+    group('retry', () {
+      const idle = {
+        'src': 'char.glb',
+        'poster': 'char.png',
+        'height': 100,
+        'state': 'idle',
+        'states': _states,
+      };
+
+      testWidgets('실패한 모델은 다시 보일 때 새 컨트롤러로 다시 불러온다', (tester) async {
+        final source = _RecordingModel3dSource(fail: true);
+        Model3dSourceRegistry.install(source);
+        final sink = _Sink();
+        final props = {...idle, 'on_ready': 'ready', 'on_error': 'failed'};
+
+        await _pump(tester, props, dispatch: sink);
+        await tester.pumpAndSettle();
+        source.fail = false;
+        await _pump(tester, props, dispatch: sink, shown: false);
+        expect(source.controllers, hasLength(1));
+
+        await _pump(tester, props, dispatch: sink);
+        await tester.pumpAndSettle();
+
+        expect(source.controllers, hasLength(2));
+        expect(source.controllers.first.disposed, isTrue);
+        expect(source.controllers.last.plays.map((p) => p.clip), ['Idle']);
+        expect(_posterOpacity(tester), 0);
+        expect(sink.calls.map((c) => c.$1), ['failed', 'ready']);
+      });
+
+      testWidgets('실패한 모델은 앱이 돌아올 때 다시 불러온다', (tester) async {
+        final source = _RecordingModel3dSource(fail: true);
+        Model3dSourceRegistry.install(source);
+
+        await _pump(tester, idle);
+        await tester.pumpAndSettle();
+        source.fail = false;
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+        expect(source.controllers, hasLength(1));
+
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+
+        expect(source.controllers, hasLength(2));
+        expect(source.controllers.last.plays.map((p) => p.clip), ['Idle']);
+      });
+
+      testWidgets('가려진 동안 앱이 돌아오면 보일 때까지 기다린다', (tester) async {
+        final source = _RecordingModel3dSource(fail: true);
+        Model3dSourceRegistry.install(source);
+
+        await _pump(tester, idle, shown: false);
+        await tester.pumpAndSettle();
+        source.fail = false;
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+        expect(source.controllers, hasLength(1));
+
+        await _pump(tester, idle);
+        await tester.pumpAndSettle();
+        expect(source.controllers, hasLength(2));
+      });
+
+      testWidgets('불러온 모델은 다시 보이거나 앱이 돌아와도 다시 불러오지 않는다', (tester) async {
+        final source = _RecordingModel3dSource();
+        Model3dSourceRegistry.install(source);
+
+        await _pump(tester, idle);
+        await tester.pumpAndSettle();
+        await _pump(tester, idle, shown: false);
+        await _pump(tester, idle);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+
+        expect(source.controllers, hasLength(1));
       });
     });
 

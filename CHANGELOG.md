@@ -35,6 +35,8 @@
   state's end never ends a later entry of the same state.
   While an inactive tab or a covering route hides the view (`TickerMode`
   off), a looping state's clip stops and plays again once the view shows.
+  A failed load is tried again with a new controller when the view shows
+  again or the app resumes; `on_error` dispatches for each failed attempt.
   Existing apps need no changes.
 
 ## 0.20.4

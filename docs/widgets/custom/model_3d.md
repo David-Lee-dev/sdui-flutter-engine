@@ -25,7 +25,7 @@ Renders a policy-backed 3D model driven by a state → clip table.
 | `on_progress_arrive` | `text` | — | `null` | Yes | action dispatched when the `progress` playhead settles at a target the template changed. The event payload is `{ clip, at }` (`at` in milliseconds); see [Progress](#progress). |
 | `on_state_end` | `text` | — | `null` | Yes | action dispatched when a state's non-looping clip ends. The event payload is `{ state }`; branch on it with `_when: '${event.state == "jump"}'`. |
 | `on_ready` | `text` | — | `null` | Yes | action dispatched once the model is ready for the current `src`. |
-| `on_error` | `text` | — | `null` | Yes | action dispatched once if the model fails to load for the current `src`. |
+| `on_error` | `text` | — | `null` | Yes | action dispatched each time the model fails to load for the current `src`: the first load and every retry. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 
 All non-structural property values are recursively expression-bindable. Structural keys control compilation and therefore are not themselves interpolated.
@@ -46,6 +46,8 @@ The engine ships no renderer. The app installs one through `Sdui.initialize(mode
 - `Model3dSource.warmUp()` runs once in the background after boot, so a renderer can do its expensive first-time setup (such as creating a webview) before the first `model_3d` mounts.
 
 Without an installed source, `model_3d` renders `poster` only. A `src` change disposes and replaces the controller; `state`, `camera`, `controls` and `auto_rotate` changes reuse it.
+
+A failed load shows `poster` and is tried again with a new controller when the view shows again or the app returns to the foreground — a weak network may have dropped the download. Each retry plays `state` from the start once it loads.
 
 While an inactive tab or a covering route hides the view (`TickerMode` off), the widget stops a looping state's clip with `stop()` and plays it again once the view shows, so a hidden loop does not keep the renderer drawing. Camera motion, `progress` and `auto_rotate` run on tickers and pause on their own; a non-looping clip plays to its end and its state ends as usual.
 

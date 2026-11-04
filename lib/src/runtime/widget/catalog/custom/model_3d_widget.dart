@@ -45,7 +45,7 @@ import '../primitive/image_widget.dart';
 /// - `on_progress_arrive` (`text`, default `null`) — action dispatched, with `{clip, at}` (`at` in milliseconds), when the playhead settles at a target the template changed: after playing there, at once when it jumps or nothing can play. A target replaced mid-way does not arrive. Lets a template ignore taps until the motion lands.
 /// - `on_state_end` (`text`, default `null`) — action dispatched, with `{state}`, when a state's non-looping clip ends.
 /// - `on_ready` (`text`, default `null`) — action dispatched once the model is ready for the current `src`.
-/// - `on_error` (`text`, default `null`) — action dispatched once if the model fails to load for the current `src`.
+/// - `on_error` (`text`, default `null`) — action dispatched each time the model fails to load for the current `src`: the first load and every retry.
 ///
 /// Child: none.
 ///
@@ -184,7 +184,7 @@ class _Model3dView extends StatefulWidget {
 }
 
 class _Model3dViewState extends State<_Model3dView>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   SduiModel3dController? _controller;
   late final Model3dCameraRig _rig;
   late final Model3dPlayhead _playhead;
@@ -215,9 +215,14 @@ class _Model3dViewState extends State<_Model3dView>
   /// a hidden loop would keep the renderer drawing frames nobody sees.
   bool _held = false;
 
+  /// Whether the last load failed. It is tried again when the view shows or
+  /// the app resumes: a weak network may have dropped the download.
+  bool _failed = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _rig = Model3dCameraRig(
       vsync: this,
       rest: widget.camera,
@@ -238,6 +243,7 @@ class _Model3dViewState extends State<_Model3dView>
     _disposeController();
     final generation = ++_generation;
     _phase = _Phase.loading;
+    _failed = false;
     _active = widget.state;
     _played = false;
     _playhead.detach();
@@ -277,7 +283,10 @@ class _Model3dViewState extends State<_Model3dView>
       if (!_isCurrent(generation)) return;
       EngineLog.warn('model "$src" failed to load: $error', tag: 'model_3d');
       _disposeController();
-      setState(() => _phase = _Phase.unavailable);
+      setState(() {
+        _phase = _Phase.unavailable;
+        _failed = true;
+      });
       _attachProgress(widget.progress);
       _dispatch(widget.onError);
     }
@@ -487,7 +496,11 @@ class _Model3dViewState extends State<_Model3dView>
   /// which [TickerMode] already stops; a non-looping clip ends by itself.
   void _onShown() {
     if (_isShown) {
-      if (_held) _enter(_active);
+      if (_failed) {
+        _retry();
+      } else if (_held) {
+        _enter(_active);
+      }
       return;
     }
     final controller = _controller;
@@ -511,6 +524,18 @@ class _Model3dViewState extends State<_Model3dView>
     );
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _retry();
+  }
+
+  /// Loads a failed model again while the view shows; a hidden view waits
+  /// until [_onShown].
+  void _retry() {
+    if (!_failed || !_isShown) return;
+    setState(_load);
+  }
+
   void _disposeController() {
     _generation++;
     final controller = _controller;
@@ -522,6 +547,7 @@ class _Model3dViewState extends State<_Model3dView>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _shown?.removeListener(_onShown);
     _disposeController();
     _rig.dispose();
