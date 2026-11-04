@@ -197,6 +197,10 @@ class _Model3dViewState extends State<_Model3dView>
   /// The state the view is in — set by the template or advanced by `next`.
   String? _active;
 
+  /// Counts state entries, so the end of one entry never ends a later entry
+  /// of the same state.
+  int _entered = 0;
+
   /// [Model3dPlayback.completions] when the active clip started.
   int _baseline = 0;
 
@@ -276,6 +280,7 @@ class _Model3dViewState extends State<_Model3dView>
   /// loads, and otherwise ends a non-looping state at once.
   void _enter(String? state) {
     _active = state;
+    final entered = ++_entered;
     if (state == null) return;
     final entry = widget.states[state];
     if (entry == null) {
@@ -289,8 +294,25 @@ class _Model3dViewState extends State<_Model3dView>
         _baseline = controller.playback.completions;
         final crossfade = _played ? widget.crossfade : Duration.zero;
         _played = true;
+        final generation = _generation;
         unawaited(
-          controller.play(entry.clip, loop: entry.loop, crossfade: crossfade),
+          controller
+              .play(entry.clip, loop: entry.loop, crossfade: crossfade)
+              .then(
+                (_) {},
+                onError: (Object error) {
+                  EngineLog.warn(
+                    'model clip "${entry.clip}" failed to play: $error',
+                    tag: 'model_3d',
+                  );
+                  // Flows never wait on the renderer.
+                  if (!entry.loop &&
+                      _isCurrent(generation) &&
+                      _entered == entered) {
+                    _finishSoon(state);
+                  }
+                },
+              ),
         );
         return;
       }
@@ -318,10 +340,11 @@ class _Model3dViewState extends State<_Model3dView>
   /// dispatched action may write scope state.
   void _finishSoon(String state) {
     final generation = _generation;
+    final entered = _entered;
     scheduleMicrotask(() {
-      if (!_isCurrent(generation) || _active != state) return;
+      if (!_isCurrent(generation) || _entered != entered) return;
       _dispatch(widget.onStateEnd, event: {'state': state});
-      if (_active != state) return;
+      if (_entered != entered) return;
       final next = widget.states[state]?.next;
       if (next != null) _enter(next);
     });

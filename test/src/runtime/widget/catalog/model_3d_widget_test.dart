@@ -22,9 +22,10 @@ final class _Play {
 }
 
 final class _FakeController implements SduiModel3dController {
-  _FakeController({this.fail = false, this.gate});
+  _FakeController({this.fail = false, this.failPlay = false, this.gate});
 
   final bool fail;
+  final bool failPlay;
 
   /// Holds [initialize] open until completed, to observe the loading phase.
   final Completer<void>? gate;
@@ -52,6 +53,7 @@ final class _FakeController implements SduiModel3dController {
   }) async {
     plays.add(_Play(clip, loop, crossfade));
     _clip = clip;
+    if (failPlay) throw StateError('play failed');
   }
 
   /// Simulates the renderer reporting the end of a non-looping clip.
@@ -97,9 +99,14 @@ final class _FakeController implements SduiModel3dController {
 }
 
 final class _RecordingModel3dSource extends Model3dSource {
-  _RecordingModel3dSource({this.fail = false, this.gate});
+  _RecordingModel3dSource({
+    this.fail = false,
+    this.failPlay = false,
+    this.gate,
+  });
 
   final bool fail;
+  final bool failPlay;
   final Completer<void>? gate;
   final requests = <Model3dRequest>[];
   final controllers = <_FakeController>[];
@@ -107,7 +114,11 @@ final class _RecordingModel3dSource extends Model3dSource {
   @override
   Future<SduiModel3dController> controllerFor(Model3dRequest request) async {
     requests.add(request);
-    final controller = _FakeController(fail: fail, gate: gate);
+    final controller = _FakeController(
+      fail: fail,
+      failPlay: failPlay,
+      gate: gate,
+    );
     controllers.add(controller);
     return controller;
   }
@@ -434,6 +445,27 @@ void main() {
         expect(find.text('poster:char.png'), findsOneWidget);
         expect(find.byKey(const Key('model-view')), findsNothing);
         expect(source.controllers.single.disposed, isTrue);
+      });
+
+      testWidgets('재생에 실패하면 한 번 재생 state를 끝내 흐름을 이어 간다', (tester) async {
+        final source = _RecordingModel3dSource(failPlay: true);
+        Model3dSourceRegistry.install(source);
+        final sink = _Sink();
+
+        await _pump(tester, const {
+          'src': 'char.glb',
+          'height': 100,
+          'state': 'jump',
+          'states': _states,
+          'on_state_end': 'landed',
+        }, dispatch: sink);
+        await tester.pumpAndSettle();
+
+        expect(sink.calls.map((c) => c.$1), ['landed']);
+        expect(source.controllers.single.plays.map((p) => p.clip), [
+          'Jump',
+          'Idle',
+        ]);
       });
 
       testWidgets('모델에 없는 클립이면 재생하지 않고 state를 끝낸다', (tester) async {

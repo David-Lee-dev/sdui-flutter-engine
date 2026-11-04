@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:sdui_engine/sdui_engine.dart';
 import 'package:thermion_flutter/thermion_flutter.dart' hide Texture, View;
 
+import 'filament_platform.dart';
 import 'load_stats.dart';
 import 'model_bytes.dart';
 import 'model_disk_cache.dart';
@@ -52,7 +53,9 @@ final class FilamentModel3dSource extends Model3dSource {
     int cachedModels = 4,
     bool diskCache = true,
     this.debugOverlay = const bool.fromEnvironment('SDUI_MODEL_DEBUG'),
-  }) : _models = ModelBytesCache(
+    @visibleForTesting FilamentPlatform platform = const FilamentPlatform(),
+  }) : _platform = platform,
+       _models = ModelBytesCache(
          baseUrl: baseUrl,
          client: client,
          bundle: bundle,
@@ -73,6 +76,7 @@ final class FilamentModel3dSource extends Model3dSource {
   /// Paints [ModelDebugOverlay] over every view.
   final bool debugOverlay;
 
+  final FilamentPlatform _platform;
   final ModelBytesCache _models;
 
   /// Filament's neutral studio environment (`lightroom_ibl.ktx`, Apache-2.0).
@@ -88,8 +92,8 @@ final class FilamentModel3dSource extends Model3dSource {
   late final RenderGate _gate = () {
     AppLifecycleListener(onResume: () => _gate.wake());
     return RenderGate(
-      resume: ThermionFlutterPlugin.instance.resumeFrameScheduler,
-      pause: ThermionFlutterPlugin.instance.pauseFrameScheduler,
+      resume: _platform.resumeFrames,
+      pause: _platform.pauseFrames,
       render: (view, rendering) =>
           (view as FilamentModel3dController)._setRendering(rendering),
     );
@@ -112,7 +116,7 @@ final class FilamentModel3dSource extends Model3dSource {
     final loads = [for (final src in prefetch) _models.load(src)];
     // The first viewer creates the engine and render thread, which outlive
     // it; later viewers attach to them.
-    final viewer = await ThermionFlutterPlugin.createViewer();
+    final viewer = await _platform.createViewer();
     await viewer.dispose();
     _gate.settle();
     await Future.wait(loads);
@@ -122,6 +126,12 @@ final class FilamentModel3dSource extends Model3dSource {
 }
 
 /// Drives one Filament viewer for the engine's `model_3d` widget.
+///
+/// Native calls on the viewer run one after another ([_native]), so
+/// [dispose] destroys the viewer only after the call in flight and no later
+/// call reaches it. Each [play] takes a run number that a later play, stop,
+/// pose of the playing clip or dispose moves on, so a superseded play's late
+/// work never changes [playback].
 final class FilamentModel3dController implements SduiModel3dController {
   FilamentModel3dController(this._request, this._source)
     : stats = _source._statsFor(_request.src);
@@ -153,12 +163,18 @@ final class FilamentModel3dController implements SduiModel3dController {
 
   /// The clip index a [play] started, until [stop] or a pose of that clip.
   int? _playing;
+
+  /// The current play's number; see [_endPlay].
+  int _run = 0;
   (String, Duration)? _pose;
   bool _posing = false;
   bool _poseAgain = false;
   Model3dPlayback _playback = const Model3dPlayback();
   bool _disposed = false;
   Widget? _view;
+
+  /// The tail of the native calls queued on the viewer.
+  Future<void> _lane = Future.value();
 
   /// Radius the camera keeps in frame; the asset is scaled so its largest
   /// extent spans -1..1.
@@ -183,8 +199,10 @@ final class FilamentModel3dController implements SduiModel3dController {
         );
         return data;
       });
+      // A load that ends before awaiting the bytes leaves their error here.
+      unawaited(bytes.then((_) {}, onError: (_) {}));
 
-      final viewer = await ThermionFlutterPlugin.createViewer();
+      final viewer = await _source._platform.createViewer();
       if (_disposed) {
         await viewer.dispose();
         return;
@@ -192,36 +210,43 @@ final class FilamentModel3dController implements SduiModel3dController {
       _viewer.value = viewer;
       stats.mark('viewer');
 
-      await viewer.setBackgroundColor(0, 0, 0, 0);
-      await viewer.view.setBlendMode(BlendMode.transparent);
-      await viewer.setPostProcessing(true);
-      await viewer.setAntiAliasing(false, true, false);
-      await viewer.loadIbl(
-        FilamentModel3dSource.iblAsset,
-        intensity: _source.iblIntensity,
-      );
+      await _native(() async {
+        await viewer.setBackgroundColor(0, 0, 0, 0);
+        await viewer.view.setBlendMode(BlendMode.transparent);
+        await viewer.setPostProcessing(true);
+        await viewer.setAntiAliasing(false, true, false);
+        await viewer.loadIbl(
+          FilamentModel3dSource.iblAsset,
+          intensity: _source.iblIntensity,
+        );
+      });
 
-      final asset = await viewer.loadGltfFromBuffer(await bytes);
-      if (_disposed) return;
-      await asset.transformToUnitCube();
+      final data = await bytes;
+      final asset = await _native(() => viewer.loadGltfFromBuffer(data));
+      final durations = await _native(() async {
+        await asset.transformToUnitCube();
+        final clips = await asset.getGltfAnimationNames();
+        return {
+          for (var i = 0; i < clips.length; i++)
+            clips[i]: Duration(
+              microseconds:
+                  (await asset.getGltfAnimationDuration(i) *
+                          Duration.microsecondsPerSecond)
+                      .round(),
+            ),
+        };
+      });
       _asset = asset;
-      final clips = await asset.getGltfAnimationNames();
-      _clips = List.unmodifiable(clips);
-      _durations = {
-        for (var i = 0; i < clips.length; i++)
-          clips[i]: Duration(
-            microseconds:
-                (await asset.getGltfAnimationDuration(i) *
-                        Duration.microsecondsPerSecond)
-                    .round(),
-          ),
-      };
+      _clips = List.unmodifiable(durations.keys);
+      _durations = durations;
       stats.mark('asset');
 
       await _frame(_framedAspect ?? 1);
       _touch();
       _ifAlive(() => stats.mark('ready'));
       debugPrint('[sdui_model_filament] ${stats.summary()}, clips: $_clips');
+    } on _Disposed {
+      return;
     } catch (error) {
       _ifAlive(() => stats.fail('$error'));
       debugPrint('[sdui_model_filament] ${stats.summary()}');
@@ -233,6 +258,29 @@ final class FilamentModel3dController implements SduiModel3dController {
     if (!_disposed) action();
   }
 
+  /// Runs [call] on the viewer after the native calls queued before it, or
+  /// throws [_Disposed] once the view is disposed.
+  Future<T> _native<T>(Future<T> Function() call) {
+    final next = _lane.then(
+      (_) => _disposed ? throw const _Disposed() : call(),
+    );
+    _lane = next.then((_) {}, onError: (_) {});
+    return next;
+  }
+
+  /// Runs [work] unawaited: a disposed view drops it, and other failures are
+  /// logged rather than left unhandled.
+  void _quietly(Future<void> work) {
+    unawaited(
+      work.then(
+        (_) {},
+        onError: (Object error) {
+          if (error is! _Disposed) debugPrint('[sdui_model_filament] $error');
+        },
+      ),
+    );
+  }
+
   /// Runs frames so this view's change reaches the screen.
   void _touch() {
     if (!_disposed && _viewer.value != null) _source._gate.touch(this);
@@ -241,7 +289,8 @@ final class FilamentModel3dController implements SduiModel3dController {
   /// Adds this view to Filament's frames, or leaves it out ([RenderGate]).
   void _setRendering(bool rendering) {
     final viewer = _viewer.value;
-    if (!_disposed && viewer != null) unawaited(viewer.setRendering(rendering));
+    if (_disposed || viewer == null) return;
+    _quietly(_native(() => viewer.setRendering(rendering)));
   }
 
   /// Sets the zoom-1 distance so [_frameRadius] fits the narrower field of
@@ -250,20 +299,22 @@ final class FilamentModel3dController implements SduiModel3dController {
     _framedAspect = aspect;
     final viewer = _viewer.value;
     if (viewer == null || _asset == null || _disposed) return;
-    final camera = await viewer.getActiveCamera();
-    final focalLength = await camera.getFocalLength();
-    // Filament's lens projection assumes a 24mm-tall sensor.
-    final vertical = 2 * math.atan(12 / focalLength);
-    final horizontal = 2 * math.atan(math.tan(vertical / 2) * aspect);
-    final fov = math.min(vertical, horizontal);
-    _distance = _frameRadius / math.sin(fov / 2);
+    _distance = await _native(() async {
+      final camera = await viewer.getActiveCamera();
+      final focalLength = await camera.getFocalLength();
+      // Filament's lens projection assumes a 24mm-tall sensor.
+      final vertical = 2 * math.atan(12 / focalLength);
+      final horizontal = 2 * math.atan(math.tan(vertical / 2) * aspect);
+      final fov = math.min(vertical, horizontal);
+      return _frameRadius / math.sin(fov / 2);
+    });
     await _place();
   }
 
   @override
   void setCamera(Model3dCamera camera) {
     _camera = camera;
-    unawaited(_place());
+    _quietly(_place());
   }
 
   /// Orbits the camera to [_camera]. Calls arrive every frame while the
@@ -286,14 +337,16 @@ final class FilamentModel3dController implements SduiModel3dController {
         // Straight up or down has no defined "up" for lookAt.
         final pitch = target.pitch.clamp(-89.0, 89.0) * math.pi / 180;
         final d = distance / (target.zoom > 0 ? target.zoom : 1);
-        final camera = await viewer.getActiveCamera();
-        await camera.lookAt(
-          Vector3(
-            d * math.cos(pitch) * math.sin(yaw),
-            d * math.sin(pitch),
-            d * math.cos(pitch) * math.cos(yaw),
-          ),
-        );
+        await _native(() async {
+          final camera = await viewer.getActiveCamera();
+          await camera.lookAt(
+            Vector3(
+              d * math.cos(pitch) * math.sin(yaw),
+              d * math.sin(pitch),
+              d * math.cos(pitch) * math.cos(yaw),
+            ),
+          );
+        });
         _touch();
       } while (_placeAgain && !_disposed);
     } finally {
@@ -310,7 +363,14 @@ final class FilamentModel3dController implements SduiModel3dController {
   @override
   void setPose(String clip, Duration time) {
     _pose = (clip, time);
-    unawaited(_applyPose());
+    final asset = _asset;
+    final index = _clips.indexOf(clip);
+    // A playing clip would overwrite the pose on its next frame.
+    if (asset != null && index >= 0 && index == _playing) {
+      _endPlay();
+      _quietly(_native(() => asset.stopGltfAnimation(index)));
+    }
+    _quietly(_applyPose());
   }
 
   /// Holds the asset at [_pose]. Like [_place], placements in flight
@@ -329,16 +389,11 @@ final class FilamentModel3dController implements SduiModel3dController {
         final (clip, time) = _pose!;
         final index = _clips.indexOf(clip);
         if (index < 0) continue;
-        // A playing clip would overwrite the pose on its next frame.
-        if (_playing == index) {
-          _clipEnd?.cancel();
-          _playing = null;
-          _source._gate.hold(this, playing: false);
-          await asset.stopGltfAnimation(index);
-        }
-        await asset.setGltfAnimationTime(
-          index,
-          time.inMicroseconds / Duration.microsecondsPerSecond,
+        await _native(
+          () => asset.setGltfAnimationTime(
+            index,
+            time.inMicroseconds / Duration.microsecondsPerSecond,
+          ),
         );
         _touch();
       } while (_poseAgain && !_disposed);
@@ -356,8 +411,7 @@ final class FilamentModel3dController implements SduiModel3dController {
     required bool loop,
     Duration crossfade = Duration.zero,
   }) async {
-    final asset = _asset;
-    final index = _clips.indexOf(clip);
+    final run = ++_run;
     _clipEnd?.cancel();
     _update(
       Model3dPlayback(
@@ -366,23 +420,36 @@ final class FilamentModel3dController implements SduiModel3dController {
         completions: _playback.completions,
       ),
     );
+    final asset = _asset;
+    final index = _clips.indexOf(clip);
     if (asset == null || index < 0) return;
     _playing = index;
     _source._gate.hold(this, playing: true);
-    await asset.playGltfAnimation(
-      index,
-      loop: loop,
-      crossfade: crossfade.inMicroseconds / Duration.microsecondsPerSecond,
-    );
-    if (loop) return;
-    // Filament reports no end event: a non-looping clip ends after its
-    // duration and holds its last frame.
-    final seconds = await asset.getGltfAnimationDuration(index);
+    final double? seconds;
+    try {
+      seconds = await _native(() async {
+        await asset.playGltfAnimation(
+          index,
+          loop: loop,
+          crossfade: crossfade.inMicroseconds / Duration.microsecondsPerSecond,
+        );
+        // Filament reports no end event: a non-looping clip ends after its
+        // duration and holds its last frame.
+        return loop ? null : await asset.getGltfAnimationDuration(index);
+      });
+    } on _Disposed {
+      return;
+    } catch (_) {
+      if (run == _run) _endPlay();
+      rethrow;
+    }
+    if (seconds == null || run != _run) return;
     _clipEnd = Timer(
       Duration(
         microseconds: (seconds * Duration.microsecondsPerSecond).round(),
       ),
       () {
+        if (run != _run) return;
         _source._gate.hold(this, playing: false);
         _update(
           Model3dPlayback(
@@ -397,13 +464,25 @@ final class FilamentModel3dController implements SduiModel3dController {
 
   @override
   Future<void> stop() async {
-    _clipEnd?.cancel();
     final asset = _asset;
     final index = _clips.indexOf(_playback.clip ?? '');
-    _playing = null;
-    if (asset != null && index >= 0) await asset.stopGltfAnimation(index);
-    if (_viewer.value != null) _source._gate.hold(this, playing: false);
+    _endPlay();
+    if (asset == null || index < 0) return;
+    try {
+      await _native(() => asset.stopGltfAnimation(index));
+    } on _Disposed {
+      return;
+    }
     _touch();
+  }
+
+  /// Ends the current play the moment it is superseded: its late native
+  /// work and timer see a newer [_run] and leave [playback] alone.
+  void _endPlay() {
+    _run++;
+    _clipEnd?.cancel();
+    _playing = null;
+    if (_viewer.value != null) _source._gate.hold(this, playing: false);
     _update(
       Model3dPlayback(
         clip: _playback.clip,
@@ -441,6 +520,7 @@ final class FilamentModel3dController implements SduiModel3dController {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _run++;
     _clipEnd?.cancel();
     _listeners.clear();
     final viewer = _viewer.value;
@@ -448,15 +528,15 @@ final class FilamentModel3dController implements SduiModel3dController {
     _asset = null;
     if (viewer == null) return;
     _source._gate.release(this);
-    try {
-      // The texture's render target refers to the view; release it before
-      // the viewer destroys the view.
-      await ThermionFlutterPlugin.instance.destroyTextureForView(viewer.view);
-    } finally {
-      await viewer.dispose();
-      await ThermionFlutterPlugin.instance.onViewerDisposed(viewer.view);
-    }
+    // The call in flight finishes; every queued one throws [_Disposed].
+    await _lane;
+    await _source._platform.releaseViewer(viewer);
   }
+}
+
+/// Unwinds work queued on a disposed view before it reaches the viewer.
+final class _Disposed implements Exception {
+  const _Disposed();
 }
 
 /// The Filament texture. It takes no pointers: the engine handles gestures
@@ -477,7 +557,7 @@ final class _FilamentView extends StatelessWidget {
             ? constraints.maxWidth / constraints.maxHeight
             : 1.0;
         if (aspect != controller._framedAspect) {
-          unawaited(controller._frame(aspect));
+          controller._quietly(controller._frame(aspect));
         }
         // A new layout may recreate the texture, which needs a frame.
         controller._touch();

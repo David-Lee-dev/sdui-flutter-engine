@@ -61,7 +61,9 @@ final class Model3dCamera {
 /// The animation surface the engine's `model_3d` widget drives — the whole
 /// coupling between the engine and whatever renderer the app installs.
 abstract class SduiModel3dController {
-  /// Loads the model; must complete before [clips] and [play] are used.
+  /// Loads the model; must complete before [clips] and [play] are used. A
+  /// failed load is final: the engine disposes the controller and creates a
+  /// new one to try again.
   Future<void> initialize();
 
   /// Animation clip names the loaded model carries (empty for a static model).
@@ -69,7 +71,13 @@ abstract class SduiModel3dController {
 
   /// Plays [clip], blending from the current clip over [crossfade]. A
   /// non-looping clip holds its last frame and increments
-  /// [Model3dPlayback.completions] when it finishes.
+  /// [Model3dPlayback.completions] once when it finishes. The returned future
+  /// reports whether the clip started.
+  ///
+  /// A later [play] (of any clip, the same one included), [stop], [dispose]
+  /// or [setPose] of the playing clip supersedes this play the moment it is
+  /// called: the superseded play's late native work and timers never change
+  /// [playback] again.
   Future<void> play(
     String clip, {
     required bool loop,
@@ -85,7 +93,8 @@ abstract class SduiModel3dController {
 
   /// Holds [clip] at [time] without playing it: the engine owns the playhead
   /// of a `progress` clip and calls this on every frame it moves, after
-  /// [initialize]. A renderer stops its own playback of [clip] first, keeps
+  /// [initialize]. A renderer stops its own playback of [clip] first (its
+  /// [playback] stops playing; [Model3dPlayback.completions] stays), keeps
   /// the latest value, and may drop intermediate values while one is being
   /// applied.
   void setPose(String clip, Duration time);
@@ -114,6 +123,9 @@ abstract class SduiModel3dController {
   /// It stays mounted across the ready transition.
   Widget buildView();
 
+  /// Releases the renderer's resources. It may come at any point, also while
+  /// [initialize] or other calls are still in flight; none of their pending
+  /// work may touch the released resources afterwards.
   Future<void> dispose();
 }
 

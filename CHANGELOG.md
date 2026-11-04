@@ -28,6 +28,11 @@
   The package ships no renderer; without a source `model_3d` renders its
   poster, and non-looping states end at once so flows never wait on
   rendering. `Model3dSource.warmUp()` runs in the background after boot.
+  The contract states the concurrency rules: a later `play`, `stop`,
+  `dispose` or a `setPose` of the playing clip supersedes a play the moment it
+  is called, a failed `initialize` is final, and `dispose` may arrive while
+  calls are in flight. A play that fails ends its non-looping state, and a
+  state's end never ends a later entry of the same state.
   Existing apps need no changes.
 
 ## 0.20.4

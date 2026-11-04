@@ -18,3 +18,8 @@
   default) and only from `baseUrl`'s origin, and persist across launches
   (`diskCache`, default on): a model seen once opens from disk, revalidated in
   the background.
+- Native calls on a viewer run one after another, so disposing a view while
+  it loads or moves destroys the viewer only after the call in flight, and
+  no later call reaches it. Each play takes a run number: a superseded play's
+  late native work or end timer, or a late `stop`, never changes the newer
+  playback.
