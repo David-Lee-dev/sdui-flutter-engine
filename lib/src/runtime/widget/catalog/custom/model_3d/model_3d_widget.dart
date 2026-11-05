@@ -4,13 +4,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sdui_engine/src/contract/model_3d_source.dart';
 
-import '../../../log/engine_log.dart';
-import '../../../media/model_3d_source_registry.dart';
-import '../../../util/props_resolver.dart';
-import '../../contract/action_sink.dart';
-import '../../model_3d/model_3d_camera_rig.dart';
-import '../../model_3d/model_3d_progress.dart';
-import '../primitive/image_widget.dart';
+import '../../../../log/engine_log.dart';
+import '../../../../media/model_3d_source_registry.dart';
+import '../../../../util/props_resolver.dart';
+import '../../../contract/action_sink.dart';
+import '../../primitive/image_widget.dart';
+import 'model_3d_camera_rig.dart';
+import 'model_3d_progress.dart';
 
 /// `model_3d` — Renders a policy-backed 3D model driven by a state → clip table.
 ///

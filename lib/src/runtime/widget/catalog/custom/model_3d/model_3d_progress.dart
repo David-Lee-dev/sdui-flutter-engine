@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
-import '../../util/props_resolver.dart';
+import '../../../../util/props_resolver.dart';
 
 /// The `progress` prop of a `model_3d`: one clip held at a playhead the
 /// template sets, e.g. a tap counter stepping through a long animation.

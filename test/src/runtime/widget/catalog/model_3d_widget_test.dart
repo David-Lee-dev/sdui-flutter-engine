@@ -6,10 +6,10 @@ import 'package:sdui_engine/src/contract/image_source.dart';
 import 'package:sdui_engine/src/contract/model_3d_source.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
 import 'package:sdui_engine/src/runtime/media/model_3d_source_registry.dart';
-import 'package:sdui_engine/src/runtime/widget/catalog/custom/model_3d_widget.dart';
+import 'package:sdui_engine/src/runtime/widget/catalog/custom/model_3d/model_3d_widget.dart';
 import 'package:sdui_engine/src/runtime/widget/contract/action_sink.dart';
-import 'package:sdui_engine/src/runtime/widget/model_3d/model_3d_camera_rig.dart';
-import 'package:sdui_engine/src/runtime/widget/model_3d/model_3d_progress.dart';
+import 'package:sdui_engine/src/runtime/widget/catalog/custom/model_3d/model_3d_camera_rig.dart';
+import 'package:sdui_engine/src/runtime/widget/catalog/custom/model_3d/model_3d_progress.dart';
 
 import '../../../../support/engine_harness.dart';
 

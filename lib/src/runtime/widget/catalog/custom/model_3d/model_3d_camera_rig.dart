@@ -4,7 +4,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sdui_engine/src/contract/model_3d_source.dart';
 
-import '../../util/props_resolver.dart';
+import '../../../../util/props_resolver.dart';
 
 /// Which drag axes rotate the camera.
 enum Model3dRotate { none, horizontal, vertical, free }

@@ -35,7 +35,7 @@ import 'catalog/custom/speech_balloon_widget.dart';
 import 'catalog/custom/serpentine_row_widget.dart';
 import 'catalog/custom/scratch_card_widget.dart';
 import 'catalog/custom/serpentine_widget.dart';
-import 'catalog/custom/model_3d_widget.dart';
+import 'catalog/custom/model_3d/model_3d_widget.dart';
 import 'catalog/custom/shape_widget.dart';
 import 'catalog/custom/spin_grid_widget.dart';
 import 'catalog/primitive/divider_widget.dart';
