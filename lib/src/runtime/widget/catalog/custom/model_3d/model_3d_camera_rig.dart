@@ -168,7 +168,10 @@ final class Model3dCameraRig {
   final ValueChanged<Model3dCamera> onChanged;
 
   late final Ticker _ticker;
-  Duration _last = Duration.zero;
+
+  /// The previous tick's time; null until the next tick sets it, which then
+  /// moves nothing.
+  Duration? _last;
 
   Model3dCamera _restFrom;
   Model3dCamera _restTo;
@@ -307,7 +310,7 @@ final class Model3dCameraRig {
 
   void _syncTicker() {
     if (_busy && !_ticker.isActive) {
-      _last = Duration.zero;
+      _last = null;
       _ticker.start();
     } else if (!_busy && _ticker.isActive) {
       _ticker.stop();
@@ -315,9 +318,10 @@ final class Model3dCameraRig {
   }
 
   void _tick(Duration elapsed) {
-    final dt =
-        (elapsed - _last).inMicroseconds / Duration.microsecondsPerSecond;
+    final last = _last;
     _last = elapsed;
+    if (last == null) return;
+    final dt = (elapsed - last).inMicroseconds / Duration.microsecondsPerSecond;
     if (dt <= 0) return;
 
     if (_restT < 1) {
@@ -377,12 +381,10 @@ final class Model3dCameraRig {
     onChanged(camera);
   }
 
-  /// Sends the current camera even if it was already sent (e.g. to a new
-  /// controller).
-  void resend() {
-    _sent = null;
-    _emit();
-  }
+  /// Counts the next tick from itself. A muted ticker still runs its clock,
+  /// so after a hidden view shows again the first tick would otherwise play
+  /// the hidden time at once.
+  void resume() => _last = null;
 
   void dispose() => _ticker.dispose();
 }

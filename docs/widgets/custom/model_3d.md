@@ -161,11 +161,11 @@ The app installs the renderer (see [Media](../../media.md#3d-models)). Without o
 
 A failed load keeps `poster` and is tried again when the view shows again or the app returns to the foreground — a weak network may have dropped the download. Each retry dispatches `on_error` if it fails, or `on_ready` and plays `state` from the start once it loads.
 
-Animation is decoration. When no renderer is installed, the model fails to load, the model lacks a state's clip, or the clip fails to play, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. While the model is still loading, a state waits and plays once it is ready.
+Animation is decoration. When no renderer is installed, the model fails to load, the model lacks a state's clip, or the clip fails to play, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. A chain of such states stops where its `next` comes back to one it already ended, so a cycle with nothing to play never spins. While the model is still loading, a state waits and plays once it is ready.
 
 The same holds for `progress`: without the clip, a `value` that changes to 1 or more dispatches `on_progress_end` at once. An `at` target cannot be judged without the clip's length, so it never ends there; prefer `value` when a flow waits on the end. A target that reaches the end while the model is loading dispatches once the clip attaches there. `on_progress_arrive` likewise dispatches at once on every target change when the clip cannot play, so a template gated on it never stalls.
 
-While an inactive tab or a covering route hides the view, a looping state's clip stops and plays again once the view shows, so a hidden loop does not keep the renderer drawing. Camera motion, `progress` and `auto_rotate` pause on their own; a non-looping clip plays to its end and its state ends as usual.
+While an inactive tab or a covering route hides the view, a looping state's clip stops and plays again once the view shows, so a hidden loop does not keep the renderer drawing. Camera motion, `progress` and `auto_rotate` pause and go on from where they stopped, without catching up the hidden time; a non-looping clip plays to its end and its state ends as usual.
 
 ## Pitfalls & related
 

@@ -295,7 +295,10 @@ class _Model3dViewState extends State<_Model3dView>
 
   /// Enters [state]: plays its clip when the model is ready, waits while it
   /// loads, and otherwise ends a non-looping state at once.
-  void _enter(String? state) {
+  ///
+  /// [skipped] holds the states the current chain of `next` already ended
+  /// without playing; see [_finishSoon].
+  void _enter(String? state, {Set<String>? skipped}) {
     _active = state;
     _held = false;
     final entered = ++_entered;
@@ -331,7 +334,7 @@ class _Model3dViewState extends State<_Model3dView>
                   if (!entry.loop &&
                       _isCurrent(generation) &&
                       _entered == entered) {
-                    _finishSoon(state);
+                    _finishSoon(state, skipped: skipped ?? const {});
                   }
                 },
               ),
@@ -343,7 +346,7 @@ class _Model3dViewState extends State<_Model3dView>
         tag: 'model_3d',
       );
     }
-    if (!entry.loop) _finishSoon(state);
+    if (!entry.loop) _finishSoon(state, skipped: skipped ?? const {});
   }
 
   void _onPlayback() {
@@ -360,7 +363,12 @@ class _Model3dViewState extends State<_Model3dView>
 
   /// Ends [state] outside the current build or listener callback, since the
   /// dispatched action may write scope state.
-  void _finishSoon(String state) {
+  ///
+  /// [skipped] is non-null when [state] ended without playing: its `next`
+  /// then follows at once too, so a `next` cycle with no clip to play (e.g.
+  /// no renderer) is stopped where it would come round, instead of entering
+  /// states forever. A clip that plays starts the chain over.
+  void _finishSoon(String state, {Set<String>? skipped}) {
     final generation = _generation;
     final entered = _entered;
     scheduleMicrotask(() {
@@ -368,7 +376,21 @@ class _Model3dViewState extends State<_Model3dView>
       _dispatch(widget.onStateEnd, event: {'state': state});
       if (_entered != entered) return;
       final next = widget.states[state]?.next;
-      if (next != null) _enter(next);
+      if (next == null) return;
+      if (skipped == null) {
+        _enter(next);
+        return;
+      }
+      final chain = {...skipped, state};
+      if (chain.contains(next)) {
+        EngineLog.warn(
+          'model states "${chain.join('", "')}" end without playing and '
+          'lead back to "$next"; stopped after "$state"',
+          tag: 'model_3d',
+        );
+        return;
+      }
+      _enter(next, skipped: chain);
     });
   }
 
@@ -493,9 +515,12 @@ class _Model3dViewState extends State<_Model3dView>
 
   /// Stops the active looping clip while the view is hidden and plays it
   /// again once it shows. Camera, progress and auto-rotation run on tickers,
-  /// which [TickerMode] already stops; a non-looping clip ends by itself.
+  /// which [TickerMode] mutes; on return they go on from where they paused.
+  /// A non-looping clip ends by itself.
   void _onShown() {
     if (_isShown) {
+      _rig.resume();
+      _playhead.resume();
       if (_failed) {
         _retry();
       } else if (_held) {

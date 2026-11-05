@@ -492,6 +492,88 @@ void main() {
         expect(source.controllers.single.plays, isEmpty);
         expect(sink.calls.map((c) => c.$1), ['danced']);
       });
+
+      group('재생 없이 끝나는 next 순환', () {
+        /// The states each `on_state_end` reported.
+        List<Object?> ended(_Sink sink) => [
+          for (final (action, event) in sink.calls)
+            if (action == 'ended') (event! as Map)['state'],
+        ];
+
+        Map<String, Object?> cycle(String a, String b) => {
+          'src': 'char.glb',
+          'height': 100,
+          'state': 'a',
+          'states': {
+            'a': {'clip': a, 'next': 'b'},
+            'b': {'clip': b, 'next': 'a'},
+          },
+          'on_state_end': 'ended',
+        };
+
+        testWidgets('렌더러가 없으면 한 바퀴 돌고 멈춘다', (tester) async {
+          final sink = _Sink();
+
+          await _pump(tester, cycle('Jump', 'Wave'), dispatch: sink);
+          await tester.pumpAndSettle();
+
+          expect(ended(sink), ['a', 'b']);
+        });
+
+        testWidgets('로드에 실패하면 한 바퀴 돌고 멈춘다', (tester) async {
+          Model3dSourceRegistry.install(_RecordingModel3dSource(fail: true));
+          final sink = _Sink();
+
+          await _pump(tester, cycle('Jump', 'Wave'), dispatch: sink);
+          await tester.pumpAndSettle();
+
+          expect(ended(sink), ['a', 'b']);
+        });
+
+        testWidgets('모델에 클립이 없으면 한 바퀴 돌고 멈춘다', (tester) async {
+          final source = _RecordingModel3dSource();
+          Model3dSourceRegistry.install(source);
+          final sink = _Sink();
+
+          await _pump(tester, cycle('Dance', 'Spin'), dispatch: sink);
+          await tester.pumpAndSettle();
+
+          expect(ended(sink), ['a', 'b']);
+          expect(source.controllers.single.plays, isEmpty);
+        });
+
+        testWidgets('재생에 실패하면 한 바퀴 돌고 멈춘다', (tester) async {
+          final source = _RecordingModel3dSource(failPlay: true);
+          Model3dSourceRegistry.install(source);
+          final sink = _Sink();
+
+          await _pump(tester, cycle('Jump', 'Wave'), dispatch: sink);
+          await tester.pumpAndSettle();
+
+          expect(ended(sink), ['a', 'b']);
+          expect(source.controllers.single.plays.map((p) => p.clip), [
+            'Jump',
+            'Wave',
+          ]);
+        });
+
+        testWidgets('재생되는 클립이 끼어 있으면 순환을 막지 않는다', (tester) async {
+          final source = _RecordingModel3dSource();
+          Model3dSourceRegistry.install(source);
+          final sink = _Sink();
+
+          await _pump(tester, cycle('Dance', 'Jump'), dispatch: sink);
+          await tester.pumpAndSettle();
+          final controller = source.controllers.single;
+          controller.finish();
+          await tester.pumpAndSettle();
+          controller.finish();
+          await tester.pumpAndSettle();
+
+          expect(ended(sink), ['a', 'b', 'a', 'b', 'a']);
+          expect(controller.plays.map((p) => p.clip), ['Jump', 'Jump', 'Jump']);
+        });
+      });
     });
 
     group('retry', () {
@@ -857,6 +939,30 @@ void main() {
         await tester.pumpWidget(const SizedBox());
       });
 
+      testWidgets('가려진 동안은 auto_rotate가 멈추고 다시 보이면 그 자리에서 이어 돈다', (
+        tester,
+      ) async {
+        const props = {
+          'src': 'char.glb',
+          'width': 200,
+          'height': 200,
+          'auto_rotate': 90,
+        };
+        final source = await ready(tester, props, settle: false);
+        await tester.pump(const Duration(milliseconds: 100));
+        await _pump(tester, props, shown: false);
+        final hidden = last(source).yaw;
+
+        await tester.pump(const Duration(seconds: 5));
+        expect(last(source).yaw, hidden);
+
+        await _pump(tester, props);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(last(source).yaw - hidden, closeTo(90, 2));
+        await tester.pumpWidget(const SizedBox());
+      });
+
       testWidgets('camera가 바뀌면 duration 동안 옮겨 간다', (tester) async {
         final source = await ready(tester, const {
           'camera': {'yaw': 0, 'duration': 400},
@@ -936,6 +1042,28 @@ void main() {
         final count = controller.poses.length;
         await tester.pump(const Duration(seconds: 1));
         expect(controller.poses.length, count);
+      });
+
+      testWidgets('가려졌다 다시 보이면 가려진 동안의 시간을 건너뛰지 않고 멈춘 자리에서 이어 간다', (
+        tester,
+      ) async {
+        final sink = _Sink();
+        final controller = await ready(tester, const {'at': 0}, sink: sink);
+        final moving = props(const {'value': 1});
+
+        await _pump(tester, moving, dispatch: sink);
+        await tester.pump(const Duration(milliseconds: 1800));
+        expect(controller.seconds, closeTo(1.8, 0.05)); // 30%
+        await _pump(tester, moving, dispatch: sink, shown: false);
+        final paused = controller.seconds;
+        await tester.pump(const Duration(seconds: 10));
+        expect(controller.seconds, paused);
+
+        await _pump(tester, moving, dispatch: sink);
+        expect(controller.seconds, paused);
+        await tester.pump(const Duration(seconds: 1));
+        expect(controller.seconds, closeTo(paused + 1, 0.05));
+        expect(ends(sink), isEmpty);
       });
 
       testWidgets('재생 중에 목표가 더 멀어지면 끊기지 않고 이어 간다', (tester) async {

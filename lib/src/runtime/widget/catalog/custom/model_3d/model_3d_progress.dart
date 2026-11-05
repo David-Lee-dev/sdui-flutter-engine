@@ -97,7 +97,10 @@ final class Model3dPlayhead {
   final VoidCallback onArrive;
 
   late final Ticker _ticker;
-  Duration _last = Duration.zero;
+
+  /// The previous tick's time; null until the next tick sets it, which then
+  /// moves nothing.
+  Duration? _last;
 
   Model3dProgress? _progress;
 
@@ -159,7 +162,7 @@ final class Model3dPlayhead {
       return;
     }
     if (!_ticker.isActive) {
-      _last = Duration.zero;
+      _last = null;
       _ticker.start();
     }
   }
@@ -170,9 +173,10 @@ final class Model3dPlayhead {
   }
 
   void _tick(Duration elapsed) {
-    final dt =
-        (elapsed - _last).inMicroseconds / Duration.microsecondsPerSecond;
+    final last = _last;
     _last = elapsed;
+    if (last == null) return;
+    final dt = (elapsed - last).inMicroseconds / Duration.microsecondsPerSecond;
     final progress = _progress;
     if (dt <= 0 || progress == null) return;
     final step = progress.speed * dt;
@@ -210,6 +214,11 @@ final class Model3dPlayhead {
       ),
     );
   }
+
+  /// Counts the next tick from itself. A muted ticker still runs its clock,
+  /// so after a hidden view shows again the first tick would otherwise play
+  /// the hidden time at once.
+  void resume() => _last = null;
 
   void dispose() => _ticker.dispose();
 }

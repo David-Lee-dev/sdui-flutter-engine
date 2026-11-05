@@ -34,7 +34,11 @@
   calls are in flight. A play that fails ends its non-looping state, and a
   state's end never ends a later entry of the same state.
   While an inactive tab or a covering route hides the view (`TickerMode`
-  off), a looping state's clip stops and plays again once the view shows.
+  off), a looping state's clip stops and plays again once the view shows;
+  camera motion, `progress` and `auto_rotate` pause and go on from where they
+  stopped, without catching up the hidden time. A `next` chain of states that
+  end without playing (no renderer, a failed load, a missing clip) stops when
+  it comes back to a state it already ended, instead of cycling forever.
   A failed load is tried again with a new controller when the view shows
   again or the app resumes; `on_error` dispatches for each failed attempt.
   Existing apps need no changes.
