@@ -164,6 +164,7 @@ Engine-specific widgets; includes the explicitly unregistered internal helper fo
 | `swipe_indicator` | A page indicator that follows its `swipe_layout`'s [SwipeController]. | box | No | [Open](custom/swipe_indicator.md) |
 | `swipe_layout` | Owns the [SwipeController] shared by a swipe layout's panes and indicators. | box | No | [Open](custom/swipe_layout.md) |
 | `swipe_pane` | A swipe area bound to its `swipe_layout`'s [SwipeController]. | box | No | [Open](custom/swipe_pane.md) |
+| `model_3d` | Renders a policy-backed 3D model driven by a state → clip table. | box | No | [Open](custom/model_3d.md) |
 | `video` | Builds a policy-backed video player with optional playback interaction. | box | No | [Open](custom/video.md) |
 | `nested_body` (internal) | Unregistered helper used by `nested_scroll_view`; not valid as a template type. | box | No | [Open](custom/nested_body.md) |
 

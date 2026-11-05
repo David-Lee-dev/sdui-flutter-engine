@@ -3,6 +3,7 @@ import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 
 import 'driver/driver_registry.dart';
 import 'media/image_source_registry.dart';
+import 'media/model_3d_source_registry.dart';
 import 'media/video_source_registry.dart';
 import 'motion/motion_factory.dart';
 import 'transition/transition_factory.dart';
@@ -27,5 +28,6 @@ final class EngineCatalog {
     FunctionRegistry.freeze();
     ImageSourceRegistry.freeze();
     VideoSourceRegistry.freeze();
+    Model3dSourceRegistry.freeze();
   }
 }

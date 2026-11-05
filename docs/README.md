@@ -28,7 +28,7 @@ This reference documents the template language implemented by the engine, from s
 - [Haptics](haptic.md) — tap and continuous haptics, playback order, device support, and authoring guidance.
 - [Haptic presets](haptic-presets.md) — legacy, basic, and continuous preset catalog with timing details.
 - [Page transitions](transitions.md) — screen effects, preloading, reverse playback, and custom registrations.
-- [Media](media.md) — image/video source policies, placeholders, cross-fades, and controls.
+- [Media](media.md) — image/video/3D model source policies, placeholders, cross-fades, and controls.
 - [Widget catalog](widgets/README.md) — categorized widget index with protocol and loop-wrapper status.
 - [Errors](errors.md) — load/compile/node/modal error surfaces, builder precedence, and the `SduiErrorObserver` seam.
 

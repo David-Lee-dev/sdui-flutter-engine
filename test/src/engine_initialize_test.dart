@@ -4,6 +4,7 @@ import 'package:sdui_engine/src/compile/schema/widget_schema_registry.dart';
 import 'package:sdui_engine/src/contract/image_source.dart';
 import 'package:sdui_engine/src/contract/app_storage.dart';
 import 'package:sdui_engine/src/contract/secure_storage.dart';
+import 'package:sdui_engine/src/contract/model_3d_source.dart';
 import 'package:sdui_engine/src/contract/video_source.dart';
 import 'package:sdui_engine/src/contract/external_command.dart';
 import 'package:sdui_engine/src/runtime/motion/_base.dart';
@@ -11,6 +12,7 @@ import 'package:sdui_engine/src/contract/network_client.dart';
 import 'package:sdui_engine/src/engine.dart';
 import 'package:sdui_engine/src/runtime/driver/driver_registry.dart';
 import 'package:sdui_engine/src/runtime/media/image_source_registry.dart';
+import 'package:sdui_engine/src/runtime/media/model_3d_source_registry.dart';
 import 'package:sdui_engine/src/runtime/media/video_source_registry.dart';
 import 'package:sdui_engine/src/runtime/motion/motion_factory.dart';
 import 'package:sdui_engine/src/runtime/transition/_base.dart';
@@ -32,6 +34,17 @@ class _VideoSource implements VideoSource {
   @override
   Future<SduiVideoController> controllerFor(VideoRequest request) =>
       throw UnimplementedError();
+}
+
+final class _Model3dSource extends Model3dSource {
+  int warmUps = 0;
+
+  @override
+  Future<SduiModel3dController> controllerFor(Model3dRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> warmUp() async => warmUps++;
 }
 
 class _AppStorage implements AppStorage {
@@ -114,9 +127,42 @@ void main() {
       PageTransitionFactory.reset();
       ImageSourceRegistry.reset();
       VideoSourceRegistry.reset();
+      Model3dSourceRegistry.reset();
     });
 
     group('initialize', () {
+      test('model3dSource를 설치하고 부팅 뒤 백그라운드에서 warmUp을 한 번 부른다', () async {
+        final source = _Model3dSource();
+        Engine.initialize(
+          networkClient: const _NetworkClient(),
+          imageSource: const _ImageSource(),
+          videoSource: const _VideoSource(),
+          model3dSource: source,
+          appStorage: _AppStorage(),
+          secureStorage: _SecureStorage(),
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        expect(Model3dSourceRegistry.current, same(source));
+        expect(source.warmUps, 1);
+        expect(
+          () => Model3dSourceRegistry.install(_Model3dSource()),
+          throwsStateError,
+        );
+      });
+
+      test('model3dSource가 없으면 model 위젯은 poster만 쓰도록 비워 둔다', () {
+        Engine.initialize(
+          networkClient: const _NetworkClient(),
+          imageSource: const _ImageSource(),
+          videoSource: const _VideoSource(),
+          appStorage: _AppStorage(),
+          secureStorage: _SecureStorage(),
+        );
+
+        expect(Model3dSourceRegistry.current, isNull);
+      });
+
       test('전달한 external command를 freeze 전에 등록해 resolve할 수 있다', () {
         Engine.initialize(
           networkClient: const _NetworkClient(),

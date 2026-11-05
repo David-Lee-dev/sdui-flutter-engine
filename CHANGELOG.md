@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.21.0
+
+- Added the `model_3d` widget: a policy-backed 3D model driven by a state → clip
+  table. `states` maps state names to `{ clip, loop, next }`; changing
+  `state` (or `state_trigger`, to replay the same state) plays that clip with a
+  `crossfade_duration` blend, `next` follows a finished non-looping clip, and
+  `on_state_end` dispatches with `{ state }`. `poster` shows until the model is
+  ready and replaces it on failure. The engine owns the camera: `camera`
+  (yaw, pitch, zoom, eased changes), `controls` (rotate axes, `min_pitch`/`max_pitch`,
+  `min_zoom`/`max_zoom`, sensitivity, inertia, `return_duration`), `auto_rotate` (degrees per
+  second) and the `interactive` shorthand turn into one `Model3dCamera` per
+  frame, so every renderer moves the same way. Without `controls`, gestures
+  pass to ancestors. `progress: { clip, at | value, speed }` (`at` in milliseconds) holds one clip at
+  a playhead the template sets — a tap counter can step through one long
+  animation — playing toward each new target at the clip's pace (reversing
+  when it moves back) and showing the first target after a load at once;
+  `on_progress_end` dispatches when the playhead arrives at the clip's end,
+  and `on_progress_arrive` (`{ clip, at }`) whenever it settles at a target
+  the template changed, so a template can ignore taps until a step lands.
+  See docs/widgets/custom/model_3d.md.
+- Added the `Model3dSource` / `SduiModel3dController` / `Model3dCamera` contract
+  (renderers implement `setCamera`, `clipDuration` and `setPose`; their views
+  never take pointers) and the
+  optional
+  `Sdui.initialize(model3dSource:)` / `Engine.initialize(model3dSource:)` seam.
+  The package ships no renderer; without a source `model_3d` renders its
+  poster, and non-looping states end at once so flows never wait on
+  rendering. `Model3dSource.warmUp()` runs in the background after boot.
+  The contract states the concurrency rules: a later `play`, `stop`,
+  `dispose` or a `setPose` of the playing clip supersedes a play the moment it
+  is called, a failed `initialize` is final, and `dispose` may arrive while
+  calls are in flight. A play that fails ends its non-looping state, and a
+  state's end never ends a later entry of the same state.
+  While an inactive tab or a covering route hides the view (`TickerMode`
+  off), a looping state's clip stops and plays again once the view shows;
+  camera motion, `progress` and `auto_rotate` pause and go on from where they
+  stopped, without catching up the hidden time. A `next` chain of states that
+  end without playing (no renderer, a failed load, a missing clip) stops when
+  it comes back to a state it already ended, instead of cycling forever.
+  A failed load is tried again with a new controller when the view shows
+  again or the app resumes; `on_error` dispatches for each failed attempt.
+  Existing apps need no changes.
+
 ## 0.20.4
 
 - A `cond` with only an `_else` branch, the layer templates use to nest

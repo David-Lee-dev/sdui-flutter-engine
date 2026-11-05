@@ -1,0 +1,177 @@
+# model_3d
+
+Renders a policy-backed 3D model driven by a state → clip table.
+
+## Properties
+
+| Name | Type | Allowed values | Default | Bindable (`${}`) | Description |
+| --- | --- | --- | --- | --- | --- |
+| `src` | `text` | — | `null` | Yes | model source path or URL. |
+| `poster` | `text` | — | `null` | Yes | image shown until the model is ready, and instead of it when no renderer is installed or loading fails. Resolved through the installed `ImageSource`. |
+| `fit` | `boxFit` | fill, contain, cover, fit_width, fit_height, none, scale_down | `contain` | Yes | poster fitting mode. |
+| `width` | `size` (scaled by EngineMetrics) | — | `null` | Yes | sets the box width. |
+| `height` | `size` (scaled by EngineMetrics) | — | `null` | Yes | sets the box height. |
+| `aspect_ratio` | `number` | — | `1` | Yes | width-to-height ratio used unless both `width` and `height` are set. |
+| `state` | `text` | — | `null` | Yes | the state to enter; changing it plays that state's clip. |
+| `state_trigger` | any | — | `null` | Yes | re-enters `state` whenever this value changes, so the same state can replay (e.g. bind a tap counter). |
+| `states` | map | — | `{}` | Yes | state name → `{ clip, loop, next }`. `clip` names an animation in the model; `loop` (default `false`) repeats it; `next` is the state entered when a non-looping clip ends. |
+| `crossfade_duration` | `integer` | — | `200` | Yes | blend time between clips in milliseconds. The first clip after a load starts without a blend. |
+| `controls` | map | — | `null` | Yes | how gestures move the camera; see [Camera and gestures](#camera-and-gestures). Without it, gestures pass through to ancestors. |
+| `interactive` | `flag` | — | `false` | Yes | shorthand for `controls: { rotate: free }` when `controls` is absent. |
+| `camera` | map | — | `{}` | Yes | the resting camera `{ yaw, pitch, zoom, duration }`; see [Camera and gestures](#camera-and-gestures). |
+| `auto_rotate` | `number` or `flag` | — | `0` | Yes | degrees per second the camera orbits on its own; `true` is 30. Pauses while the user drags. |
+| `progress` | map | — | `null` | Yes | holds one clip at a playhead the template sets: `{ clip, at, value, speed }`; see [Progress](#progress). |
+| `on_progress_end` | `text` | — | `null` | Yes | action dispatched when the `progress` playhead arrives at the clip's end. The event payload is `{ clip }`. |
+| `on_progress_arrive` | `text` | — | `null` | Yes | action dispatched when the `progress` playhead settles at a target the template changed. The event payload is `{ clip, at }` (`at` in milliseconds); see [Progress](#progress). |
+| `on_state_end` | `text` | — | `null` | Yes | action dispatched when a state's non-looping clip ends. The event payload is `{ state }`; branch on it with `_when: '${event.state == "jump"}'`. |
+| `on_ready` | `text` | — | `null` | Yes | action dispatched once the model is ready for the current `src`. |
+| `on_error` | `text` | — | `null` | Yes | action dispatched each time the model fails to load for the current `src`: the first load and every retry. |
+| `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
+
+All non-structural property values are recursively expression-bindable. Structural keys control compilation and therefore are not themselves interpolated.
+
+## Protocol
+
+This widget produces the **box** layout protocol. Its positional children must produce box. This type is not selected directly by `_loop._wrap`; `_loop` may still wrap this widget node as the repeated item. See [Concepts](../../concepts.md#box-and-sliver-protocols) and [Loops](../../loops.md).
+
+## Examples
+
+A character that idles, jumps on tap, and returns to idle:
+
+```yaml
+_type: model_3d
+src: /assets/character.glb
+poster: /assets/character.png
+height: 200
+state: '${mood}'
+state_trigger: '${taps}'
+states:
+  idle: { clip: Idle, loop: true }
+  jump: { clip: Jump, next: idle }
+on_state_end: landed
+_scope:
+  _state:
+    mood: idle
+    taps: 0
+  _action:
+    hop:
+      _type: set
+      mood: jump
+      taps: '${taps + 1}'
+    landed:
+      _type: set
+      mood: idle
+_on:
+  tap: { do: hop, ripple: false }
+```
+
+`state_trigger: '${taps}'` lets every tap replay `jump`, even while `mood` already is `jump`.
+
+A model in a scrolling feed that turns sideways, springs back, and spins slowly:
+
+```yaml
+_type: model_3d
+src: /assets/egg.glb
+height: 200
+camera: { pitch: 15 }
+controls: { rotate: horizontal, return_duration: 400 }
+auto_rotate: 20
+```
+
+A dispenser whose lever moves one stage per tap, through stops placed at the animation's beats. Every tap buzzes, but a tap only advances once the previous stage has landed:
+
+```yaml
+_type: model_3d
+src: /assets/dispenser.glb
+height: 200
+progress:
+  clip: Sequence
+  at: '${[0, 1100, 2250, 3600, 3800, 6200][min(taps, 5)]}'
+on_progress_end: reward
+on_progress_arrive: landed
+_scope:
+  _state:
+    taps: 0
+    moving: false
+  _action:
+    tap_lever:
+      - { _type: sys_haptic, variant: chip, _background: true }
+      - _type: set
+        _when: '${not moving}'
+        taps: '${taps + 1}'
+        moving: true
+    landed:
+      _type: set
+      moving: false
+_on:
+  tap: { do: tap_lever, ripple: false }
+```
+
+## Camera and gestures
+
+The camera orbits the model's centre. Its angles are in degrees, unlike the radians of 2D `transform` and motion `rotate`, since 3D cameras are conventionally set in degrees. The engine computes it each frame from the resting `camera`, accumulated `auto_rotate`, and the user's gesture offset, and hands it to the renderer.
+
+`camera`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `yaw` | `0` | degrees around the vertical axis; 0 faces the model's front, positive moves the camera toward the model's right. |
+| `pitch` | `0` | degrees above the horizon; positive looks down on the model. |
+| `zoom` | `1` | magnification; 1 frames the whole model, 2 is twice as close. |
+| `duration` | `300` | how long a change to `camera` takes to ease in, in milliseconds. |
+
+Bind `camera` to state to turn the model from an action, e.g. `camera: { yaw: '${facing}' }` with a `set` that changes `facing`.
+
+`controls`:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `rotate` | `free` | `none`, `horizontal`, `vertical` or `free`: which drag axes turn the camera. |
+| `min_pitch` | `-60` | lowest pitch in degrees for vertical dragging. |
+| `max_pitch` | `60` | highest pitch in degrees for vertical dragging. |
+| `min_zoom` | none | smallest pinch magnification. |
+| `max_zoom` | none | largest pinch magnification. Pinch is off unless `min_zoom` or `max_zoom` is set; the one left out is `1`. |
+| `sensitivity` | `1` | multiplies the base rate of half a degree per logical pixel. |
+| `inertia` | `true` | a fling keeps the camera turning and slowing down. |
+| `return_duration` | none | after release, ease back to `camera` over this many milliseconds; without it the camera stays where it was left. |
+
+Gestures go through Flutter's gesture arena. `rotate: horizontal` claims only horizontal drags, so an enclosing scroll view still scrolls vertically over the model. `free`, `vertical` and pinch zoom claim drags in their directions over the model, so use them where the model is not inside a scroll view in that direction. Taps are never claimed, so `_on: tap` on the model or an ancestor still fires.
+
+## Progress
+
+`progress` turns one long clip into steps the template controls, e.g. a lever that moves a stage per tap. The engine owns the playhead: it shows the clip at the target time and, when the target changes, plays toward it at the clip's own pace and stops there.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `clip` | — | the animation to hold; required. |
+| `at` | — | target in milliseconds into the clip. Wins over `value`. |
+| `value` | `0` | target as a fraction of the clip, 0 to 1. |
+| `speed` | `1` | playback rate toward a new target, in either direction: `1` is the clip's own pace, `2` twice as fast; `0` jumps. |
+
+- The first target after a load shows at once, without playing: a model that mounts with `taps: 3` from the server appears at stage 3.
+- A target that moves on while the playhead is still on its way (fast taps) is followed without a jump; a target behind the playhead plays backward.
+- Targets are clamped to the clip. `on_progress_end` dispatches when the playhead arrives at the clip's end by moving there — not when a model loads already at its end.
+- `on_progress_arrive` dispatches once the playhead settles at a target the template changed: after playing there, or at once when it jumps (`speed: 0`, a new `clip`), already holds the target, or has no clip to play (`at` is then `null`). A target replaced mid-way does not arrive; only the last one does. The first target after a load does not dispatch, but a target changed while loading does once the clip attaches. At the clip's end it follows `on_progress_end`.
+- To ignore taps while the motion plays, gate the step on a state the arrival clears (see the dispenser in [Examples](#examples)). The gate lives in the template, so it can instead queue taps, or give ignored taps their own haptic.
+- Drive the progress clip from `progress` only. `states` may play other clips at the same time when they animate other parts of the model.
+
+## Loading, failure and visibility
+
+The app installs the renderer (see [Media](../../media.md#3d-models)). Without one, `model_3d` renders `poster` only. `poster` shows until the model is ready and fades out above it. A `src` change replaces the model; `state`, `camera`, `controls` and `auto_rotate` changes keep it.
+
+A failed load keeps `poster` and is tried again when the view shows again or the app returns to the foreground — a weak network may have dropped the download. Each retry dispatches `on_error` if it fails, or `on_ready` and plays `state` from the start once it loads.
+
+Animation is decoration. When no renderer is installed, the model fails to load, the model lacks a state's clip, or the clip fails to play, a non-looping state ends at once: `on_state_end` dispatches and `next` is followed exactly as if the clip had played. A chain of such states stops where its `next` comes back to one it already ended, so a cycle with nothing to play never spins. While the model is still loading, a state waits and plays once it is ready.
+
+The same holds for `progress`: without the clip, a `value` that changes to 1 or more dispatches `on_progress_end` at once. An `at` target cannot be judged without the clip's length, so it never ends there; prefer `value` when a flow waits on the end. A target that reaches the end while the model is loading dispatches once the clip attaches there. `on_progress_arrive` likewise dispatches at once on every target change when the clip cannot play, so a template gated on it never stalls.
+
+While an inactive tab or a covering route hides the view, a looping state's clip stops and plays again once the view shows, so a hidden loop does not keep the renderer drawing. Camera motion, `progress` and `auto_rotate` pause and go on from where they stopped, without catching up the hidden time; a non-looping clip plays to its end and its state ends as usual.
+
+## Pitfalls & related
+
+- Use only the documented positional child form; `_slots` are rejected for this specification kind.
+- Set `poster`: without it the box stays empty while the model loads and after a failed load. Keep it the same framing as the model's first frame so the swap is not noticeable.
+- Keep one or two models per screen: renderer views are heavy.
+- Inside a vertical scroll view, use `controls: { rotate: horizontal }` so vertical drags keep scrolling.
+- Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
+- See [Media](../../media.md#3d-models) for the renderer contract, and return to the [widget catalog](../README.md).
