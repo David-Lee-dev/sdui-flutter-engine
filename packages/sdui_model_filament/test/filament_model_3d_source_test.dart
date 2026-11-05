@@ -13,6 +13,12 @@ import 'package:thermion_flutter/thermion_flutter.dart' as thermion;
 /// once released.
 final class _Native {
   final log = <String>[];
+
+  /// The model's clips in native order: name and seconds.
+  List<(String, double)> clips = const [('Wave', 1.0), ('Jump', 1.0)];
+
+  /// The native index of each other animation call, as `name index`.
+  final indices = <String>[];
   final _holds = <String, Completer<void>>{};
 
   /// Holds the next call to [name] until [release].
@@ -81,23 +87,30 @@ final class _Camera implements thermion.Camera {
       native.call<void>(_nameOf(invocation), null);
 }
 
-/// A model with a one-second `Wave` and `Jump`.
+/// A model with [_Native.clips], by default a one-second `Wave` and `Jump`.
 final class _Asset implements thermion.ThermionAsset {
   _Asset(this.native);
 
   final _Native native;
 
   @override
-  Future<List<String>> getGltfAnimationNames() =>
-      native.call('getGltfAnimationNames', const ['Wave', 'Jump']);
+  Future<List<String>> getGltfAnimationNames() => native.call(
+    'getGltfAnimationNames',
+    [for (final (name, _) in native.clips) name],
+  );
 
   @override
   Future<double> getGltfAnimationDuration(int animationIndex) =>
-      native.call('getGltfAnimationDuration', 1.0);
+      native.call('getGltfAnimationDuration', native.clips[animationIndex].$2);
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      native.call<void>(_nameOf(invocation), null);
+  dynamic noSuchMethod(Invocation invocation) {
+    final name = _nameOf(invocation);
+    if (name.contains('GltfAnimation')) {
+      native.indices.add('$name ${invocation.positionalArguments.first}');
+    }
+    return native.call<void>(name, null);
+  }
 }
 
 final class _Platform extends FilamentPlatform {
@@ -294,6 +307,33 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(model.playback.isPlaying, isFalse);
       expect(model.playback.completions, 1);
+      await model.dispose();
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('이름이 겹치면 첫 클립을 쓰고, 뒤 클립은 원래 번호로 재생하고 포즈를 잡는다', (tester) async {
+      final model = await controller();
+      native.clips = const [('Wave', 1.0), ('Wave', 3.0), ('Jump', 2.0)];
+      bytes.complete();
+      await model.initialize();
+
+      expect(model.clips, ['Wave', 'Jump']);
+      expect(model.clipDuration('Wave'), const Duration(seconds: 1));
+      expect(model.clipDuration('Jump'), const Duration(seconds: 2));
+
+      await model.play('Jump', loop: true);
+      model.setPose('Jump', const Duration(milliseconds: 500));
+      await tester.pump();
+      await model.play('Wave', loop: true);
+      await model.stop();
+
+      expect(native.indices, [
+        'playGltfAnimation 2',
+        'stopGltfAnimation 2',
+        'setGltfAnimationTime 2',
+        'playGltfAnimation 0',
+        'stopGltfAnimation 0',
+      ]);
       await model.dispose();
       await tester.pump(const Duration(seconds: 1));
     });

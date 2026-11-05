@@ -23,3 +23,5 @@
   no later call reaches it. Each play takes a run number: a superseded play's
   late native work or end timer, or a late `stop`, never changes the newer
   playback.
+- Clips keep their native animation index, so a clip after a repeated name
+  plays and poses itself; a repeated name plays its first animation.

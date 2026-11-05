@@ -103,12 +103,8 @@ final class FilamentModel3dSource extends Model3dSource {
   Future<SduiModel3dController> controllerFor(Model3dRequest request) async =>
       FilamentModel3dController(request, this);
 
-  ModelLoadStats _statsFor(String src) => ModelLoadStats(
-    src: src,
-    mount: ++_mounts,
-    warmUpMs: _warmUpMs,
-    renderer: 'filament',
-  );
+  ModelLoadStats _statsFor(String src) =>
+      ModelLoadStats(src: src, mount: ++_mounts, warmUpMs: _warmUpMs);
 
   @override
   Future<void> warmUp() async {
@@ -158,8 +154,10 @@ final class FilamentModel3dController implements SduiModel3dController {
   bool _placing = false;
   bool _placeAgain = false;
   Timer? _clipEnd;
-  List<String> _clips = const [];
-  Map<String, Duration> _durations = const {};
+
+  /// The model's clips by name, with their native animation index.
+  Map<String, ({int index, Duration duration})> _clips = const {};
+  List<String> _clipNames = const [];
 
   /// The clip index a [play] started, until [stop] or a pose of that clip.
   int? _playing;
@@ -223,28 +221,42 @@ final class FilamentModel3dController implements SduiModel3dController {
 
       final data = await bytes;
       final asset = await _native(() => viewer.loadGltfFromBuffer(data));
-      final durations = await _native(() async {
+      final clips = await _native(() async {
         await asset.transformToUnitCube();
-        final clips = await asset.getGltfAnimationNames();
-        return {
-          for (var i = 0; i < clips.length; i++)
-            clips[i]: Duration(
+        final names = await asset.getGltfAnimationNames();
+        final clips = <String, ({int index, Duration duration})>{};
+        for (var i = 0; i < names.length; i++) {
+          // glTF does not require unique names; a name plays its first clip.
+          if (clips.containsKey(names[i])) {
+            debugPrint(
+              '[sdui_model_filament] clip "${names[i]}" #$i ignored: '
+              '"${names[i]}" is clip #${clips[names[i]]!.index}',
+            );
+            continue;
+          }
+          clips[names[i]] = (
+            index: i,
+            duration: Duration(
               microseconds:
                   (await asset.getGltfAnimationDuration(i) *
                           Duration.microsecondsPerSecond)
                       .round(),
             ),
-        };
+          );
+        }
+        return clips;
       });
       _asset = asset;
-      _clips = List.unmodifiable(durations.keys);
-      _durations = durations;
+      _clips = Map.unmodifiable(clips);
+      _clipNames = List.unmodifiable(clips.keys);
       stats.mark('asset');
 
       await _frame(_framedAspect ?? 1);
       _touch();
       _ifAlive(() => stats.mark('ready'));
-      debugPrint('[sdui_model_filament] ${stats.summary()}, clips: $_clips');
+      debugPrint(
+        '[sdui_model_filament] ${stats.summary()}, clips: $_clipNames',
+      );
     } on _Disposed {
       return;
     } catch (error) {
@@ -355,16 +367,16 @@ final class FilamentModel3dController implements SduiModel3dController {
   }
 
   @override
-  List<String> get clips => _clips;
+  List<String> get clips => _clipNames;
 
   @override
-  Duration? clipDuration(String clip) => _durations[clip];
+  Duration? clipDuration(String clip) => _clips[clip]?.duration;
 
   @override
   void setPose(String clip, Duration time) {
     _pose = (clip, time);
     final asset = _asset;
-    final index = _clips.indexOf(clip);
+    final index = _clips[clip]?.index ?? -1;
     // A playing clip would overwrite the pose on its next frame.
     if (asset != null && index >= 0 && index == _playing) {
       _endPlay();
@@ -387,7 +399,7 @@ final class FilamentModel3dController implements SduiModel3dController {
       do {
         _poseAgain = false;
         final (clip, time) = _pose!;
-        final index = _clips.indexOf(clip);
+        final index = _clips[clip]?.index ?? -1;
         if (index < 0) continue;
         await _native(
           () => asset.setGltfAnimationTime(
@@ -421,7 +433,7 @@ final class FilamentModel3dController implements SduiModel3dController {
       ),
     );
     final asset = _asset;
-    final index = _clips.indexOf(clip);
+    final index = _clips[clip]?.index ?? -1;
     if (asset == null || index < 0) return;
     _playing = index;
     _source._gate.hold(this, playing: true);
@@ -465,7 +477,7 @@ final class FilamentModel3dController implements SduiModel3dController {
   @override
   Future<void> stop() async {
     final asset = _asset;
-    final index = _clips.indexOf(_playback.clip ?? '');
+    final index = _clips[_playback.clip]?.index ?? -1;
     _endPlay();
     if (asset == null || index < 0) return;
     try {

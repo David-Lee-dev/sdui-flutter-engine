@@ -28,7 +28,8 @@ Sdui.initialize(
   directory (64 MB, least recently used first), revalidated in the background
   by ETag; `diskCache: false` keeps them in memory only.
 - Models are glTF binary (`.glb`). The clip names a template's `states` and
-  `progress` use are the GLB's animation names, matched exactly.
+  `progress` use are the GLB's animation names, matched exactly; when names
+  repeat, the first animation with the name plays.
 - Clips play with `crossfade`; Filament reports no end event, so a
   non-looping clip completes after its duration.
 - Lighting is Filament's neutral studio IBL (`assets/lightroom_ibl.ktx`,
