@@ -137,6 +137,7 @@ final class FilamentModel3dController implements SduiModel3dController {
 
   /// This view's load timeline, also painted when
   /// [FilamentModel3dSource.debugOverlay] is on.
+  @visibleForTesting
   final ModelLoadStats stats;
 
   /// Set once the viewer exists, so the view allocates its texture while the

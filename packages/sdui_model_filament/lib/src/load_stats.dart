@@ -8,22 +8,9 @@ import 'package:flutter/widgets.dart';
 /// The load timeline of one model view, in milliseconds since its controller
 /// was created.
 final class ModelLoadStats extends ChangeNotifier {
-  ModelLoadStats({
-    required this.src,
-    required this.mount,
-    this.warmUpMs,
-    this.renderer = '',
-    this.outOfProcess = false,
-  });
+  ModelLoadStats({required this.src, required this.mount, this.warmUpMs});
 
   final String src;
-
-  /// A short renderer label shown with the stats, e.g. `web` or `filament`.
-  final String renderer;
-
-  /// Whether the renderer draws in another process (a webview's content
-  /// process), so the app's RSS leaves it out.
-  final bool outOfProcess;
 
   /// 1 for the first model view of the source since launch, then 2, 3, ...
   final int mount;
@@ -35,7 +22,7 @@ final class ModelLoadStats extends ChangeNotifier {
   final _clock = Stopwatch()..start();
   final List<({String label, int ms})> marks = [];
 
-  /// How the model bytes reached the page, e.g. `7.6MB cache 3ms`.
+  /// How the model bytes arrived, e.g. `7.6MB cache 3ms`.
   String? model;
   String? error;
 
@@ -44,7 +31,7 @@ final class ModelLoadStats extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Records the model bytes served to the page; [cached] when they were
+  /// Records the model bytes served; [cached] when they were
   /// already in (or on their way into) the byte cache.
   void served({required int bytes, required bool cached, required int ms}) {
     model =
@@ -65,9 +52,8 @@ final class ModelLoadStats extends ChangeNotifier {
   String get warmUp =>
       warmUpMs == null ? 'warm-up pending' : 'warm-up ${warmUpMs}ms';
 
-  /// One line for logs: `#1 warm-up 812ms a.glb: webview 15ms, ... (7.6MB ...)`.
+  /// One line for logs: `#1 warm-up 812ms a.glb: viewer 15ms, ... (7.6MB ...)`.
   String summary() => [
-    if (renderer.isNotEmpty) '[$renderer]',
     '#$mount $warmUp $src:',
     marks.map((m) => '${m.label} ${m.ms}ms').join(', '),
     if (model != null) '($model)',
@@ -119,11 +105,8 @@ final class FrameStats {
 
 /// Paints [stats], app memory and frame times over a model view.
 ///
-/// Memory is this app process's RSS: an out-of-process renderer (a webview's
-/// content process) is not included, so measure the total with Instruments
-/// (iOS) or `adb shell dumpsys meminfo` (Android). Frame times are Flutter's,
-/// counted from the model's ready mark; an out-of-process renderer's own frame
-/// rate is not.
+/// Memory is this app process's RSS, which includes Filament: it runs
+/// in-process. Frame times are Flutter's, counted from the model's ready mark.
 final class ModelDebugOverlay extends StatefulWidget {
   const ModelDebugOverlay({
     super.key,
@@ -196,18 +179,12 @@ final class _ModelDebugOverlayState extends State<ModelDebugOverlay> {
     final rss = _rssNow;
     final base = _rssAtMount;
     final lines = [
-      [
-        if (stats.renderer.isNotEmpty) stats.renderer,
-        '#${stats.mount}',
-        stats.warmUp,
-        stats.src.split('/').last,
-      ].join(' '),
+      ['#${stats.mount}', stats.warmUp, stats.src.split('/').last].join(' '),
       stats.marks.map((m) => '${m.label} ${m.ms}').join(' · '),
       if (stats.model != null) 'model ${stats.model}',
       if (stats.error != null) 'error ${stats.error}',
       if (rss != null && base != null)
-        'app RSS ${_mb(rss)} (${rss >= base ? '+' : '-'}${_mb((rss - base).abs())})'
-            '${stats.outOfProcess ? ' excl. renderer process' : ''}',
+        'app RSS ${_mb(rss)} (${rss >= base ? '+' : '-'}${_mb((rss - base).abs())})',
       if (stats.isReady)
         'since ready: $_frames'
       else

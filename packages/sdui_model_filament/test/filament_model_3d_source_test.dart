@@ -179,7 +179,6 @@ void main() {
     );
 
     expect(find.byType(ModelDebugOverlay), findsOneWidget);
-    expect(model.stats.renderer, 'filament');
     expect(model.stats.mount, 1);
     await tester.pumpWidget(const SizedBox());
     await model.dispose();

@@ -25,3 +25,4 @@
   playback.
 - Clips keep their native animation index, so a clip after a repeated name
   plays and poses itself; a repeated name plays its first animation.
+- `ModelLoadStats` is internal: it only feeds the debug overlay.

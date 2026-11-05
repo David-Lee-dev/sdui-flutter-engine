@@ -5,4 +5,3 @@ library;
 
 export 'src/filament_model_3d_source.dart'
     show FilamentModel3dController, FilamentModel3dSource;
-export 'src/load_stats.dart' show ModelLoadStats;

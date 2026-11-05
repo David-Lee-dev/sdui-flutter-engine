@@ -98,16 +98,6 @@ final class ModelDiskCache {
     }
   }
 
-  /// Marks [url]'s copy as just used, so eviction keeps it.
-  Future<void> touch(Uri url) async {
-    try {
-      final dir = await _dir;
-      if (dir != null) await _model(dir, url).setLastModified(DateTime.now());
-    } on Object {
-      // Nothing stored.
-    }
-  }
-
   /// Writes beside [file] and renames over it, so a reader never sees a
   /// partial file.
   static Future<void> _replace(File file, List<int> bytes) async {
