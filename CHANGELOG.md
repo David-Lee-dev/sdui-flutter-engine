@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.25.0
+
+- Bottom sheets no longer leave an empty strip above the home indicator. The
+  sheet surface (background and top radius) now reaches the bottom edge and the
+  frame lifts the body above the bottom inset inside it, so templates need no
+  bottom `safe_area` (one they already have adds nothing). A `background: none`
+  sheet paints its own card, so its template receives the bottom inset and owns
+  it like a scaffold body. Left/right safe areas, keyboard positioning and
+  dialogs are unchanged; the sheet height cap includes the inset area.
+
 ## 0.24.0
 
 - `curve` (in `_motion`) and `_morph._curve` accept a list of segments
