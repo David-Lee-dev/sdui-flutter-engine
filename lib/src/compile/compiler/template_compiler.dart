@@ -117,6 +117,10 @@ final class TemplateCompiler {
     // 0.23.0: `box_shadow` `inset: true`. Declare-only for the same reasons;
     // older engines draw an inset entry as a normal outer shadow.
     'box_shadow_inset_v1',
+    // 0.24.0: segmented curve lists (`[{until, to, curve}, ...]`). Declare-
+    // only like `curve_v2`: older engines read the list as a malformed
+    // bezier and use the default curve.
+    'curve_segments_v1',
   };
 
   /// Builds the directive tree for a template root.

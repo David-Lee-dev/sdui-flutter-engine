@@ -56,6 +56,29 @@ A `repeat` value that is neither a bool nor a whole number in 1–1000 (`0`, `2.
 - A cubic bezier `[x1, y1, x2, y2]` of four finite numbers. `x1`/`x2` are clamped to 0–1; a `y` beyond ±10, a non-number or a wrong length uses the fallback.
 - Spring curves `spatial_fast`, `spatial_default`, `spatial_slow`, `effect_default`: the matching [`_spring` preset](control-flow.md#_spring) run from 0 to 1 at rest, stretched so its settle time maps to the end. Without an explicit `duration` the motion runs for that settle time; with one, the spring is squeezed into it. It overshoots like the spring does.
 
+Since 0.24.0 (`_requires: [curve_segments_v1]`) `curve` (and `_morph._curve`) also accepts a list of segments, each a map `{until, to, curve}`. A hop that rises, falls back with a bounce on landing, then rests on the ground:
+
+```yaml
+_motion:
+  type: move
+  begin: [0, 0]
+  end: [0, -12]
+  duration: 900
+  repeat: true
+  repeat_delay: 1200
+  curve:
+    - { until: 0.35, to: 1, curve: ease_out }
+    - { until: 1, to: 0, curve: bounce_out }
+```
+
+- The value starts at 0. A segment covers t from the previous segment's `until` (0 for the first) to its own, and goes from the previous segment's `to` (0 for the first) to its own `to`, following its own `curve` over that span.
+- `until` is a finite number, strictly increasing, in (0, 1]; the last must be exactly 1.
+- `to` is a finite number within ±10 (like a bezier `y`). The curve ends at the last `to`, which need not be 1.
+- `curve` defaults to `linear` and takes any name or bezier above, but not another segment list. Other keys are ignored.
+- Anything else (an empty list, a non-map entry, a missing or non-numeric `until`/`to`, `until` out of order or not ending at 1, a `to` beyond ±10, an unknown inner curve) uses the fallback, like an invalid bezier.
+- With a last `to` of 0 a leg ends where it started, at `begin`: `repeat` restarts without a jump, `repeat_delay` rests at `begin`, and reduced motion (t = 1) shows `begin`. With `reverse`, the backward leg runs the same curve backwards.
+- Engines older than 0.24.0 read a segment list as a malformed bezier and use the default curve.
+
 ### Reduced motion
 
 When the platform asks to reduce motion (`MediaQuery.disableAnimations`), every `_motion` layer draws its end state at once (t = 1) and runs nothing: delays, repeats and `shimmer` stop there, and a `trigger` change keeps the end state. A one-shot layer whose `reverse` flips shows the start state instead. Turning reduced motion on mid-run jumps to the end. Since 0.9.0.

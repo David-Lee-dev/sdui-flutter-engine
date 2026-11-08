@@ -54,7 +54,6 @@ class _MotionWrapperState extends State<MotionWrapper>
     with SingleTickerProviderStateMixin
     implements PresenceMember {
   late final AnimationController _controller;
-  CurvedAnimation? _curved;
   Timer? _delayTimer;
   late MotionPlan _plan;
 
@@ -121,7 +120,6 @@ class _MotionWrapperState extends State<MotionWrapper>
     _isolate = _plan.repeat && widget.repaintBoundary;
     _controller = AnimationController(vsync: this, duration: _plan.duration)
       ..addStatusListener(_onStatus);
-    _curved = CurvedAnimation(parent: _controller, curve: _plan.curve);
     if (widget.phase == MotionPhase.exit) _controller.value = 1;
   }
 
@@ -428,10 +426,6 @@ class _MotionWrapperState extends State<MotionWrapper>
     _plan = next;
 
     if (next.duration != prev.duration) _controller.duration = next.duration;
-    if (next.curve != prev.curve) {
-      _curved?.dispose();
-      _curved = CurvedAnimation(parent: _controller, curve: next.curve);
-    }
 
     if (next.trigger != prev.trigger) {
       // A trigger change always restarts immediately, bypassing the gate.
@@ -489,22 +483,23 @@ class _MotionWrapperState extends State<MotionWrapper>
     _presence?.remove(this);
     _removeListeners();
     _delayTimer?.cancel();
-    _curved?.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // The curve is applied here rather than through a CurvedAnimation, which
+    // pins t = 0 and 1 to themselves: a segmented curve may end elsewhere.
     return AnimatedBuilder(
-      animation: _curved!,
+      animation: _controller,
       child: _isolate ? RepaintBoundary(child: widget.child) : widget.child,
       builder: (context, child) {
         if (_off) return child!;
         try {
           return widget.motion.frame(
             context,
-            _curved!.value,
+            _plan.curve.transform(_controller.value),
             child!,
             widget.params,
           );
