@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.23.0
+
+- `box_shadow` entries take `inset: true` for a CSS-style inset shadow: the
+  shadow paints inside the box, following `border_radius` and `shape: circle`,
+  above the decoration's color and gradient and below its border and the
+  child. `offset`, `blur_radius` and `spread_radius` work like CSS `inset`
+  (positive spread thickens the shadow inward). Outer and inset entries can be
+  mixed in one list. Works in `container` `decoration` and
+  `foreground_decoration` and in `decorated_box`; `speech_balloon` draws no
+  shadows. Only the boolean `true` counts. New declare-only `_requires`
+  feature `box_shadow_inset_v1`.
+- `box_shadow` entries take `blur_style: normal | solid | outer | inner`
+  (Flutter `BlurStyle`), bindable like the other shadow keys. `outer` draws
+  only the outer glow; `inner` keeps only the fuzzy part inside the shadow
+  shape, which the decoration's fill still covers, so it is not an inset
+  shadow (use `inset: true`). Ignored for inset entries. A missing or unknown
+  value draws a normal shadow. New declare-only `_requires` feature
+  `box_shadow_blur_style_v1`.
+- Engines older than 0.23.0 ignore both keys and draw every entry as a normal
+  outer shadow; the compiler does not require either feature. See
+  docs/widgets/layout/container.md#box-shadow.
+
 ## 0.22.0
 
 - New `anchored_overlay` widget: a highlight layer attached to an on-screen
