@@ -13,7 +13,11 @@ import 'package:sdui_engine/src/runtime/wrapper/presence.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/scope.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/skeleton_scope.dart';
 
-const _timing = PresenceConfig(durationMs: 1000, curve: 'linear');
+const _timing = PresenceConfig(
+  enabled: true,
+  durationMs: 1000,
+  curve: 'linear',
+);
 const _child = SizedBox(width: 120, height: 80);
 
 Widget _host(Widget child, {TextDirection direction = TextDirection.ltr}) =>

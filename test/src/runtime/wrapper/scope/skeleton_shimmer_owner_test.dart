@@ -98,7 +98,7 @@ void main() {
         LoadingScope(
           loading: loading,
           child: PresenceGroup.single(
-            config: const PresenceConfig(),
+            config: PresenceConfig.on,
             childKey: 'slot',
             child: shown ? _slot(key: key) : null,
           ),

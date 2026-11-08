@@ -231,6 +231,11 @@ class _MotionWrapperState extends State<MotionWrapper>
   }
 
   void _evaluateGate() {
+    _dropForeignScrollables();
+    if (_scrollables.isEmpty) {
+      _passGate();
+      return;
+    }
     var moving = false;
     for (final s in _scrollables) {
       final position = s.position;
@@ -253,6 +258,39 @@ class _MotionWrapperState extends State<MotionWrapper>
     if (_isVisible()) _passGate();
     // Settled but not visible: stop checking and wait for the next
     // position notification, at zero cost while idle.
+  }
+
+  /// Stops watching the ancestor scrollables this motion is not drawn inside:
+  /// content an [OverlayPortal] shows in an [Overlay] has the page's
+  /// scrollable above it as a widget, but is drawn outside its viewport, so
+  /// that scrollable can neither hide it nor move it.
+  void _dropForeignScrollables() {
+    final own = context.findRenderObject();
+    if (own == null) return;
+    bool drawsInside(ScrollableState s) {
+      final scrollable = s.context.findRenderObject();
+      if (scrollable == null) return true;
+      for (RenderObject? r = own.parent; r != null; r = r.parent) {
+        if (identical(r, scrollable)) return true;
+      }
+      return false;
+    }
+
+    final foreign = [
+      for (final s in _scrollables)
+        if (!drawsInside(s)) s,
+    ];
+    if (foreign.isEmpty) return;
+    for (final s in foreign) {
+      final listener = _positionListeners.remove(s.position);
+      if (listener == null) continue;
+      s.position.removeListener(listener);
+      s.position.isScrollingNotifier.removeListener(listener);
+    }
+    _scrollables = [
+      for (final s in _scrollables)
+        if (!foreign.contains(s)) s,
+    ];
   }
 
   /// True when the slot this motion occupies has non-zero overlap with every
@@ -421,12 +459,22 @@ class _MotionWrapperState extends State<MotionWrapper>
       return Duration.zero;
     }
     _delayTimer?.cancel();
-    _generation++;
+    final generation = ++_generation;
     _legRun = null;
     final from = _controller.value;
     if (from <= 0) return Duration.zero;
-    _controller.reverse(from: from);
-    return _plan.duration * from;
+    final wait = _plan.exitDelay;
+    if (wait <= Duration.zero) {
+      _controller.reverse(from: from);
+    } else {
+      _controller.stop();
+      _delayTimer = Timer(wait, () {
+        if (mounted && generation == _generation) {
+          _controller.reverse(from: from);
+        }
+      });
+    }
+    return wait + _plan.duration * from;
   }
 
   @override

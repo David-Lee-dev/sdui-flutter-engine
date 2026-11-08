@@ -6,6 +6,7 @@ import 'package:sdui_engine/src/compile/compiler/template_compiler.dart';
 import 'package:sdui_engine/src/compile/template_parser.dart';
 import 'package:sdui_engine/src/ir/model/action/command.dart';
 import 'package:sdui_engine/src/ir/model/directive/_base.dart';
+import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import 'package:sdui_engine/src/ir/model/scope_config.dart';
 import 'package:sdui_engine/src/presentation/presence_style.dart';
 import 'package:sdui_engine/src/presentation/presentation.dart';
@@ -86,10 +87,11 @@ double _opacityAbove(WidgetTester tester, String text) => tester
     .opacity;
 
 /// A column with an `_if` box of height 50 labelled `top` over a box
-/// labelled `below`, so `below`'s offset is the slot's height.
+/// labelled `below`, so `below`'s offset is the slot's height. Presence is
+/// opted in unless [presence] says otherwise; `null` leaves `_presence` out.
 Map<String, Object?> _toggled({
   Object? motion,
-  Object? presence,
+  Object? presence = true,
   String label = 'top',
 }) => {
   '_type': 'column',
@@ -223,6 +225,7 @@ void main() {
                 '_type': 'text',
                 'value': r'${banner.title}',
                 '_if': r'${banner != null}',
+                '_presence': true,
               },
             ],
           }),
@@ -272,6 +275,7 @@ void main() {
             '_children': [
               {
                 '_type': 'cond',
+                '_presence': true,
                 '_children': [
                   {..._box('A', height: 50), '_if': r'${show}'},
                   {..._box('B'), '_else': true},
@@ -307,6 +311,7 @@ void main() {
             '_children': [
               {
                 '_type': 'cond',
+                '_presence': true,
                 '_children': [
                   {..._box('A', height: 50), '_if': r'${show}'},
                   {
@@ -349,6 +354,7 @@ void main() {
               {
                 '_type': 'switch',
                 '_value': r'${tab}',
+                '_presence': true,
                 '_children': [
                   {..._box('A', height: 50), '_case': 'a'},
                   {..._box('B'), '_case': 'b'},
@@ -383,6 +389,7 @@ void main() {
           _content({
             ..._box(r'${it.id}'),
             '_loop': {'_in': r'${items}', '_as': 'it', '_key': r'${it.id}'},
+            '_presence': true,
           }),
         ),
       );
@@ -423,6 +430,7 @@ void main() {
               '_key': r'${it.id}',
               '_wrap': 'row',
             },
+            '_presence': true,
           }),
         ),
       );
@@ -448,6 +456,7 @@ void main() {
               {
                 '_type': 'expanded',
                 '_if': r'${show}',
+                '_presence': true,
                 '_motion': {'type': 'fade', 'on': 'exit'},
                 '_child': {
                   '_type': 'sizedbox',
@@ -515,6 +524,7 @@ void main() {
                 '_type': 'app_fill',
                 'label': 'fill',
                 '_if': r'${show}',
+                '_presence': true,
               }),
             ),
           ),
@@ -534,6 +544,7 @@ void main() {
                 '_type': 'app_fill',
                 'label': 'fill',
                 '_if': r'${show}',
+                '_presence': true,
               }),
             ),
           ),
@@ -563,6 +574,7 @@ void main() {
                 '_key': r'${it.id}',
                 '_wrap': 'row',
               },
+              '_presence': true,
             }),
           ),
         );
@@ -590,6 +602,7 @@ void main() {
                     '_type': 'app_box',
                     'label': 'top',
                     '_if': r'${show}',
+                    '_presence': true,
                     '_motion': {'type': 'fade', 'on': 'exit'},
                   },
                   _box('below'),
@@ -658,6 +671,7 @@ void main() {
               {
                 ..._box('inner', height: 50),
                 '_if': r'${inner}',
+                '_presence': true,
                 '_motion': {'type': 'fade', 'on': 'exit'},
               },
             ],
@@ -711,6 +725,31 @@ void main() {
       _scope(tester).set('show', false);
       await tester.pump();
 
+      expect(find.text('top'), findsNothing);
+      expect(_top(tester, 'below'), 0);
+      expect(_idle(tester), isTrue);
+    });
+
+    testWidgets('without _presence an _if appears and leaves at once', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          {'show': false},
+          _content(
+            _toggled(motion: {'type': 'fade', 'on': 'exit'}, presence: null),
+          ),
+        ),
+      );
+
+      _scope(tester).set('show', true);
+      await tester.pump();
+      expect(find.text('top'), findsOneWidget);
+      expect(_top(tester, 'below'), 50);
+      expect(_idle(tester), isTrue);
+
+      _scope(tester).set('show', false);
+      await tester.pump();
       expect(find.text('top'), findsNothing);
       expect(_top(tester, 'below'), 0);
       expect(_idle(tester), isTrue);
@@ -821,6 +860,7 @@ void main() {
               {
                 '_type': 'column',
                 '_if': r'${show}',
+                '_presence': true,
                 '_scope': {
                   '_state': {'local': 0},
                 },
@@ -867,6 +907,7 @@ void main() {
                   'width': 100,
                   'height': 50,
                   '_if': r'${show}',
+                  '_presence': true,
                   '_on': {'tap': 'bump'},
                   '_scope': {
                     '_state': {'ticks': 0},
@@ -951,12 +992,14 @@ void main() {
               {
                 '_type': 'column',
                 '_if': r'${show}',
+                '_presence': true,
                 '_motion': {'type': 'fade', 'on': 'exit'},
                 '_children': [
                   {
                     '_type': 'text',
                     'value': 'nested',
                     '_if': r'${inner}',
+                    '_presence': true,
                     '_motion': {'type': 'scale', 'on': 'exit'},
                   },
                 ],
@@ -1089,7 +1132,12 @@ void main() {
                 '_type': 'column',
                 '_children': [
                   {'_type': 'text', 'value': r'q=${q}'},
-                  {'_type': 'text_field', 'bind': 'q', '_if': r'${show}'},
+                  {
+                    '_type': 'text_field',
+                    'bind': 'q',
+                    '_if': r'${show}',
+                    '_presence': true,
+                  },
                 ],
               }),
             ),
@@ -1141,6 +1189,7 @@ void main() {
                   {
                     '_type': 'column',
                     '_if': r'${show}',
+                    '_presence': true,
                     '_children': [
                       {'_type': 'text_field', 'bind': 'q'},
                       {'_type': 'checkbox', 'bind': 'c'},
@@ -1273,6 +1322,7 @@ void main() {
                     {
                       '_type': 'expanded',
                       '_if': r'${show}',
+                      '_presence': true,
                       '_motion': {'type': 'fade', 'on': 'exit'},
                       '_child': {'_type': 'text_field', 'bind': 'q'},
                     },
@@ -1318,6 +1368,7 @@ void main() {
               alignment: Alignment.topLeft,
               child: SkeletonScope(
                 loading: loading,
+                presence: PresenceConfig.on,
                 skeleton: const SizedBox(width: 100, height: 120),
                 child: const SizedBox(
                   width: 100,
@@ -1361,6 +1412,7 @@ void main() {
                   if (shown) Focus(child: const SizedBox(height: 10)),
                   SkeletonScope(
                     loading: loading,
+                    presence: PresenceConfig.on,
                     skeleton: const SizedBox(width: 100, height: 120),
                     child: const SizedBox(width: 100, height: 40),
                   ),
@@ -1399,6 +1451,7 @@ void main() {
                   ),
                   SkeletonScope(
                     loading: loading,
+                    presence: PresenceConfig.on,
                     skeleton: const SizedBox(width: 100, height: 120),
                     child: const TextField(),
                   ),

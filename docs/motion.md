@@ -43,6 +43,7 @@ Nothing in these cases reaches `SduiErrorObserver` or `NodeGuard`; a debug build
 | `reverse` | bool | `false` | Alternates direction when repeating. |
 | `trigger` | any | `null` | Runtime restart identity; also restarts a leg count. |
 | `start` | `'visible'` or `'mount'` | `'visible'` | Inside an ancestor `Scrollable`, `'mount'` skips the start gate below and starts (counting `delay`) as soon as the layer mounts. Since 0.13.0. |
+| `exit_delay` | milliseconds, 0–1,000,000 | `0` | Wait before the exit run of an `on: exit` or `on: both` entry plays; the entrance ignores it. Use expressions to stagger exits (for example in reverse order). Since 0.22.0; declare `_requires: [anchored_overlay_v1]`. |
 
 A `repeat` value that is neither a bool nor a whole number in 1–1000 (`0`, `2.5`, `1001`, `'x'`) falls back to the atom default, and an invalid `repeat_delay` to `0`. With `reverse`, odd legs run backwards, so `repeat: 2, reverse: true` goes there and back and stops at the start. A counted or pausing repeat detects each leg's end on the frame after it is due, so the next leg may start up to one frame late. Declare `_requires: [motion_repeat_v1]` for counts and `repeat_delay`. A `start` value other than `'mount'` (an unknown string, or any non-string) falls back to `'visible'`. Declare `_requires: [motion_start_v1]` for `start: 'mount'`.
 
@@ -71,12 +72,12 @@ A repeating layer wraps its child in a `RepaintBoundary`, so the animation repai
 
 ## Exit motions
 
-A `_motion` entry's `on` places it in the presence phases of the nearest structural directive around it (see [Presence transitions](control-flow.md#presence-transitions)). Since 0.16.0.
+A `_motion` entry's `on` places it in the presence phases of the nearest structural directive around it (see [Presence transitions](control-flow.md#presence-transitions)). Since 0.16.0. Since 0.21.0 presence is off unless that directive's node sets `_presence: true` or a `_presence` map; with presence off, `on: exit` entries do not play and the content leaves at once.
 
 | `on` | Behavior |
 | --- | --- |
 | `enter` (default) | As above: runs when it mounts. |
-| `exit` | Rests at its end state and plays backwards (t 1 → 0) over its `duration` when the directive removes the content; `pop_in` with `on: exit` is a pop-out. `delay` and `repeat` do not apply to the exit run. |
+| `exit` | Rests at its end state and plays backwards (t 1 → 0) over its `duration` when the directive removes the content; `pop_in` with `on: exit` is a pop-out. `delay` and `repeat` do not apply to the exit run; `exit_delay` (since 0.22.0) makes it wait. |
 | `both` | Runs as an entrance, and plays backwards from wherever it is when the content is removed. |
 
 Any other `on` value fails to compile; it must be a literal. An exit entry plays only for the nearest directive that removes content: a nested `_if` inside the removed content does not play its own exits. Engines before 0.16 ignore `on` and run every entry as an entrance, so gate templates that use it with `_requires: [presence_v1]` and the server's app-version check.
@@ -102,6 +103,10 @@ takes the size of the first sized box beneath it. Known limits of that fallback:
 reveal aligned to the right or bottom edge of its parent can stay waiting when that edge sits
 exactly at the viewport edge, and a collapsed multi-child layout is sized by its first child only.
 Prefer left/top alignment for reveals inside scrollables.
+
+Only scrollables the motion is drawn inside count. Content an `anchored_overlay` shows in the
+Overlay sits under the page's scrollable as a node but is drawn outside its viewport, so its
+motions start as if they had no ancestor `Scrollable` (after the first frame). Since 0.22.0.
 
 `start: 'mount'` skips this gate entirely: the motion starts (and starts counting `delay`) as
 soon as its layer mounts, whether or not it is on-screen and whether or not an ancestor is still

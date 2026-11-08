@@ -43,7 +43,7 @@ Matching uses the evaluator's structural equality. A switch control node allows 
 
 ## Presence transitions
 
-Since 0.16.0 a structural change is a transition owned by the directive that made it, on by default. When `_if`, `cond`, or `switch` inserts content, its slot grows from nothing to the content's size; when it removes content, the content plays its exit motions (`_motion` entries with `on: exit` or `on: both`, see [Motion](motion.md#exit-motions)) and the slot collapses, then the content leaves. A branch change (if↔else, case A→B) shows both while the size goes from A's to B's; an output without phase motions of its own crossfades. Eager loops (`column`, `row`, `wrap`) do the same per item (see [Loops](loops.md#presence)), and a `_scope` `_skeleton` swaps to its content the same way.
+Since 0.16.0 a structural change can be a transition owned by the directive that made it. Since 0.21.0 it is off by default: without `_presence` (or with `_presence: false`) inserted content appears at once and removed content leaves at once, with no size animation and no exit motions. A node opts in with `_presence: true` or a `_presence` map. With presence on, when `_if`, `cond`, or `switch` inserts content, its slot grows from nothing to the content's size; when it removes content, the content plays its exit motions (`_motion` entries with `on: exit` or `on: both`, see [Motion](motion.md#exit-motions)) and the slot collapses, then the content leaves. A branch change (if↔else, case A→B) shows both while the size goes from A's to B's; an output without phase motions of its own crossfades. Eager loops (`column`, `row`, `wrap`) do the same per item (see [Loops](loops.md#presence)), and a `_scope` `_skeleton` swaps to its content the same way.
 
 | Phase | Default | Curve |
 | --- | --- | --- |
@@ -51,16 +51,20 @@ Since 0.16.0 a structural change is a transition owned by the directive that mad
 | exit | 250 ms | `emphasized_accelerate` |
 | swap | 300 ms | `emphasized` |
 
-The app sets these once with `SduiPresentation(presence: PresenceStyle(...))`. A node tunes or turns them off with `_presence`, which applies to every structural directive of that node (`_if`, `_loop`, `_scope` skeleton, `cond`, `switch`):
+The app sets these once with `SduiPresentation(presence: PresenceStyle(...))`. A node turns presence on and tunes it with `_presence`, which applies to every structural directive of that node (`_if`, `_loop`, `_scope` skeleton, `cond`, `switch`):
 
 ```yaml
 - _type: cond
-  _presence: false                 # instant, as before 0.16
+  _presence: true                  # on, with the app-wide style
 - _type: container
   _if: '${banner != null}'
-  _presence: { order: sequential, duration: 200 }
+  _presence: { order: sequential, duration: 200 }   # a map also turns it on
   _motion: [pop_in, { type: fade, on: exit }]
+- _type: column
+  _if: '${ready}'                  # no _presence: instant (same as false)
 ```
+
+Engines 0.16–0.20 animate a node without `_presence`; from 0.21.0 the same template is instant. `_presence: true`, a map and `false` mean the same on both.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |

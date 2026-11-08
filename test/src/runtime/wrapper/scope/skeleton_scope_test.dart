@@ -1,15 +1,20 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sdui_engine/src/ir/model/presence_config.dart';
 import 'package:sdui_engine/src/runtime/wrapper/scope/skeleton_scope.dart';
 
 const _skeletonKey = ValueKey('skeleton');
 const _childKey = ValueKey('child');
 
-Widget _subject(ValueNotifier<bool> loading) => Directionality(
+Widget _subject(
+  ValueNotifier<bool> loading, {
+  PresenceConfig presence = PresenceConfig.off,
+}) => Directionality(
   textDirection: TextDirection.ltr,
   child: SkeletonScope(
     loading: loading,
     skeleton: const SizedBox(key: _skeletonKey),
+    presence: presence,
     child: const SizedBox(key: _childKey),
   ),
 );
@@ -92,36 +97,33 @@ void main() {
       expect(find.byKey(_childKey), findsNothing);
     });
 
-    testWidgets(
-      'swaps from a never-painted skeleton to content when loading '
-      'finishes within the grace',
-      (tester) async {
-        final loading = ValueNotifier(true);
-        addTearDown(loading.dispose);
+    testWidgets('swaps from a never-painted skeleton to content when loading '
+        'finishes within the grace', (tester) async {
+      final loading = ValueNotifier(true);
+      addTearDown(loading.dispose);
 
-        await tester.pumpWidget(_subject(loading));
-        await tester.pump(const Duration(milliseconds: 150));
-        expect(
-          find.ancestor(
-            of: find.byKey(_skeletonKey),
-            matching: find.byWidgetPredicate(
-              (widget) => widget is Opacity && widget.opacity == 0,
-            ),
+      await tester.pumpWidget(_subject(loading, presence: PresenceConfig.on));
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(
+        find.ancestor(
+          of: find.byKey(_skeletonKey),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Opacity && widget.opacity == 0,
           ),
-          findsOneWidget,
-        );
+        ),
+        findsOneWidget,
+      );
 
-        loading.value = false;
-        await tester.pump();
-        expect(find.byKey(_childKey), findsOneWidget);
+      loading.value = false;
+      await tester.pump();
+      expect(find.byKey(_childKey), findsOneWidget);
 
-        // The never-painted skeleton leaves after the presence swap.
-        await tester.pumpAndSettle();
-        expect(find.byKey(_skeletonKey), findsNothing);
-        expect(find.byType(ShaderMask), findsNothing);
-        expect(find.byType(FadeTransition), findsNothing);
-      },
-    );
+      // The never-painted skeleton leaves after the presence swap.
+      await tester.pumpAndSettle();
+      expect(find.byKey(_skeletonKey), findsNothing);
+      expect(find.byType(ShaderMask), findsNothing);
+      expect(find.byType(FadeTransition), findsNothing);
+    });
 
     testWidgets('fades the skeleton after loading finishes beyond grace', (
       tester,
@@ -129,7 +131,7 @@ void main() {
       final loading = ValueNotifier(true);
       addTearDown(loading.dispose);
 
-      await tester.pumpWidget(_subject(loading));
+      await tester.pumpWidget(_subject(loading, presence: PresenceConfig.on));
       await tester.pump(const Duration(milliseconds: 300));
 
       loading.value = false;
@@ -155,6 +157,7 @@ void main() {
           child: SkeletonScope(
             loading: loading,
             skeleton: const SizedBox(key: _skeletonKey),
+            presence: PresenceConfig.on,
             child: _MountCounter(onMount: () => mounts++),
           ),
         ),

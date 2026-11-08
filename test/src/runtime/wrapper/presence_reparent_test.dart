@@ -6,7 +6,11 @@ import 'package:sdui_engine/src/runtime/motion/atom/fade.dart';
 import 'package:sdui_engine/src/runtime/wrapper/motion.dart';
 import 'package:sdui_engine/src/runtime/wrapper/presence.dart';
 
-const _timing = PresenceConfig(durationMs: 1000, curve: 'linear');
+const _timing = PresenceConfig(
+  enabled: true,
+  durationMs: 1000,
+  curve: 'linear',
+);
 
 Widget _host(Widget child) => Directionality(
   textDirection: TextDirection.ltr,
@@ -160,7 +164,7 @@ void main() {
           PresenceGroup.single(
             key: ValueKey(id),
             childKey: show ? id : null,
-            config: const PresenceConfig(space: false),
+            config: const PresenceConfig(enabled: true, space: false),
             child: show ? (holds ? motion() : Text(id)) : null,
           );
       Widget tree({required bool moved, bool a = true, bool b = true}) => _host(

@@ -8,6 +8,7 @@ import 'contract/spec.dart';
 import 'catalog/primitive/absorb_pointer_widget.dart';
 import 'catalog/primitive/align_widget.dart';
 import 'catalog/custom/anchor_scope_widget.dart';
+import 'catalog/custom/anchored_overlay_widget.dart';
 import 'catalog/custom/anchor_widget.dart';
 import 'catalog/custom/shared_element_widget.dart';
 import 'catalog/custom/transition_source_widget.dart';
@@ -128,6 +129,11 @@ final class WidgetFactory {
     'shared_element': EagerSpec(SharedElementWidget.build),
     'transition_source': EagerSpec(TransitionSourceWidget.build),
     'anchor_scope': EagerSpec(AnchorScopeWidget.build),
+    'anchored_overlay': ActionSpec(
+      AnchoredOverlayWidget.build,
+      childParentData: ParentDataKind.stack,
+    ),
+    'anchored': EagerSpec(AnchoredWidget.build),
     'text': EagerSpec(TextWidget.build),
     'rich_text': EagerSpec(RichTextWidget.build),
     'container': EagerSpec(ContainerWidget.build),

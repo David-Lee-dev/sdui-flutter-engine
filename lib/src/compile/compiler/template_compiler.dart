@@ -107,6 +107,9 @@ final class TemplateCompiler {
     'skeleton_style_v1',
     // Node `_skeleton: merge`.
     'skeleton_merge_v1',
+    // 0.22.0: the `anchored_overlay` and `anchored` widgets and the `_motion`
+    // `exit_delay` parameter.
+    'anchored_overlay_v1',
   };
 
   /// Builds the directive tree for a template root.
@@ -162,7 +165,9 @@ final class TemplateCompiler {
   ///
   /// Throws [InvalidTemplateException] at the first scope with
   /// `_skeleton_style` when `skeleton_style_v1` is not declared, and at the
-  /// first node with `_skeleton: merge` when `skeleton_merge_v1` is not.
+  /// first node with `_skeleton: merge` when `skeleton_merge_v1` is not, and
+  /// at the first `anchored_overlay` or `anchored` node, or `_motion` with
+  /// `exit_delay`, when `anchored_overlay_v1` is not.
   static Directive _gateFeatures(Directive root, List<Object?> requires) {
     if (!requires.contains('skeleton_style_v1')) {
       final path = _firstPath(
@@ -188,8 +193,26 @@ final class TemplateCompiler {
         );
       }
     }
+    if (!requires.contains('anchored_overlay_v1')) {
+      final path = _firstPath(
+        root,
+        (d) => d is PlainDirective && _usesAnchoredOverlay(d) ? d.path : null,
+      );
+      if (path != null) {
+        throw InvalidTemplateException(
+          path,
+          '"anchored_overlay", "anchored" and "_motion" "exit_delay" need '
+          '"anchored_overlay_v1" in "_requires".',
+        );
+      }
+    }
     return root;
   }
+
+  static bool _usesAnchoredOverlay(PlainDirective node) =>
+      node.type == 'anchored_overlay' ||
+      node.type == 'anchored' ||
+      node.motions.any((m) => m.params.containsKey('exit_delay'));
 
   /// The first path in [directive], depth first, that [use] returns.
   static String? _firstPath(
@@ -1181,13 +1204,13 @@ final class TemplateCompiler {
 
   static const _presenceKeys = {'space', 'order', 'duration', 'curve'};
 
-  /// Reads the node's `_presence`: `false` turns presence off, `true` or a
-  /// map keeps it on. An unknown map key is a typo and fails; a malformed
-  /// value takes its default, like a motion parameter.
+  /// Reads the node's `_presence`: absent or `false` leaves presence off,
+  /// `true` or a map turns it on. An unknown map key is a typo and fails; a
+  /// malformed value takes its default, like a motion parameter.
   static PresenceConfig _parsePresence(UiNode node) {
-    if (!node.reserved.containsKey('_presence')) return const PresenceConfig();
+    if (!node.reserved.containsKey('_presence')) return PresenceConfig.off;
     final raw = node.reserved['_presence'];
-    if (raw == true) return const PresenceConfig();
+    if (raw == true) return PresenceConfig.on;
     if (raw == false) return PresenceConfig.off;
     if (raw is! Map) {
       throw InvalidTemplateException(
@@ -1208,6 +1231,7 @@ final class TemplateCompiler {
     final duration = raw['duration'];
     final curve = raw['curve'];
     return PresenceConfig(
+      enabled: true,
       space: space is bool ? space : true,
       sequential: raw['order'] == 'sequential',
       durationMs: duration is num && duration.isFinite && duration >= 0

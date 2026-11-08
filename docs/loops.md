@@ -51,7 +51,7 @@ These are the validator's complete accepted names. `box`, `data`, `event`, and `
 
 ## Presence
 
-Since 0.16.0 the eager `column`, `row` and `wrap` strategies animate item changes (see [Presence transitions](control-flow.md#presence-transitions)): a new key grows in at its index along the wrapper's main axis (`wrap`: its `direction`), and a removed key plays its exit motions and collapses in its old place. A reorder of kept keys still moves them at once. `_presence` on the loop node tunes or turns this off. Every other strategy, and items whose body is a `dismissible`, change at once.
+Since 0.16.0 the eager `column`, `row` and `wrap` strategies can animate item changes (see [Presence transitions](control-flow.md#presence-transitions)); since 0.21.0 only when the loop node opts in with `_presence: true` or a `_presence` map, and otherwise items change at once. With presence on, a new key grows in at its index along the wrapper's main axis (`wrap`: its `direction`), and a removed key plays its exit motions and collapses in its old place. A reorder of kept keys still moves them at once. Every other strategy, and items whose body is a `dismissible`, change at once.
 
 ## Mutation and constraints
 
