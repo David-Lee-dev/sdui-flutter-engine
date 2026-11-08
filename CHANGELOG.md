@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.24.0
+
+- `curve` (in `_motion`) and `_morph._curve` accept a list of segments
+  `{until, to, curve}`: each segment runs its own curve from the previous
+  segment's `to` (0 for the first) to its own over t from the previous
+  `until` (0) to its own. `until` strictly increases in (0, 1] and ends at 1,
+  `to` is within ±10, `curve` defaults to `linear` and takes any name or
+  bezier but not another segment list. The curve ends at the last `to`, so a
+  hop such as `[{until: 0.35, to: 1, curve: ease_out}, {until: 1, to: 0,
+  curve: bounce_out}]` rises, lands with a bounce and ends at `begin`:
+  `repeat` restarts without a jump and `repeat_delay` rests on the ground.
+  A malformed list uses the fallback like an invalid bezier. New
+  declare-only `_requires` feature `curve_segments_v1`; older engines use the
+  default curve. See docs/motion.md#curves.
+- `_motion` and `_morph` apply the curve to the controller value themselves
+  instead of through a `CurvedAnimation`, which pins t = 1 to 1 (and turned
+  the layer off in debug for a curve ending elsewhere). Existing curves draw
+  the same values.
+- `_morph` compares segment lists by content, so recompiling the same
+  template keeps a running morph going.
+
 ## 0.23.0
 
 - `box_shadow` entries take `inset: true` for a CSS-style inset shadow: the
