@@ -51,13 +51,7 @@ final class AppBarWidget {
         alignment: Alignment.center,
         children: [
           Positioned.fill(
-            child: Row(
-              children: [
-                ?leading,
-                const Spacer(),
-                ?actions,
-              ],
-            ),
+            child: Row(children: [?leading, const Spacer(), ?actions]),
           ),
           title,
         ],

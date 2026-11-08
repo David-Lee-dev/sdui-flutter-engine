@@ -258,7 +258,12 @@ final class ActionHost implements ActionSink {
         var ok = true;
         final params = ExpressionEvaluator.resolveMap(command.params, readEnv);
         final ctx = _context(params, invocation, branchOrigin, event);
-        final pending = _observer.begin(command, params, invocation, branchOrigin);
+        final pending = _observer.begin(
+          command,
+          params,
+          invocation,
+          branchOrigin,
+        );
         // Await only when measurement is async (reserved span) — an
         // unconditional await would break synchronous `set` semantics.
         final measurement = pending is CommandMeasurement
@@ -437,4 +442,3 @@ final class ActionHost implements ActionSink {
     }
   }
 }
-

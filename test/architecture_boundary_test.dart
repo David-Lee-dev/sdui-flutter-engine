@@ -168,7 +168,8 @@ void main() {
       expect(
         violations,
         isEmpty,
-        reason: 'Flutter imports in the compile stage:\n${violations.join('\n')}',
+        reason:
+            'Flutter imports in the compile stage:\n${violations.join('\n')}',
       );
       expect(graph, isNotEmpty);
     });
@@ -197,7 +198,8 @@ void main() {
       expect(
         violations,
         isEmpty,
-        reason: 'plugin/implementation imports in contract/:\n'
+        reason:
+            'plugin/implementation imports in contract/:\n'
             '${violations.join('\n')}',
       );
     });

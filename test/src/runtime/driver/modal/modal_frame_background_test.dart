@@ -25,9 +25,7 @@ Future<void> _pumpFrame(
 );
 
 Material _bodyMaterial(WidgetTester tester) => tester.widget<Material>(
-  find
-      .ancestor(of: find.text('body'), matching: find.byType(Material))
-      .first,
+  find.ancestor(of: find.text('body'), matching: find.byType(Material)).first,
 );
 
 void main() {

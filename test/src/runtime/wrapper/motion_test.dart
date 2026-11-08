@@ -420,7 +420,10 @@ void main() {
             child: ListView(
               controller: scrollController,
               children: [
-                const SizedBox(key: ValueKey('spacer-mount-scrolling'), height: 200),
+                const SizedBox(
+                  key: ValueKey('spacer-mount-scrolling'),
+                  height: 200,
+                ),
                 KeyedSubtree(
                   key: probeKey,
                   child: MotionWrapper(

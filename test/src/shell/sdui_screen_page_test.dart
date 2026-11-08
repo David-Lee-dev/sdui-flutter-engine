@@ -115,40 +115,41 @@ void main() {
         expect(errors.single.screenId, 's');
       });
 
-      testWidgets('issues a screen_view per successful load and renews on retry', (
-        tester,
-      ) async {
-        final sink = _FakeSink();
-        Telemetry.install(sink);
-        addTearDown(Telemetry.reset);
+      testWidgets(
+        'issues a screen_view per successful load and renews on retry',
+        (tester) async {
+          final sink = _FakeSink();
+          Telemetry.install(sink);
+          addTearDown(Telemetry.reset);
 
-        var fail = true;
-        await _pumpPage(
-          tester,
-          _FakeLoader([
-            () async => fail ? throw StateError('down') : _screen('ok'),
-            () async => _screen('ok'),
-          ]),
-        );
-        await tester.pumpAndSettle();
+          var fail = true;
+          await _pumpPage(
+            tester,
+            _FakeLoader([
+              () async => fail ? throw StateError('down') : _screen('ok'),
+              () async => _screen('ok'),
+            ]),
+          );
+          await tester.pumpAndSettle();
 
-        // Failed load: no visit issued.
-        Iterable<TelemetryEvent> views() =>
-            sink.recorded.where((e) => e.event == 'screen_view');
-        expect(views(), isEmpty);
+          // Failed load: no visit issued.
+          Iterable<TelemetryEvent> views() =>
+              sink.recorded.where((e) => e.event == 'screen_view');
+          expect(views(), isEmpty);
 
-        fail = false;
-        await tester.tap(find.byType(TextButton));
-        await tester.pumpAndSettle();
+          fail = false;
+          await tester.tap(find.byType(TextButton));
+          await tester.pumpAndSettle();
 
-        // The visit is owned by the page: screen_view carries the screen id
-        // and a fresh view id, before the engine mounts.
-        final view = views().single;
-        expect(view.screenId, 's');
-        expect(view.screenViewId, isNotNull);
-        expect(view.properties['surface_type'], 'screen');
-        expect(find.text('ok'), findsOneWidget);
-      });
+          // The visit is owned by the page: screen_view carries the screen id
+          // and a fresh view id, before the engine mounts.
+          final view = views().single;
+          expect(view.screenId, 's');
+          expect(view.screenViewId, isNotNull);
+          expect(view.properties['surface_type'], 'screen');
+          expect(find.text('ok'), findsOneWidget);
+        },
+      );
 
       testWidgets('renders the loaded template', (tester) async {
         await _pumpPage(tester, _FakeLoader([() async => _screen('hello')]));

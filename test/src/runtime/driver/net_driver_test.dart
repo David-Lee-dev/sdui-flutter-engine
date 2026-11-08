@@ -140,7 +140,9 @@ void main() {
       });
 
       test('owner가 이미 사라졌으면 null을 반환하고 호출하지 않는다', () async {
-        final result = await driver.run(_ctx({'op': 'Viewer'}, cancelled: true));
+        final result = await driver.run(
+          _ctx({'op': 'Viewer'}, cancelled: true),
+        );
 
         expect(result, isNull);
         expect(client.calls, 0);

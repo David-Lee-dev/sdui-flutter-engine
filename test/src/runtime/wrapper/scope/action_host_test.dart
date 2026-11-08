@@ -397,10 +397,7 @@ void main() {
         ]);
         // Parameter *values* never leave the engine — request vocabulary is
         // implementation-owned, so telemetry records shapes only.
-        expect(
-          sink.events.single.properties.containsKey('vars'),
-          isFalse,
-        );
+        expect(sink.events.single.properties.containsKey('vars'), isFalse);
         expect(sink.completions.single['outcome'], 'success');
       });
 

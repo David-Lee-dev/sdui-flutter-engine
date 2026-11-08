@@ -96,10 +96,8 @@ abstract final class CommandTelemetry {
 
 /// One command run's telemetry slot; completed exactly once.
 final class CommandMeasurement {
-  CommandMeasurement._({
-    required this.reservation,
-    required this.recordFailure,
-  }) : _stopwatch = Stopwatch()..start();
+  CommandMeasurement._({required this.reservation, required this.recordFailure})
+    : _stopwatch = Stopwatch()..start();
 
   final TelemetryReservation? reservation;
   final void Function(Map<String, Object?> completion)? recordFailure;

@@ -103,10 +103,11 @@ void main() {
       test('catalog 생략(레지스트리 스냅샷)도 빌트인 모션·함수는 검증한다', () {
         // 스냅샷 카탈로그가 BuiltinLanguage를 시드하므로 모르는 이름은 잡힌다.
         expect(
-          () => validate(
-            {'_type': 'text', 'value': 'x', '_motion': 'sparkle_nope'},
-            const {},
-          ),
+          () => validate({
+            '_type': 'text',
+            'value': 'x',
+            '_motion': 'sparkle_nope',
+          }, const {}),
           throwsInvalidTemplate,
         );
         // 빌트인은 통과.
@@ -115,7 +116,11 @@ void main() {
 
       test('모션·함수 집합이 null인 카탈로그는 그 검사를 건너뛴다 (명시적 opt-out)', () {
         validate(
-          {'_type': 'text', 'value': r'${nope(name)}', '_motion': 'sparkle_nope'},
+          {
+            '_type': 'text',
+            'value': r'${nope(name)}',
+            '_motion': 'sparkle_nope',
+          },
           {'name'},
           catalog: LanguageCatalog(
             widgets: WidgetSchemaRegistry.all(),

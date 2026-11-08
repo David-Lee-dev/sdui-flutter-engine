@@ -208,7 +208,10 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const Directionality(textDirection: TextDirection.ltr, child: Placeholder()),
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Placeholder(),
+      ),
     );
     final effect = PageTransitionFactory.resolve('slide');
     for (final (params, expected) in <(Map<String, Object?>, Offset)>[
@@ -242,7 +245,10 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const Directionality(textDirection: TextDirection.ltr, child: Placeholder()),
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: Placeholder(),
+      ),
     );
     final effect = PageTransitionFactory.resolve('slide');
     final controller = AnimationController(
@@ -255,7 +261,10 @@ void main() {
       controller,
       const AlwaysStoppedAnimation(0),
       const Placeholder(),
-      PageTransitionSpec(type: 'slide', params: const {'y': 0.08, 'fade': false}),
+      PageTransitionSpec(
+        type: 'slide',
+        params: const {'y': 0.08, 'fade': false},
+      ),
     );
     expect(child, isA<SlideTransition>());
     await tester.pumpWidget(

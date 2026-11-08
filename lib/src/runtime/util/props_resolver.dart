@@ -254,9 +254,7 @@ final class PropsResolver {
     if (raw is! Map) return null;
     final colorsRaw = raw['colors'];
     if (colorsRaw is! List) return null;
-    final colors = [
-      for (final item in colorsRaw) ?color(item),
-    ];
+    final colors = [for (final item in colorsRaw) ?color(item)];
     if (colors.length < 2) return null;
 
     List<double>? stops;
@@ -353,23 +351,25 @@ final class PropsResolver {
     final hasDefaults =
         typography.baseStyle != null || typography.fontFamily != null;
     if (raw is! Map) return hasDefaults ? base : null;
-    return base.merge(TextStyle(
-      fontSize: size(context, raw['font_size']),
-      color: color(raw['color']),
-      fontWeight: fontWeight(raw['font_weight']),
-      fontStyle: fontStyle(raw['font_style']),
-      letterSpacing: _scaledSigned(context, raw['letter_spacing']),
-      height: number(raw['height']),
-      decoration: textDecorationLine(raw['decoration']),
-      decorationColor: color(raw['decoration_color']),
-      decorationStyle: textDecorationStyle(raw['decoration_style']),
-      decorationThickness: number(raw['decoration_thickness']),
-      leadingDistribution: leadingDistribution(raw['leading_distribution']),
-      wordSpacing: _scaledSigned(context, raw['word_spacing']),
-      backgroundColor: color(raw['background_color']),
-      shadows: textShadows(context, raw['shadows']),
-      fontFamily: text(raw['font_family']),
-    ));
+    return base.merge(
+      TextStyle(
+        fontSize: size(context, raw['font_size']),
+        color: color(raw['color']),
+        fontWeight: fontWeight(raw['font_weight']),
+        fontStyle: fontStyle(raw['font_style']),
+        letterSpacing: _scaledSigned(context, raw['letter_spacing']),
+        height: number(raw['height']),
+        decoration: textDecorationLine(raw['decoration']),
+        decorationColor: color(raw['decoration_color']),
+        decorationStyle: textDecorationStyle(raw['decoration_style']),
+        decorationThickness: number(raw['decoration_thickness']),
+        leadingDistribution: leadingDistribution(raw['leading_distribution']),
+        wordSpacing: _scaledSigned(context, raw['word_spacing']),
+        backgroundColor: color(raw['background_color']),
+        shadows: textShadows(context, raw['shadows']),
+        fontFamily: text(raw['font_family']),
+      ),
+    );
   }
 
   static InputBorder? inputBorder(BuildContext context, Object? raw) {

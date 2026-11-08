@@ -188,7 +188,9 @@ class _ModalFrameState extends State<ModalFrame>
             child: GestureDetector(
               onTap: _onBackdrop,
               behavior: HitTestBehavior.opaque,
-              child: ColoredBox(color: EnginePresentation.value.modal.barrierColor),
+              child: ColoredBox(
+                color: EnginePresentation.value.modal.barrierColor,
+              ),
             ),
           ),
         ),
