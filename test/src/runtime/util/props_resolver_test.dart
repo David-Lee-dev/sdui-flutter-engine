@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sdui_engine/src/runtime/util/engine_metrics.dart';
+import 'package:sdui_engine/src/runtime/util/inset_shadow_decoration.dart';
 import 'package:sdui_engine/src/runtime/util/props_resolver.dart';
 import 'package:sdui_engine/src/runtime/util/styled_border.dart';
 
@@ -443,6 +444,67 @@ void main() {
         final ctx = await _capture(tester);
         expect(PropsResolver.boxShadow(ctx, 'x'), isNull);
       });
+
+      testWidgets('blur_style 은 이름대로 BlurStyle 이 된다', (tester) async {
+        final ctx = await _capture(tester);
+        const styles = {
+          'normal': BlurStyle.normal,
+          'solid': BlurStyle.solid,
+          'outer': BlurStyle.outer,
+          'inner': BlurStyle.inner,
+        };
+        for (final MapEntry(:key, :value) in styles.entries) {
+          final result = PropsResolver.boxShadow(ctx, {
+            'blur_radius': 4,
+            'blur_style': key,
+          });
+          expect(result!.single.blurStyle, value, reason: key);
+        }
+      });
+
+      testWidgets('리스트의 각 그림자가 자기 blur_style 을 갖는다', (tester) async {
+        final ctx = await _capture(tester);
+        final result = PropsResolver.boxShadow(ctx, [
+          {'blur_radius': 4, 'blur_style': 'inner'},
+          {'blur_radius': 4, 'blur_style': 'outer'},
+          {'blur_radius': 4},
+        ]);
+        expect(result!.map((shadow) => shadow.blurStyle), [
+          BlurStyle.inner,
+          BlurStyle.outer,
+          BlurStyle.normal,
+        ]);
+      });
+
+      testWidgets('모르는 blur_style 은 던지지 않고 normal 이 된다', (tester) async {
+        final ctx = await _capture(tester);
+        for (final raw in <Object?>['INNER', true, 'bogus', 3, null]) {
+          final result = PropsResolver.boxShadow(ctx, {
+            'blur_radius': 4,
+            'blur_style': raw,
+          });
+          expect(result!.single.blurStyle, BlurStyle.normal, reason: '$raw');
+        }
+      });
+
+      testWidgets('blur_style 이 없으면 예전과 같은 그림자다', (tester) async {
+        final ctx = await _capture(tester);
+        final result = PropsResolver.boxShadow(ctx, {
+          'color': '#000000',
+          'blur_radius': 10,
+          'spread_radius': 4,
+          'offset': [4, 8],
+        });
+        expect(result, [
+          const BoxShadow(
+            color: Color(0xff000000),
+            blurRadius: 10,
+            spreadRadius: 4,
+            offset: Offset(4, 8),
+          ),
+        ]);
+        expect(result!.single.blurStyle, BlurStyle.normal);
+      });
     });
 
     group('text_shadows', () {
@@ -519,6 +581,49 @@ void main() {
         final result = PropsResolver.boxDecoration(ctx, {'color': '#fff'});
         expect(result?.color, const Color(0xffffffff));
         expect(result?.gradient, isNull);
+      });
+
+      testWidgets('inset 그림자가 없으면 평범한 BoxDecoration 이다', (tester) async {
+        final ctx = await _capture(tester);
+        final result = PropsResolver.boxDecoration(ctx, {
+          'color': '#fff',
+          'box_shadow': [
+            {'blur_radius': 4},
+            {'blur_radius': 2, 'inset': false},
+          ],
+        });
+        expect(result.runtimeType, BoxDecoration);
+        expect(result!.boxShadow, hasLength(2));
+      });
+
+      testWidgets('inset: true 항목은 바깥 그림자 목록에서 빠진다', (tester) async {
+        final ctx = await _capture(tester);
+        final result = PropsResolver.boxDecoration(ctx, {
+          'color': '#fff',
+          'box_shadow': [
+            {'color': '#000000', 'blur_radius': 4},
+            {'color': '#ff0000', 'blur_radius': 2, 'inset': true},
+          ],
+        });
+        expect(result, isA<InsetShadowDecoration>());
+        expect((result! as InsetShadowDecoration).insetShadows, [
+          const BoxShadow(color: Color(0xffff0000), blurRadius: 2),
+        ]);
+        expect(result.boxShadow, [
+          const BoxShadow(color: Color(0xff000000), blurRadius: 4),
+        ]);
+        expect(result.color, const Color(0xffffffff));
+      });
+
+      testWidgets('inset 이 true 가 아니면 바깥 그림자다', (tester) async {
+        final ctx = await _capture(tester);
+        for (final raw in <Object?>['true', 1, 'yes', null]) {
+          final result = PropsResolver.boxDecoration(ctx, {
+            'box_shadow': {'blur_radius': 4, 'inset': raw},
+          });
+          expect(result.runtimeType, BoxDecoration, reason: '$raw');
+          expect(result!.boxShadow, hasLength(1), reason: '$raw');
+        }
       });
     });
 

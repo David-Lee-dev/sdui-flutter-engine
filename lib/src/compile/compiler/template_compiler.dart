@@ -110,6 +110,13 @@ final class TemplateCompiler {
     // 0.22.0: the `anchored_overlay` and `anchored` widgets and the `_motion`
     // `exit_delay` parameter.
     'anchored_overlay_v1',
+    // 0.23.0: `box_shadow` `blur_style`. Declare-only: older engines ignore
+    // the key and draw a normal shadow, and the value can be bound, so the
+    // compiler does not check templates that use it without declaring it.
+    'box_shadow_blur_style_v1',
+    // 0.23.0: `box_shadow` `inset: true`. Declare-only for the same reasons;
+    // older engines draw an inset entry as a normal outer shadow.
+    'box_shadow_inset_v1',
   };
 
   /// Builds the directive tree for a template root.
