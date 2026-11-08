@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.22.0
+
+- New `anchored_overlay` widget: a highlight layer attached to an on-screen
+  `anchor`. While it is in the tree (show it with `_if` and
+  `_presence: true`) it dims the app in the nearest Overlay, above the app
+  bar and a shell bar drawn beside the screen, blocks the page beneath, and
+  lays its children over the dim. A tap on the dim or a system back
+  dispatches `on_dismiss`. Its children read the screen's state and dispatch
+  its actions. `barrier_color`, `barrier_duration` and `barrier_exit_delay`
+  set the dim. See docs/widgets/custom/anchored_overlay.md.
+- New `anchored` widget, for an `anchored_overlay`'s children: places its
+  child `over`, `above`, `below`, before (`start`) or after (`end`) the
+  anchor's current on-screen rect, scroll offset included, with `align` and
+  `gap`. See docs/widgets/custom/anchored.md.
+- `_motion` `exit_delay`: milliseconds an `on: exit|both` entry waits before
+  its exit run, so exits can stagger (exit runs still ignore `delay`). The
+  presence slot stays until the last delayed exit has finished.
+- A `_motion`'s start gate now counts only the scrollables the motion is
+  drawn inside, so motions in an overlay shown from inside a scroll view
+  start instead of waiting on the page's viewport. Trees without overlays
+  behave as before.
+- The new names need `_requires: [anchored_overlay_v1]`; engines before
+  0.22.0 reject the feature, so gate such templates by app version.
+
+## 0.21.0
+
+- **Behavior change:** presence transitions are now opt-in. A node without
+  `_presence` builds its `_if`, `cond`, `switch`, eager loop and skeleton
+  swap with presence off, as `_presence: false` did: inserted content
+  appears at once, removed content leaves at once, with no size animation
+  and no `on: exit` motions. Templates used `_presence: false` to opt out
+  far more often than they relied on the default, and the default size
+  growth along a row read as an unwanted left-to-right reveal.
+  `_presence: true` and a `_presence` map turn presence on and behave as
+  the old default; `_presence: false` stays valid. Engines 0.16–0.20 keep
+  animating a node without `_presence`, so add `_presence: true` where an
+  animation is wanted before shipping templates to 0.21.0 apps. See
+  docs/control-flow.md.
+
 ## 0.20.4
 
 - A `cond` with only an `_else` branch, the layer templates use to nest
