@@ -121,6 +121,11 @@ final class TemplateCompiler {
     // only like `curve_v2`: older engines read the list as a malformed
     // bezier and use the default curve.
     'curve_segments_v1',
+    // 0.26.0: time and condition waits require explicit opt-in.
+    'wait_v1',
+    // 0.26.0: circular progress stroke_cap. Declare-only: older engines
+    // ignore the property and preserve Flutter's default cap.
+    'progress_stroke_cap_v1',
   };
 
   /// Builds the directive tree for a template root.
@@ -180,6 +185,22 @@ final class TemplateCompiler {
   /// at the first `anchored_overlay` or `anchored` node, or `_motion` with
   /// `exit_delay`, when `anchored_overlay_v1` is not.
   static Directive _gateFeatures(Directive root, List<Object?> requires) {
+    if (!requires.contains('wait_v1')) {
+      final path = _firstPath(
+        root,
+        (d) =>
+            d is ScopeDirective &&
+                d.actions.values.any((a) => _usesWait(a.steps))
+            ? d.path
+            : null,
+      );
+      if (path != null) {
+        throw InvalidTemplateException(
+          path,
+          '"wait" needs "wait_v1" in "_requires".',
+        );
+      }
+    }
     if (!requires.contains('skeleton_style_v1')) {
       final path = _firstPath(
         root,
@@ -224,6 +245,17 @@ final class TemplateCompiler {
       node.type == 'anchored_overlay' ||
       node.type == 'anchored' ||
       node.motions.any((m) => m.params.containsKey('exit_delay'));
+
+  static bool _usesWait(Flow flow) => flow.any(
+    (batch) => batch.any(
+      (command) =>
+          command.type == 'wait' ||
+          (command.then != null && _usesWait(command.then!)) ||
+          (command.onError?.values.any(_usesWait) ?? false) ||
+          (command.dismiss != null && _usesWait(command.dismiss!)) ||
+          (command.always != null && _usesWait(command.always!)),
+    ),
+  );
 
   /// The first path in [directive], depth first, that [use] returns.
   static String? _firstPath(

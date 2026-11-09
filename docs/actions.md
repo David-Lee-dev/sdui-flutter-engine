@@ -23,6 +23,11 @@ A map is one command. A top-level list is a sequence of batches. Each list item 
 
 Every command needs a non-empty `_type`. Bare keys are recursively resolved driver parameters. The built-ins are linked from the [index](README.md#built-in-commands); unknown driver types fail validation.
 
+[`wait`](commands/wait.md) delays the next batch with `duration`, or waits for
+a live `until` expression with a required `timeout`. It requires `wait_v1`.
+Timeout skips its `_then` and follows the existing error flow; later batches
+continue. Disposing the owning scope cancels the wait and its continuations.
+
 ## Metadata
 
 | Key | Type | Default | Behavior |

@@ -15,10 +15,13 @@ class DriverContext {
     this.branchOrigin,
     this.host,
     void Function() Function(void Function())? onOwnerDispose,
+    void Function() Function(String, void Function())? watchTruthy,
   }) : _isCancelled = isCancelled,
-       _onOwnerDispose = onOwnerDispose;
+       _onOwnerDispose = onOwnerDispose,
+       _watchTruthy = watchTruthy;
 
   /// Contains command parameters after environment expressions are resolved.
+  /// Parameters declared in [Driver.watchedParams] retain their expressions.
   final Map<String, Object?> params;
 
   /// Accepts state commits without exposing mutable environment internals.
@@ -48,6 +51,11 @@ class DriverContext {
   final bool Function() _isCancelled;
 
   final void Function() Function(void Function())? _onOwnerDispose;
+  final void Function() Function(String, void Function())? _watchTruthy;
+
+  /// Observes a deferred parameter until it is truthy, or explicitly removed.
+  void Function() watchTruthy(String name, void Function() onTruthy) =>
+      _watchTruthy?.call(name, onTruthy) ?? () {};
 
   /// Reports whether the scope that started this command has been disposed.
   ///
@@ -75,6 +83,9 @@ abstract class Driver {
   /// executor stays blind to which command it is running. Un-measured
   /// commands record failures only.
   bool get measured => false;
+
+  /// Parameters retained as expressions for the driver's live observation.
+  Set<String> get watchedParams => const {};
 
   /// Executes a command and returns data exposed to its success flow.
   ///

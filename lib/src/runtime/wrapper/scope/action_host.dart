@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:sdui_engine/src/contract/error_observer.dart';
 import 'package:sdui_engine/src/ir/model/action/command.dart';
+import 'package:sdui_engine/src/ir/expression.dart';
 import '../../environment/_base.dart';
 import '../../environment/map_environment.dart';
 import '../../environment/scope/scope_environment.dart';
@@ -213,6 +214,8 @@ final class ActionHost implements ActionSink {
   }
 
   DriverContext _context(
+    Command command,
+    Environment readEnv,
     Map<String, Object?> params,
     ActionInvocation invocation,
     String? branchOrigin,
@@ -226,6 +229,35 @@ final class ActionHost implements ActionSink {
     branchOrigin: branchOrigin,
     host: host,
     onOwnerDispose: _registerDisposal,
+    watchTruthy: (name, onTruthy) {
+      final expression = command.params[name];
+      if (expression is! Expression) return () {};
+      final listenable = readEnv.listen(expression.roots);
+      var removed = false;
+      late void Function() check;
+      void remove() {
+        if (removed) return;
+        removed = true;
+        listenable?.removeListener(check);
+      }
+
+      check = () {
+        if (removed) return;
+        bool truthy;
+        try {
+          truthy = ExpressionEvaluator.evaluateTruthy(expression, readEnv);
+        } catch (error, stack) {
+          _report(error, stack);
+          return;
+        }
+        if (!truthy || removed) return;
+        remove();
+        onTruthy();
+      };
+      listenable?.addListener(check);
+      check();
+      return remove;
+    },
   );
 
   Future<void> _runCommand(
@@ -256,8 +288,25 @@ final class ActionHost implements ActionSink {
       try {
         Object? data;
         var ok = true;
-        final params = ExpressionEvaluator.resolveMap(command.params, readEnv);
-        final ctx = _context(params, invocation, branchOrigin, event);
+        final watched =
+            DriverRegistry.resolveOrNull(command.type)?.watchedParams ??
+            const {};
+        final params = {
+          ...ExpressionEvaluator.resolveMap({
+            for (final entry in command.params.entries)
+              if (!watched.contains(entry.key)) entry.key: entry.value,
+          }, readEnv),
+          for (final key in watched)
+            if (command.params.containsKey(key)) key: command.params[key],
+        };
+        final ctx = _context(
+          command,
+          readEnv,
+          params,
+          invocation,
+          branchOrigin,
+          event,
+        );
         final pending = _observer.begin(
           command,
           params,
@@ -352,7 +401,16 @@ final class ActionHost implements ActionSink {
   ) async {
     CommandMeasurement? measurement;
     try {
-      final params = ExpressionEvaluator.resolveMap(command.params, readEnv);
+      final watched =
+          DriverRegistry.resolveOrNull(command.type)?.watchedParams ?? const {};
+      final params = {
+        ...ExpressionEvaluator.resolveMap({
+          for (final entry in command.params.entries)
+            if (!watched.contains(entry.key)) entry.key: entry.value,
+        }, readEnv),
+        for (final key in watched)
+          if (command.params.containsKey(key)) key: command.params[key],
+      };
       final pending = _observer.begin(
         command,
         params,
@@ -364,7 +422,14 @@ final class ActionHost implements ActionSink {
         measurement.complete(outcome: 'cancelled');
         return;
       }
-      final ctx = _context(params, invocation, ActionOrigin.background, event);
+      final ctx = _context(
+        command,
+        readEnv,
+        params,
+        invocation,
+        ActionOrigin.background,
+        event,
+      );
       await DriverRegistry.resolve(command.type).run(ctx);
       measurement.complete(outcome: _disposed ? 'cancelled' : 'success');
     } catch (error, stack) {

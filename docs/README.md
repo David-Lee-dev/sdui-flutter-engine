@@ -41,6 +41,7 @@ This reference documents the template language implemented by the engine, from s
 - [`scroll`](commands/scroll.md) — reveal a registered anchor.
 - [`anchoring`](commands/anchoring.md) — animate registered content between anchors.
 - [`set`](commands/set.md) — commit values to the defining scope.
+- [`wait`](commands/wait.md) — wait for a duration or a live condition with a timeout.
 - [`app_storage`](commands/app-storage.md) — get/set values and calendar-day throttling stamps.
 - [`secure_storage`](commands/secure-storage.md) — read/write/delete secure strings.
 - [`sys_haptic`](commands/sys-haptic.md) — custom taps and continuous haptics, presets, platform impulses, and semantic rhythms.

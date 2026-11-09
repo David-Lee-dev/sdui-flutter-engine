@@ -601,6 +601,7 @@ abstract final class BuiltinLanguage {
     'set',
     'sys_haptic',
     'toast',
+    'wait',
   };
 
   /// Motion atoms and composite preset names accepted by `_motion`.
