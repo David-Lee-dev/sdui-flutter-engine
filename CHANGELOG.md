@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.26.0
+
+- Add `wait`: delay by `duration` or observe an `until` expression with a required
+  `timeout`. Requires `wait_v1`. Owner-scope disposal releases all resources and
+  cancels continuations; route coverage alone does not cancel. `WAIT_TIMEOUT`
+  uses the existing error flow, skips `_then`, and continues later batches.
+- `circular_progress_indicator` accepts bindable `stroke_cap` values `butt`,
+  `round`, and `square`; missing or invalid values preserve Flutter's default.
+  Add the optional declare-only feature `progress_stroke_cap_v1`.
+
 ## 0.25.0
 
 - Bottom sheets no longer leave an empty strip above the home indicator. The
