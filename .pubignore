@@ -1,2 +1,7 @@
+# A .pubignore replaces the root .gitignore for pub, so its entries repeat here.
+.dart_tool/
+build/
+*.iml
+
 # The renderer packages publish on their own.
 packages/
