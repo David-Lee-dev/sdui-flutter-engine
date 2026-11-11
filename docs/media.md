@@ -47,6 +47,48 @@ on_end: finished
 
 See the full [`model_3d` widget reference](widgets/custom/model_3d.md). `Model3dSource.controllerFor(Model3dRequest(src))` returns an unloaded `SduiModel3dController` — a renderer-free contract, so a webview `<model-viewer>`, Filament, or SceneKit implementation can back it. The package ships no renderer: `model3dSource` is optional, and without it `model_3d` renders its `poster` image only. `Model3dSource.warmUp()` runs once in the background after boot, for expensive first-time setup before the first `model_3d` mounts.
 
+### Filament renderer (`sdui_model_filament`)
+
+The renderer this repository provides is a separate package,
+[`packages/sdui_model_filament`](../packages/sdui_model_filament/README.md). It
+lives in this repository but is not part of `sdui_engine`: the engine does not
+depend on it, it depends on the engine, and it is published on its own.
+
+- **Apps without 3D need nothing.** Depend on `sdui_engine` alone; `model_3d`
+  shows its `poster`.
+- **Apps that render 3D models** add the package and pass the source:
+
+  ```yaml
+  dependencies:
+    sdui_engine:
+      hosted: http://100.115.77.18:28400/api/packages/david/pub
+      version: 0.27.0
+    sdui_model_filament:
+      hosted: http://100.115.77.18:28400/api/packages/david/pub
+      version: 0.1.0
+  ```
+
+  ```dart
+  Sdui.initialize(
+    // ...
+    model3dSource: FilamentModel3dSource(
+      client: gatewayHttpClient,     // the app's gateway client; required
+      baseUrl: Uri.parse(apiUrl),    // origin that `/assets/...` srcs resolve against
+    ),
+  );
+  ```
+
+It is kept out of the engine because of its cost, which every app would carry
+otherwise:
+
+- Flutter `>=3.38.0` (the engine needs `>=3.24.0`) and iOS 13+.
+- Filament's native libraries link into the app. The first build downloads
+  them from thermion's R2 bucket — the Filament 1.69.1 release archives are
+  21 MB for iOS and 51 MB for Android (all ABIs). The installed app grows by
+  less, since the linker keeps only what is used; that growth is not measured
+  yet.
+- Filament runs in-process, so its memory counts toward the app's.
+
 The widget mounts the controller's view under the poster at once, calls `initialize()`, reads `clips`, and drives `play(clip, loop:, crossfade:)` and `stop()` from the template's states. A non-looping clip holds its last frame and advances `Model3dPlayback.completions`; the engine detects a clip end by that counter. The engine owns gestures and the camera: it calls `setCamera(Model3dCamera(yaw, pitch, zoom))` right after creation and on every frame the camera moves, and the view never receives pointers, so every renderer moves the same way for the same template. For `progress` the engine also owns the playhead: it reads `clipDuration(clip)` and calls `setPose(clip, time)` on every frame the playhead moves. A failed `initialize()` is final — the widget disposes the controller and asks for a new one to retry — and `dispose()` may arrive while calls are still in flight; the contract's doc comments state the concurrency rules. Changing `src` disposes and replaces the controller; changing `state`, `camera`, `controls` or `auto_rotate` reuses it.
 
 ```yaml
