@@ -52,3 +52,24 @@ them. iOS 13+.
 Status: Dart surface covered by widget tests (view before load, overlay,
 playback state, byte and disk caches, render gate). The native path runs on a
 Galaxy S25, a Galaxy A32 and an iPhone 13 mini.
+
+## Publishing
+
+Publish from a copy outside the repository. The repository root's `.pubignore`
+excludes `packages/` so that `sdui_engine` does not ship this package, and pub
+applies that rule here too: `dart pub publish` in this directory builds an
+empty archive.
+
+1. Commit and push; bump `version` and `CHANGELOG.md` first, since a published
+   version cannot be overwritten.
+2. Export the committed package and publish from the copy:
+
+   ```sh
+   out=$(mktemp -d)
+   git archive HEAD packages/sdui_model_filament | tar -x -C "$out"
+   cd "$out/packages/sdui_model_filament"
+   dart pub publish --dry-run   # expect ~68 KB, not <1 KB
+   dart pub publish --force
+   ```
+
+3. Remove the copy: `rm -rf "$out"`.
