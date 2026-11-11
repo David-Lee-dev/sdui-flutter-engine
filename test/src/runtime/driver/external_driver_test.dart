@@ -53,10 +53,13 @@ void main() {
       );
 
       await driver.run(
-        _ctx(const {}, onOwnerDispose: (cleanup) {
-          registered.add(cleanup);
-          return () => registered.remove(cleanup);
-        }),
+        _ctx(
+          const {},
+          onOwnerDispose: (cleanup) {
+            registered.add(cleanup);
+            return () => registered.remove(cleanup);
+          },
+        ),
       );
 
       expect(registered, hasLength(1));

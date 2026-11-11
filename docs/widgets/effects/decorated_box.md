@@ -44,6 +44,7 @@ _child:
 ## Pitfalls & related
 
 - Use only the documented positional child form; `_slots` are rejected for this specification kind.
+- `decoration.box_shadow` takes the same shadow maps as `container`, including `blur_style` and `inset` (since 0.23.0); see [container box shadow](../layout/container.md#box-shadow). With `position: background` inset shadows paint below the child, with `foreground` over it.
 
 - Interaction maps must reference actions visible from an enclosing scope; see [Interaction](../../interaction.md) and [Actions](../../actions.md).
 - Return to the [widget catalog](../README.md).

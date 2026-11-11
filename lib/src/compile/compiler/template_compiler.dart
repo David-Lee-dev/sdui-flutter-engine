@@ -107,6 +107,25 @@ final class TemplateCompiler {
     'skeleton_style_v1',
     // Node `_skeleton: merge`.
     'skeleton_merge_v1',
+    // 0.22.0: the `anchored_overlay` and `anchored` widgets and the `_motion`
+    // `exit_delay` parameter.
+    'anchored_overlay_v1',
+    // 0.23.0: `box_shadow` `blur_style`. Declare-only: older engines ignore
+    // the key and draw a normal shadow, and the value can be bound, so the
+    // compiler does not check templates that use it without declaring it.
+    'box_shadow_blur_style_v1',
+    // 0.23.0: `box_shadow` `inset: true`. Declare-only for the same reasons;
+    // older engines draw an inset entry as a normal outer shadow.
+    'box_shadow_inset_v1',
+    // 0.24.0: segmented curve lists (`[{until, to, curve}, ...]`). Declare-
+    // only like `curve_v2`: older engines read the list as a malformed
+    // bezier and use the default curve.
+    'curve_segments_v1',
+    // 0.26.0: time and condition waits require explicit opt-in.
+    'wait_v1',
+    // 0.26.0: circular progress stroke_cap. Declare-only: older engines
+    // ignore the property and preserve Flutter's default cap.
+    'progress_stroke_cap_v1',
   };
 
   /// Builds the directive tree for a template root.
@@ -162,8 +181,26 @@ final class TemplateCompiler {
   ///
   /// Throws [InvalidTemplateException] at the first scope with
   /// `_skeleton_style` when `skeleton_style_v1` is not declared, and at the
-  /// first node with `_skeleton: merge` when `skeleton_merge_v1` is not.
+  /// first node with `_skeleton: merge` when `skeleton_merge_v1` is not, and
+  /// at the first `anchored_overlay` or `anchored` node, or `_motion` with
+  /// `exit_delay`, when `anchored_overlay_v1` is not.
   static Directive _gateFeatures(Directive root, List<Object?> requires) {
+    if (!requires.contains('wait_v1')) {
+      final path = _firstPath(
+        root,
+        (d) =>
+            d is ScopeDirective &&
+                d.actions.values.any((a) => _usesWait(a.steps))
+            ? d.path
+            : null,
+      );
+      if (path != null) {
+        throw InvalidTemplateException(
+          path,
+          '"wait" needs "wait_v1" in "_requires".',
+        );
+      }
+    }
     if (!requires.contains('skeleton_style_v1')) {
       final path = _firstPath(
         root,
@@ -188,8 +225,37 @@ final class TemplateCompiler {
         );
       }
     }
+    if (!requires.contains('anchored_overlay_v1')) {
+      final path = _firstPath(
+        root,
+        (d) => d is PlainDirective && _usesAnchoredOverlay(d) ? d.path : null,
+      );
+      if (path != null) {
+        throw InvalidTemplateException(
+          path,
+          '"anchored_overlay", "anchored" and "_motion" "exit_delay" need '
+          '"anchored_overlay_v1" in "_requires".',
+        );
+      }
+    }
     return root;
   }
+
+  static bool _usesAnchoredOverlay(PlainDirective node) =>
+      node.type == 'anchored_overlay' ||
+      node.type == 'anchored' ||
+      node.motions.any((m) => m.params.containsKey('exit_delay'));
+
+  static bool _usesWait(Flow flow) => flow.any(
+    (batch) => batch.any(
+      (command) =>
+          command.type == 'wait' ||
+          (command.then != null && _usesWait(command.then!)) ||
+          (command.onError?.values.any(_usesWait) ?? false) ||
+          (command.dismiss != null && _usesWait(command.dismiss!)) ||
+          (command.always != null && _usesWait(command.always!)),
+    ),
+  );
 
   /// The first path in [directive], depth first, that [use] returns.
   static String? _firstPath(
@@ -1181,13 +1247,13 @@ final class TemplateCompiler {
 
   static const _presenceKeys = {'space', 'order', 'duration', 'curve'};
 
-  /// Reads the node's `_presence`: `false` turns presence off, `true` or a
-  /// map keeps it on. An unknown map key is a typo and fails; a malformed
-  /// value takes its default, like a motion parameter.
+  /// Reads the node's `_presence`: absent or `false` leaves presence off,
+  /// `true` or a map turns it on. An unknown map key is a typo and fails; a
+  /// malformed value takes its default, like a motion parameter.
   static PresenceConfig _parsePresence(UiNode node) {
-    if (!node.reserved.containsKey('_presence')) return const PresenceConfig();
+    if (!node.reserved.containsKey('_presence')) return PresenceConfig.off;
     final raw = node.reserved['_presence'];
-    if (raw == true) return const PresenceConfig();
+    if (raw == true) return PresenceConfig.on;
     if (raw == false) return PresenceConfig.off;
     if (raw is! Map) {
       throw InvalidTemplateException(
@@ -1208,6 +1274,7 @@ final class TemplateCompiler {
     final duration = raw['duration'];
     final curve = raw['curve'];
     return PresenceConfig(
+      enabled: true,
       space: space is bool ? space : true,
       sequential: raw['order'] == 'sequential',
       durationMs: duration is num && duration.isFinite && duration >= 0

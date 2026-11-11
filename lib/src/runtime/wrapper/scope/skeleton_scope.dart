@@ -21,11 +21,12 @@ enum _Phase { holding, showing, done }
 /// The skeleton fills the slot from the first frame but is painted only after
 /// [grace]. This prevents fast loads from flashing a placeholder while still
 /// reserving space so slower sibling scopes cannot reflow shared layouts. When
-/// the load finishes the slot swaps the skeleton for the content as a
-/// presence swap ([presence]): the size goes from the skeleton's to the
-/// content's while one crossfades into the other. A load inside the grace
-/// swaps the same way from the never-painted skeleton, so the content fades
-/// in. A content already loaded at mount shows at once.
+/// the load finishes the slot swaps the skeleton for the content at once by
+/// default. With an enabled [presence] the swap animates instead: the size
+/// goes from the skeleton's to the content's while one crossfades into the
+/// other, and a load inside the grace swaps the same way from the
+/// never-painted skeleton, so the content fades in. A content already loaded
+/// at mount shows at once.
 class SkeletonScope extends StatefulWidget {
   const SkeletonScope({
     super.key,

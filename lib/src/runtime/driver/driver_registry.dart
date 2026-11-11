@@ -11,6 +11,7 @@ import 'secure_storage_driver.dart';
 import 'navigate_driver.dart';
 import 'scroll_driver.dart';
 import 'set_driver.dart';
+import 'wait_driver.dart';
 import 'toast_driver.dart';
 import 'modal/modal_driver.dart';
 
@@ -20,6 +21,7 @@ final class DriverRegistry {
 
   static const Map<String, Driver> _builtins = {
     'set': SetDriver(),
+    'wait': WaitDriver(),
     'net': NetDriver(),
     'sys_haptic': HapticDriver(),
     'anchoring': AnchoringDriver(),

@@ -23,6 +23,49 @@ Builds Flutter's [Container] from resolved box props. This primitive mirrors the
 
 All non-structural property values are recursively expression-bindable. Structural keys control compilation and therefore are not themselves interpolated.
 
+## Box shadow
+
+`decoration.box_shadow` (also in `foreground_decoration`) is one shadow map or a list of them. Each map takes:
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `color` | `color` | `#000000` | shadow color. |
+| `blur_radius` | `size` (scaled) | `0` | blur radius. |
+| `spread_radius` | `size` (scaled) | `0` | grows (or, negative, shrinks) the shadow before blurring; for an `inset` shadow it thickens the shadow inward. |
+| `offset` | `[x, y]` (scaled) | `[0, 0]` | shadow offset; negative values move it up/left. |
+| `blur_style` | normal, solid, outer, inner | `normal` | Flutter `BlurStyle` of an outer shadow: `normal` blurs both ways, `solid` keeps the shadow solid with a blurred outer edge, `outer` draws only the blur outside the shadow shape (an outer glow), `inner` draws only the fuzzy part inside the shadow shape and nothing outside it. Ignored when `inset` is true. Since 0.23.0. |
+| `inset` | `bool` | `false` | `true` draws a CSS-style inset shadow inside the box (see below). Only the boolean `true` counts; anything else is an outer shadow. Since 0.23.0. |
+
+Every key is bindable. A missing or unknown `blur_style` (for example `INNER` or `true`) draws a `normal` shadow without an error, so templates without it render as before.
+
+`blur_style: inner` is not an inset shadow: the decoration still paints its `color` and `gradient` over the shadow, and the shadow is the box shape itself with only its inner edge softened. For a shadow inside the box, use `inset: true`.
+
+### Inset shadows
+
+An `inset: true` entry paints like CSS `box-shadow: inset`: the shadow covers the inside of the box except a hole, the box shape moved by `offset` and shrunk by `spread_radius`, with the hole edge blurred by `blur_radius`. It follows `border_radius` and `shape: circle` and never paints outside the box. A positive `offset: [0, 4]` therefore darkens the top inner edge.
+
+Inset entries paint above the decoration's `color` and `gradient` and below the `border` and the child; outer entries in the same list paint outside the box as before. Both kinds may be mixed in one list, and each kind keeps its list order.
+
+The `decoration` of `container` and `decorated_box` and `container`'s `foreground_decoration` draw inset shadows. `speech_balloon` reads only the fill, border and radius of its decoration and draws no shadows.
+
+Engines older than 0.23.0 ignore `blur_style` and `inset` and draw every entry as a `normal` outer shadow. `_requires: [box_shadow_blur_style_v1]` and `_requires: [box_shadow_inset_v1]` declare the features; the compiler does not demand them, so declare them, or gate the template by app version, when an outer shadow on older engines would look wrong.
+
+A raised pill, lit from above: a soft outer drop shadow, a light inset along the top edge and a dark inset along the bottom edge.
+
+```yaml
+_type: container
+_requires: [box_shadow_inset_v1]
+width: 160
+height: 48
+decoration:
+  color: '#E9E9EF'
+  border_radius: 24
+  box_shadow:
+    - { color: '#26000000', blur_radius: 12, offset: [0, 4] }
+    - { color: '#CCFFFFFF', blur_radius: 4, offset: [0, 2], inset: true }
+    - { color: '#1F000000', blur_radius: 6, offset: [0, -3], inset: true }
+```
+
 ## Protocol
 
 This widget produces the **box** layout protocol. Its positional children must produce box. This type is not selected directly by `_loop._wrap`; `_loop` may still wrap this widget node as the repeated item. See [Concepts](../../concepts.md#box-and-sliver-protocols) and [Loops](../../loops.md).

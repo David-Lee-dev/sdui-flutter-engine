@@ -25,7 +25,11 @@ const _widgetOf = {
   ParentDataKind.stack: Positioned,
 };
 
+/// The `_requires` feature a parent type needs to compile.
+const _requires = {'anchored_overlay': 'anchored_overlay_v1'};
+
 Map<String, Object?> _boxed(Map<String, Object?> parent) => {
+  if (_requires[parent['_type']] case final feature?) '_requires': [feature],
   '_type': 'sizedbox',
   'width': 300,
   'height': 300,
@@ -64,6 +68,7 @@ void main() {
         'flex': ParentDataKind.flex,
         'serpentine_row': ParentDataKind.flex,
         'stack': ParentDataKind.stack,
+        'anchored_overlay': ParentDataKind.stack,
       });
     });
 

@@ -22,13 +22,43 @@ PresenceConfig _ifPresence(Object? presence) {
 
 void main() {
   group('_presence', () {
-    test('is on by default with the style timing', () {
-      final directive = _compile({
+    test('is off on every structural directive when absent', () {
+      final node = _compile({
         '_type': 'text',
-        'value': 'x',
+        'value': r'${it}',
+        '_loop': {'_in': r'${items}', '_as': 'it', '_key': r'${it}'},
         '_if': r'${show}',
+        '_scope': {
+          '_state': {'x': 1},
+          '_skeleton': {'_type': 'sizedbox'},
+        },
       });
-      final presence = (directive as ConditionDirective).presence;
+      final loop = node as LoopDirective;
+      final ifCond = loop.child as ConditionDirective;
+      final scope = ifCond.branches.single.body as ScopeDirective;
+      final cond = _compile({
+        '_type': 'cond',
+        '_children': [
+          {'_type': 'text', 'value': 'a', '_if': r'${a}'},
+        ],
+      });
+      final sw = _compile({
+        '_type': 'switch',
+        '_value': r'${tab}',
+        '_children': [
+          {'_type': 'text', 'value': 'a', '_case': 'a'},
+        ],
+      });
+
+      expect(loop.presence.enabled, isFalse);
+      expect(ifCond.presence.enabled, isFalse);
+      expect(scope.presence.enabled, isFalse);
+      expect((cond as ConditionDirective).presence.enabled, isFalse);
+      expect((sw as SwitchDirective).presence.enabled, isFalse);
+    });
+
+    test('true turns it on with the style timing', () {
+      final presence = _ifPresence(true);
 
       expect(presence.enabled, isTrue);
       expect(presence.space, isTrue);
@@ -37,9 +67,8 @@ void main() {
       expect(presence.curve, isNull);
     });
 
-    test('false turns it off and true keeps it on', () {
+    test('false is accepted and turns it off', () {
       expect(_ifPresence(false).enabled, isFalse);
-      expect(_ifPresence(true).enabled, isTrue);
     });
 
     test('a map sets space, order, duration and curve', () {

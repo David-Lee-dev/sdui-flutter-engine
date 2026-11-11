@@ -10,9 +10,15 @@ Shows determinate or indeterminate circular progress. This primitive mirrors the
 | `color` | `color` | — | `null` | Yes | indicator color. |
 | `background_color` | `color` | — | `null` | Yes | track color. |
 | `stroke_width` | `number` | — | `4.0` | Yes | ring stroke width. |
+| `stroke_cap` | `string` | `butt`, `round`, `square` | `null` | Yes | Line ends for determinate and indeterminate progress. |
 | `_on` | event map | tap, double_tap, long_press, end_reached, start_reached, scroll | `{}` | Payload only | Maps supported events to action names or `{do, throttle/debounce, event, ripple}` options. |
 
 All non-structural property values are recursively expression-bindable. Structural keys control compilation and therefore are not themselves interpolated.
+
+Missing, null, unknown, or non-string `stroke_cap` uses Flutter's default
+without reporting an error. Optional `_requires: [progress_stroke_cap_v1]`
+rejects engines before 0.26.0; without it, older engines ignore the property.
+The feature is declare-only, so using the property without `_requires` compiles.
 
 ## Protocol
 
@@ -26,6 +32,7 @@ value: 0.6
 color: '#336699'
 background_color: '#eeeeee'
 stroke_width: 4
+stroke_cap: round
 ```
 
 ```yaml

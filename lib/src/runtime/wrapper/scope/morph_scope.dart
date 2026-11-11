@@ -29,7 +29,6 @@ class _MorphScopeState extends State<MorphScope>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late Curve _curve;
-  late final CurvedAnimation _curved;
 
   /// Both `null` until `_to` or `_from` yields a finite number.
   double? _start;
@@ -50,7 +49,6 @@ class _MorphScopeState extends State<MorphScope>
     super.initState();
     _controller = AnimationController(vsync: this, duration: _duration());
     _curve = EngineCurve.resolve(d.curve, fallback: Curves.easeOut);
-    _curved = CurvedAnimation(parent: _controller, curve: _curve);
   }
 
   /// A replaced template (the runner recompiles but keeps this State) is
@@ -123,7 +121,9 @@ class _MorphScopeState extends State<MorphScope>
     final start = _start;
     final target = _target;
     if (start == null || target == null) return target;
-    return start + (target - start) * _curved.value;
+    // The curve is applied here rather than through a CurvedAnimation, which
+    // pins t = 0 and 1 to themselves: a segmented curve may end elsewhere.
+    return start + (target - start) * _curve.transform(_controller.value);
   }
 
   /// The value's rate of change in `_to` units per second: the curve's slope
@@ -162,10 +162,7 @@ class _MorphScopeState extends State<MorphScope>
     // Timing is read from the directive in force, so a replaced template's
     // duration and curve apply from this run on.
     _controller.duration = _duration();
-    _curved.curve = _curve = EngineCurve.resolve(
-      d.curve,
-      fallback: Curves.easeOut,
-    );
+    _curve = EngineCurve.resolve(d.curve, fallback: Curves.easeOut);
     void go() {
       if (!mounted || to == null || _reduceMotion) return;
       if (d.repeat) {
@@ -187,7 +184,6 @@ class _MorphScopeState extends State<MorphScope>
   void dispose() {
     _delayTimer?.cancel();
     _dep?.removeListener(_onDep);
-    _curved.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -198,7 +194,7 @@ class _MorphScopeState extends State<MorphScope>
       parent: _parent,
       name: d.as,
       velocityName: d.velocityAs,
-      animation: _curved,
+      animation: _controller,
       valueOf: _current,
       velocityOf: _velocity,
     );

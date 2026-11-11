@@ -43,6 +43,7 @@ Nothing in these cases reaches `SduiErrorObserver` or `NodeGuard`; a debug build
 | `reverse` | bool | `false` | Alternates direction when repeating. |
 | `trigger` | any | `null` | Runtime restart identity; also restarts a leg count. |
 | `start` | `'visible'` or `'mount'` | `'visible'` | Inside an ancestor `Scrollable`, `'mount'` skips the start gate below and starts (counting `delay`) as soon as the layer mounts. Since 0.13.0. |
+| `exit_delay` | milliseconds, 0–1,000,000 | `0` | Wait before the exit run of an `on: exit` or `on: both` entry plays; the entrance ignores it. Use expressions to stagger exits (for example in reverse order). Since 0.22.0; declare `_requires: [anchored_overlay_v1]`. |
 
 A `repeat` value that is neither a bool nor a whole number in 1–1000 (`0`, `2.5`, `1001`, `'x'`) falls back to the atom default, and an invalid `repeat_delay` to `0`. With `reverse`, odd legs run backwards, so `repeat: 2, reverse: true` goes there and back and stops at the start. A counted or pausing repeat detects each leg's end on the frame after it is due, so the next leg may start up to one frame late. Declare `_requires: [motion_repeat_v1]` for counts and `repeat_delay`. A `start` value other than `'mount'` (an unknown string, or any non-string) falls back to `'visible'`. Declare `_requires: [motion_start_v1]` for `start: 'mount'`.
 
@@ -54,6 +55,29 @@ A `repeat` value that is neither a bool nor a whole number in 1–1000 (`0`, `2.
 - Material 3 easings: `emphasized`, `emphasized_decelerate` (0.05, 0.7, 0.1, 1), `emphasized_accelerate` (0.3, 0, 0.8, 0.15), `standard` (0.2, 0, 0, 1), `standard_decelerate` (0, 0, 0, 1), `standard_accelerate` (0.3, 0, 1, 1).
 - A cubic bezier `[x1, y1, x2, y2]` of four finite numbers. `x1`/`x2` are clamped to 0–1; a `y` beyond ±10, a non-number or a wrong length uses the fallback.
 - Spring curves `spatial_fast`, `spatial_default`, `spatial_slow`, `effect_default`: the matching [`_spring` preset](control-flow.md#_spring) run from 0 to 1 at rest, stretched so its settle time maps to the end. Without an explicit `duration` the motion runs for that settle time; with one, the spring is squeezed into it. It overshoots like the spring does.
+
+Since 0.24.0 (`_requires: [curve_segments_v1]`) `curve` (and `_morph._curve`) also accepts a list of segments, each a map `{until, to, curve}`. A hop that rises, falls back with a bounce on landing, then rests on the ground:
+
+```yaml
+_motion:
+  type: move
+  begin: [0, 0]
+  end: [0, -12]
+  duration: 900
+  repeat: true
+  repeat_delay: 1200
+  curve:
+    - { until: 0.35, to: 1, curve: ease_out }
+    - { until: 1, to: 0, curve: bounce_out }
+```
+
+- The value starts at 0. A segment covers t from the previous segment's `until` (0 for the first) to its own, and goes from the previous segment's `to` (0 for the first) to its own `to`, following its own `curve` over that span.
+- `until` is a finite number, strictly increasing, in (0, 1]; the last must be exactly 1.
+- `to` is a finite number within ±10 (like a bezier `y`). The curve ends at the last `to`, which need not be 1.
+- `curve` defaults to `linear` and takes any name or bezier above, but not another segment list. Other keys are ignored.
+- Anything else (an empty list, a non-map entry, a missing or non-numeric `until`/`to`, `until` out of order or not ending at 1, a `to` beyond ±10, an unknown inner curve) uses the fallback, like an invalid bezier.
+- With a last `to` of 0 a leg ends where it started, at `begin`: `repeat` restarts without a jump, `repeat_delay` rests at `begin`, and reduced motion (t = 1) shows `begin`. With `reverse`, the backward leg runs the same curve backwards.
+- Engines older than 0.24.0 read a segment list as a malformed bezier and use the default curve.
 
 ### Reduced motion
 
@@ -71,12 +95,12 @@ A repeating layer wraps its child in a `RepaintBoundary`, so the animation repai
 
 ## Exit motions
 
-A `_motion` entry's `on` places it in the presence phases of the nearest structural directive around it (see [Presence transitions](control-flow.md#presence-transitions)). Since 0.16.0.
+A `_motion` entry's `on` places it in the presence phases of the nearest structural directive around it (see [Presence transitions](control-flow.md#presence-transitions)). Since 0.16.0. Since 0.21.0 presence is off unless that directive's node sets `_presence: true` or a `_presence` map; with presence off, `on: exit` entries do not play and the content leaves at once.
 
 | `on` | Behavior |
 | --- | --- |
 | `enter` (default) | As above: runs when it mounts. |
-| `exit` | Rests at its end state and plays backwards (t 1 → 0) over its `duration` when the directive removes the content; `pop_in` with `on: exit` is a pop-out. `delay` and `repeat` do not apply to the exit run. |
+| `exit` | Rests at its end state and plays backwards (t 1 → 0) over its `duration` when the directive removes the content; `pop_in` with `on: exit` is a pop-out. `delay` and `repeat` do not apply to the exit run; `exit_delay` (since 0.22.0) makes it wait. |
 | `both` | Runs as an entrance, and plays backwards from wherever it is when the content is removed. |
 
 Any other `on` value fails to compile; it must be a literal. An exit entry plays only for the nearest directive that removes content: a nested `_if` inside the removed content does not play its own exits. Engines before 0.16 ignore `on` and run every entry as an entrance, so gate templates that use it with `_requires: [presence_v1]` and the server's app-version check.
@@ -102,6 +126,10 @@ takes the size of the first sized box beneath it. Known limits of that fallback:
 reveal aligned to the right or bottom edge of its parent can stay waiting when that edge sits
 exactly at the viewport edge, and a collapsed multi-child layout is sized by its first child only.
 Prefer left/top alignment for reveals inside scrollables.
+
+Only scrollables the motion is drawn inside count. Content an `anchored_overlay` shows in the
+Overlay sits under the page's scrollable as a node but is drawn outside its viewport, so its
+motions start as if they had no ancestor `Scrollable` (after the first frame). Since 0.22.0.
 
 `start: 'mount'` skips this gate entirely: the motion starts (and starts counting `delay`) as
 soon as its layer mounts, whether or not it is on-screen and whether or not an ancestor is still

@@ -81,6 +81,7 @@ class MotionPlan {
     this.repeatDelay = Duration.zero,
     this.trigger,
     this.startAtMount = false,
+    this.exitDelay = Duration.zero,
   });
 
   final Duration duration;
@@ -107,6 +108,10 @@ class MotionPlan {
   /// as if it had no ancestor `Scrollable`.
   final bool startAtMount;
 
+  /// How long an exit run (`on: exit|both`) waits before it plays; the
+  /// entrance ignores it, as the exit run ignores [delay].
+  final Duration exitDelay;
+
   /// Builds the common one-shot or repeating plan options from [p].
   ///
   /// A spring curve name without a `duration` runs for its settle time.
@@ -132,6 +137,7 @@ class MotionPlan {
       repeatDelay: p.duration('repeat_delay', Duration.zero),
       trigger: p.raw('trigger'),
       startAtMount: p.text('start') == 'mount',
+      exitDelay: p.duration('exit_delay', Duration.zero),
     );
   }
 

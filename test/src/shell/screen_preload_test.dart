@@ -676,8 +676,7 @@ void main() {
       tester,
     ) async {
       final loader = _Loader({
-        'detail': () async =>
-            _screen('detail', transition: {'type': 'slide'}),
+        'detail': () async => _screen('detail', transition: {'type': 'slide'}),
       });
       await _init(loader, type: type);
       final router = await _pump(tester);
@@ -848,10 +847,7 @@ void main() {
     final loader = _Loader({
       'detail': () async => version == 1
           ? _screen('detail', transition: {'type': 'fade', 'duration': 300})
-          : _screen(
-              'detail',
-              transition: {'type': 'slide', 'duration': 500},
-            ),
+          : _screen('detail', transition: {'type': 'slide', 'duration': 500}),
     });
     await _init(loader, preload: ['detail'], type: 'none');
     final router = await _pump(tester);

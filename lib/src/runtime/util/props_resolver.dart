@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../engine_presentation.dart';
 import 'engine_metrics.dart';
+import 'inset_shadow_decoration.dart';
 import 'styled_border.dart';
 import 'template_number.dart';
 import '../widget/util/icon_catalog.dart';
@@ -198,6 +199,7 @@ final class PropsResolver {
       blurRadius: size(context, raw['blur_radius']) ?? 0.0,
       spreadRadius: size(context, raw['spread_radius']) ?? 0.0,
       offset: Offset(dx ?? 0.0, dy ?? 0.0),
+      blurStyle: enumOf(raw['blur_style'], _blurStyles) ?? BlurStyle.normal,
     );
   }
 
@@ -231,6 +233,9 @@ final class PropsResolver {
     );
   }
 
+  /// Decodes a decoration map. `box_shadow` entries with `inset: true` (bool
+  /// only) make it an [InsetShadowDecoration]; otherwise a plain
+  /// [BoxDecoration].
   static BoxDecoration? boxDecoration(
     BuildContext context,
     Object? raw, {
@@ -238,14 +243,44 @@ final class PropsResolver {
   }) {
     if (raw is! Map) return null;
     final resolvedGradient = gradient(raw['gradient']);
-    return BoxDecoration(
-      color: resolvedGradient == null ? color(raw['color']) : null,
+    final resolvedColor = resolvedGradient == null ? color(raw['color']) : null;
+    final resolvedBorder = border(context, raw['border']);
+    final resolvedRadius =
+        borderRadius ?? radius(context, raw['border_radius']);
+    final shape = boxShape(raw['shape']) ?? BoxShape.rectangle;
+    final blend = blendMode(raw['background_blend_mode']);
+
+    final shadowsRaw = raw['box_shadow'];
+    final entries = shadowsRaw is Map ? [shadowsRaw] : shadowsRaw;
+    final insetRaw = entries is List
+        ? [
+            for (final item in entries)
+              if (item is Map && item['inset'] == true) item,
+          ]
+        : const [];
+    if (insetRaw.isEmpty) {
+      return BoxDecoration(
+        color: resolvedColor,
+        gradient: resolvedGradient,
+        border: resolvedBorder,
+        borderRadius: resolvedRadius,
+        boxShadow: boxShadow(context, shadowsRaw),
+        shape: shape,
+        backgroundBlendMode: blend,
+      );
+    }
+    return InsetShadowDecoration(
+      color: resolvedColor,
       gradient: resolvedGradient,
-      border: border(context, raw['border']),
-      borderRadius: borderRadius ?? radius(context, raw['border_radius']),
-      boxShadow: boxShadow(context, raw['box_shadow']),
-      shape: boxShape(raw['shape']) ?? BoxShape.rectangle,
-      backgroundBlendMode: blendMode(raw['background_blend_mode']),
+      border: resolvedBorder,
+      borderRadius: resolvedRadius,
+      boxShadow: boxShadow(context, [
+        for (final item in entries as List)
+          if (item is Map && item['inset'] != true) item,
+      ]),
+      shape: shape,
+      backgroundBlendMode: blend,
+      insetShadows: boxShadow(context, insetRaw)!,
     );
   }
 
@@ -254,9 +289,7 @@ final class PropsResolver {
     if (raw is! Map) return null;
     final colorsRaw = raw['colors'];
     if (colorsRaw is! List) return null;
-    final colors = [
-      for (final item in colorsRaw) ?color(item),
-    ];
+    final colors = [for (final item in colorsRaw) ?color(item)];
     if (colors.length < 2) return null;
 
     List<double>? stops;
@@ -353,23 +386,25 @@ final class PropsResolver {
     final hasDefaults =
         typography.baseStyle != null || typography.fontFamily != null;
     if (raw is! Map) return hasDefaults ? base : null;
-    return base.merge(TextStyle(
-      fontSize: size(context, raw['font_size']),
-      color: color(raw['color']),
-      fontWeight: fontWeight(raw['font_weight']),
-      fontStyle: fontStyle(raw['font_style']),
-      letterSpacing: _scaledSigned(context, raw['letter_spacing']),
-      height: number(raw['height']),
-      decoration: textDecorationLine(raw['decoration']),
-      decorationColor: color(raw['decoration_color']),
-      decorationStyle: textDecorationStyle(raw['decoration_style']),
-      decorationThickness: number(raw['decoration_thickness']),
-      leadingDistribution: leadingDistribution(raw['leading_distribution']),
-      wordSpacing: _scaledSigned(context, raw['word_spacing']),
-      backgroundColor: color(raw['background_color']),
-      shadows: textShadows(context, raw['shadows']),
-      fontFamily: text(raw['font_family']),
-    ));
+    return base.merge(
+      TextStyle(
+        fontSize: size(context, raw['font_size']),
+        color: color(raw['color']),
+        fontWeight: fontWeight(raw['font_weight']),
+        fontStyle: fontStyle(raw['font_style']),
+        letterSpacing: _scaledSigned(context, raw['letter_spacing']),
+        height: number(raw['height']),
+        decoration: textDecorationLine(raw['decoration']),
+        decorationColor: color(raw['decoration_color']),
+        decorationStyle: textDecorationStyle(raw['decoration_style']),
+        decorationThickness: number(raw['decoration_thickness']),
+        leadingDistribution: leadingDistribution(raw['leading_distribution']),
+        wordSpacing: _scaledSigned(context, raw['word_spacing']),
+        backgroundColor: color(raw['background_color']),
+        shadows: textShadows(context, raw['shadows']),
+        fontFamily: text(raw['font_family']),
+      ),
+    );
   }
 
   static InputBorder? inputBorder(BuildContext context, Object? raw) {
@@ -807,6 +842,13 @@ final class PropsResolver {
     'repeated': TileMode.repeated,
     'mirror': TileMode.mirror,
     'decal': TileMode.decal,
+  };
+
+  static const Map<String, BlurStyle> _blurStyles = {
+    'normal': BlurStyle.normal,
+    'solid': BlurStyle.solid,
+    'outer': BlurStyle.outer,
+    'inner': BlurStyle.inner,
   };
 
   static const Map<String, BlendMode> _blendModes = {

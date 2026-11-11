@@ -138,7 +138,7 @@ void main() {
       await tester.pumpWidget(
         _app(
           _section(
-            _content,
+            {..._content, '_presence': true},
             skeleton: const {'_type': 'skeleton', 'width': 80, 'height': 40},
           ),
         ),
@@ -262,7 +262,15 @@ void main() {
 
     testWidgets('a load inside the grace fades the content in from the '
         'unpainted bones', (tester) async {
-      await tester.pumpWidget(_app(_section(column([boned(_content)]))));
+      await tester.pumpWidget(
+        _app(
+          _section(
+            column([
+              {...boned(_content), '_presence': true},
+            ]),
+          ),
+        ),
+      );
       await tester.pump(const Duration(milliseconds: 100));
 
       await expectFadeIn(tester);
@@ -270,7 +278,9 @@ void main() {
 
     testWidgets('a legacy _scope._skeleton load inside the grace fades the '
         'content in from the unpainted bones', (tester) async {
-      await tester.pumpWidget(_app(_section(_content, skeleton: bone)));
+      await tester.pumpWidget(
+        _app(_section({..._content, '_presence': true}, skeleton: bone)),
+      );
       await tester.pump(const Duration(milliseconds: 100));
 
       await expectFadeIn(tester);
@@ -1130,11 +1140,13 @@ void main() {
                   '_child': {
                     '_type': 'column',
                     '_skeleton': true,
+                    '_presence': true,
                     'cross_axis_alignment': 'start',
                     '_children': [
                       {'_type': 'text', 'value': r'level ${ready}'},
                       {
                         '_type': 'stack',
+                        '_presence': true,
                         '_skeleton': {
                           '_type': 'sizedbox',
                           'height': 24,

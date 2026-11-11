@@ -179,7 +179,10 @@ class _AnchorScopeHostState extends State<_AnchorScopeHost>
       // A fresh Scope + build per flight — instantiating the same compiled
       // directive again gives each concurrent flight independent state (own
       // `_motion` timers), matching what a fresh node in the tree would do.
-      content: Scope.ofState(const {}, child: DirectiveSubtree.mount(directive)),
+      content: Scope.ofState(
+        const {},
+        child: DirectiveSubtree.mount(directive),
+      ),
       // `dispose()` also drives this (via finish()) after the widget has
       // already unmounted — setState would throw there, so plain removal
       // covers that path and the rebuild-triggering path covers the rest.

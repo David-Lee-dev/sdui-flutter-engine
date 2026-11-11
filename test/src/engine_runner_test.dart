@@ -51,7 +51,11 @@ void main() {
     tester,
   ) async {
     final lines = <String>[];
-    EngineLog.configure(minLevel: LogLevel.warn, colors: false, output: lines.add);
+    EngineLog.configure(
+      minLevel: LogLevel.warn,
+      colors: false,
+      output: lines.add,
+    );
     addTearDown(
       () => EngineLog.configure(
         minLevel: LogLevel.debug,

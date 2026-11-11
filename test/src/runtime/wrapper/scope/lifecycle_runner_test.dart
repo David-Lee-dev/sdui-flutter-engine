@@ -67,9 +67,7 @@ void main() {
       });
 
       testWidgets('가려졌다 돌아오면 remount 훅이 발화한다', (tester) async {
-        final r = runner(
-          hooks: [hook(LifecycleTrigger.remount)],
-        );
+        final r = runner(hooks: [hook(LifecycleTrigger.remount)]);
         r.visibilityChanged(true);
         r.visibilityChanged(false);
         expect(host.env.read('_probe'), isNull);

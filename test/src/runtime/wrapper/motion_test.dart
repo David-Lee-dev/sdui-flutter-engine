@@ -174,6 +174,75 @@ void main() {
     });
   });
 
+  group('MotionWrapper 0.24.0 구간 곡선', () {
+    const hop = <Object?>[
+      {'until': 0.35, 'to': 1, 'curve': 'ease_out'},
+      {'until': 1, 'to': 0, 'curve': 'bounce_out'},
+    ];
+
+    Widget move({bool reduce = false}) => MediaQuery(
+      data: MediaQueryData(disableAnimations: reduce),
+      child: const Directionality(
+        textDirection: TextDirection.ltr,
+        child: MotionWrapper(
+          motion: MoveMotion(),
+          params: MotionParams({
+            'begin': [0, 0],
+            'end': [0, -10],
+            'curve': hop,
+            'duration': 100,
+            'repeat': true,
+            'repeat_delay': 50,
+          }),
+          child: SizedBox(width: 10, height: 10),
+        ),
+      ),
+    );
+
+    double dy(WidgetTester tester) => tester
+        .widget<Transform>(find.byType(Transform))
+        .transform
+        .getTranslation()
+        .y;
+
+    testWidgets('다리 끝과 다음 다리 시작이 모두 begin이라 튀지 않고, 쉬는 동안 begin에 머문다', (
+      tester,
+    ) async {
+      await tester.pumpWidget(move());
+      final samples = <double>[dy(tester)];
+      for (var i = 0; i < 60; i++) {
+        await tester.pump(const Duration(milliseconds: 10));
+        samples.add(dy(tester));
+      }
+      expect(tester.takeException(), isNull);
+      expect(samples.reduce((a, b) => a < b ? a : b), lessThan(-9));
+      expect(samples.every((v) => v <= 0.001 && v >= -10.001), isTrue);
+      // First leg ends at 100 ms; the pause runs to ~160 ms (one frame late).
+      for (final i in [11, 12, 13, 14, 15]) {
+        expect(samples[i], closeTo(0, 1e-9), reason: '${i * 10} ms');
+      }
+      // The second leg starts from begin: no jump larger than a rising frame.
+      for (var i = 1; i < samples.length; i++) {
+        expect(
+          (samples[i] - samples[i - 1]).abs(),
+          lessThan(6),
+          reason: '${i * 10} ms',
+        );
+      }
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('reduced motion은 t = 1 상태(마지막 to 0이면 begin)를 그린다', (
+      tester,
+    ) async {
+      await tester.pumpWidget(move(reduce: true));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(tester.takeException(), isNull);
+      expect(dy(tester), closeTo(0, 1e-9));
+      expect(tester.hasRunningAnimations, isFalse);
+    });
+  });
+
   group('MotionWrapper 0.9.0 reduced motion', () {
     testWidgets('one-shot은 첫 프레임부터 끝 상태이고 애니메이션이 없다', (tester) async {
       await tester.pumpWidget(_fade({'delay': 300}, reduce: true));
@@ -420,7 +489,10 @@ void main() {
             child: ListView(
               controller: scrollController,
               children: [
-                const SizedBox(key: ValueKey('spacer-mount-scrolling'), height: 200),
+                const SizedBox(
+                  key: ValueKey('spacer-mount-scrolling'),
+                  height: 200,
+                ),
                 KeyedSubtree(
                   key: probeKey,
                   child: MotionWrapper(

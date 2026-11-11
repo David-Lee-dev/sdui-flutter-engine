@@ -150,6 +150,8 @@ Engine-specific widgets; includes the explicitly unregistered internal helper fo
 | `shared_element` | Flies one box child as a snapshot between matching route tags. | box | No | [Open](custom/shared_element.md) |
 | `anchor` | Registers an `anchor` node's first child under its non-empty `id`. | box | No | [Open](custom/anchor.md) |
 | `anchor_scope` | Owns the stacking context `anchor`s inside it fly within. | box | No | [Open](custom/anchor_scope.md) |
+| `anchored_overlay` | Dims the app in the nearest Overlay and lays its children over the dim. | box | No | [Open](custom/anchored_overlay.md) |
+| `anchored` | Places its child against the anchor of the `anchored_overlay` it is in. | box | No | [Open](custom/anchored.md) |
 | `auto_scroll` | A seamless, infinitely repeating scrolling marquee. | box | Yes | [Open](custom/auto_scroll.md) |
 | `chart` | A data-driven line, area, or bar chart. | box | No | [Open](custom/chart.md) |
 | `collapsing_header` | Builds a [SliverPersistentHeader] whose child receives scroll-state variables. | sliver | No | [Open](custom/collapsing_header.md) |

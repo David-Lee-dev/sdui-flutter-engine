@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.21.0
+## 0.27.0
 
 - Added the `model_3d` widget: a policy-backed 3D model driven by a state → clip
   table. `states` maps state names to `{ clip, loop, next }`; changing
@@ -42,6 +42,108 @@
   A failed load is tried again with a new controller when the view shows
   again or the app resumes; `on_error` dispatches for each failed attempt.
   Existing apps need no changes.
+
+## 0.26.0
+
+- Add `wait`: delay by `duration` or observe an `until` expression with a required
+  `timeout`. Requires `wait_v1`. Owner-scope disposal releases all resources and
+  cancels continuations; route coverage alone does not cancel. `WAIT_TIMEOUT`
+  uses the existing error flow, skips `_then`, and continues later batches.
+- `circular_progress_indicator` accepts bindable `stroke_cap` values `butt`,
+  `round`, and `square`; missing or invalid values preserve Flutter's default.
+  Add the optional declare-only feature `progress_stroke_cap_v1`.
+
+## 0.25.0
+
+- Bottom sheets no longer leave an empty strip above the home indicator. The
+  sheet surface (background and top radius) now reaches the bottom edge and the
+  frame lifts the body above the bottom inset inside it, so templates need no
+  bottom `safe_area` (one they already have adds nothing). A `background: none`
+  sheet paints its own card, so its template receives the bottom inset and owns
+  it like a scaffold body. Left/right safe areas, keyboard positioning and
+  dialogs are unchanged; the sheet height cap includes the inset area.
+
+## 0.24.0
+
+- `curve` (in `_motion`) and `_morph._curve` accept a list of segments
+  `{until, to, curve}`: each segment runs its own curve from the previous
+  segment's `to` (0 for the first) to its own over t from the previous
+  `until` (0) to its own. `until` strictly increases in (0, 1] and ends at 1,
+  `to` is within ±10, `curve` defaults to `linear` and takes any name or
+  bezier but not another segment list. The curve ends at the last `to`, so a
+  hop such as `[{until: 0.35, to: 1, curve: ease_out}, {until: 1, to: 0,
+  curve: bounce_out}]` rises, lands with a bounce and ends at `begin`:
+  `repeat` restarts without a jump and `repeat_delay` rests on the ground.
+  A malformed list uses the fallback like an invalid bezier. New
+  declare-only `_requires` feature `curve_segments_v1`; older engines use the
+  default curve. See docs/motion.md#curves.
+- `_motion` and `_morph` apply the curve to the controller value themselves
+  instead of through a `CurvedAnimation`, which pins t = 1 to 1 (and turned
+  the layer off in debug for a curve ending elsewhere). Existing curves draw
+  the same values.
+- `_morph` compares segment lists by content, so recompiling the same
+  template keeps a running morph going.
+
+## 0.23.0
+
+- `box_shadow` entries take `inset: true` for a CSS-style inset shadow: the
+  shadow paints inside the box, following `border_radius` and `shape: circle`,
+  above the decoration's color and gradient and below its border and the
+  child. `offset`, `blur_radius` and `spread_radius` work like CSS `inset`
+  (positive spread thickens the shadow inward). Outer and inset entries can be
+  mixed in one list. Works in `container` `decoration` and
+  `foreground_decoration` and in `decorated_box`; `speech_balloon` draws no
+  shadows. Only the boolean `true` counts. New declare-only `_requires`
+  feature `box_shadow_inset_v1`.
+- `box_shadow` entries take `blur_style: normal | solid | outer | inner`
+  (Flutter `BlurStyle`), bindable like the other shadow keys. `outer` draws
+  only the outer glow; `inner` keeps only the fuzzy part inside the shadow
+  shape, which the decoration's fill still covers, so it is not an inset
+  shadow (use `inset: true`). Ignored for inset entries. A missing or unknown
+  value draws a normal shadow. New declare-only `_requires` feature
+  `box_shadow_blur_style_v1`.
+- Engines older than 0.23.0 ignore both keys and draw every entry as a normal
+  outer shadow; the compiler does not require either feature. See
+  docs/widgets/layout/container.md#box-shadow.
+
+## 0.22.0
+
+- New `anchored_overlay` widget: a highlight layer attached to an on-screen
+  `anchor`. While it is in the tree (show it with `_if` and
+  `_presence: true`) it dims the app in the nearest Overlay, above the app
+  bar and a shell bar drawn beside the screen, blocks the page beneath, and
+  lays its children over the dim. A tap on the dim or a system back
+  dispatches `on_dismiss`. Its children read the screen's state and dispatch
+  its actions. `barrier_color`, `barrier_duration` and `barrier_exit_delay`
+  set the dim. See docs/widgets/custom/anchored_overlay.md.
+- New `anchored` widget, for an `anchored_overlay`'s children: places its
+  child `over`, `above`, `below`, before (`start`) or after (`end`) the
+  anchor's current on-screen rect, scroll offset included, with `align` and
+  `gap`. See docs/widgets/custom/anchored.md.
+- `_motion` `exit_delay`: milliseconds an `on: exit|both` entry waits before
+  its exit run, so exits can stagger (exit runs still ignore `delay`). The
+  presence slot stays until the last delayed exit has finished.
+- A `_motion`'s start gate now counts only the scrollables the motion is
+  drawn inside, so motions in an overlay shown from inside a scroll view
+  start instead of waiting on the page's viewport. Trees without overlays
+  behave as before.
+- The new names need `_requires: [anchored_overlay_v1]`; engines before
+  0.22.0 reject the feature, so gate such templates by app version.
+
+## 0.21.0
+
+- **Behavior change:** presence transitions are now opt-in. A node without
+  `_presence` builds its `_if`, `cond`, `switch`, eager loop and skeleton
+  swap with presence off, as `_presence: false` did: inserted content
+  appears at once, removed content leaves at once, with no size animation
+  and no `on: exit` motions. Templates used `_presence: false` to opt out
+  far more often than they relied on the default, and the default size
+  growth along a row read as an unwanted left-to-right reveal.
+  `_presence: true` and a `_presence` map turn presence on and behave as
+  the old default; `_presence: false` stays valid. Engines 0.16–0.20 keep
+  animating a node without `_presence`, so add `_presence: true` where an
+  animation is wanted before shipping templates to 0.21.0 apps. See
+  docs/control-flow.md.
 
 ## 0.20.4
 

@@ -614,6 +614,26 @@ final class TemplateValidator {
         }
       }
     }
+    if (command.type == 'wait' && command.params.containsKey('until')) {
+      if (command.params.containsKey('duration')) {
+        throw InvalidTemplateException(
+          path,
+          '"wait.duration" and "until" are exclusive.',
+        );
+      }
+      if (command.params['until'] is! Expression) {
+        throw InvalidTemplateException(
+          path,
+          '"wait.until" must be an expression.',
+        );
+      }
+      if (!command.params.containsKey('timeout')) {
+        throw InvalidTemplateException(
+          path,
+          '"wait.until" requires "timeout".',
+        );
+      }
+    }
     // Handler declarations intentionally mirror their runtime shadows.
     final then = command.then;
     if (then != null) {

@@ -17,6 +17,7 @@ import '../../../util/props_resolver.dart';
 /// - `color` (`color`, default `null`) — indicator color.
 /// - `background_color` (`color`, default `null`) — track color.
 /// - `stroke_width` (`number`, default `4.0`) — ring stroke width.
+/// - `stroke_cap` (`string`, default `null`) — butt, round, or square ends.
 ///
 /// Child: none.
 final class CircularProgressIndicatorWidget {
@@ -31,5 +32,12 @@ final class CircularProgressIndicatorWidget {
     color: PropsResolver.color(props['color']),
     backgroundColor: PropsResolver.color(props['background_color']),
     strokeWidth: PropsResolver.number(props['stroke_width']) ?? 4.0,
+    strokeCap: PropsResolver.enumOf(props['stroke_cap'], _strokeCaps),
   );
 }
+
+const _strokeCaps = {
+  'butt': StrokeCap.butt,
+  'round': StrokeCap.round,
+  'square': StrokeCap.square,
+};

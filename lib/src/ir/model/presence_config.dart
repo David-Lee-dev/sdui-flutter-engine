@@ -1,21 +1,25 @@
 /// How a structural directive (cond, switch, `_if`, eager loop, skeleton
 /// swap) shows the content it inserts and removes, from `_presence`.
 ///
-/// Enabled by default: inserted content grows into its space and removed
-/// content plays its `on: exit` motions and collapses before it leaves.
+/// Disabled by default (since 0.21): structural changes are instant. When
+/// enabled, inserted content grows into its space and removed content plays
+/// its `on: exit` motions and collapses before it leaves.
 /// [durationMs] and [curve] override the app-wide presence style for every
 /// phase when set; a malformed curve falls back to that style.
 final class PresenceConfig {
   const PresenceConfig({
-    this.enabled = true,
+    this.enabled = false,
     this.space = true,
     this.sequential = false,
     this.durationMs,
     this.curve,
   });
 
-  /// `_presence: false` — structural changes are instant, as before 0.16.
-  static const off = PresenceConfig(enabled: false);
+  /// No `_presence` or `_presence: false` — structural changes are instant.
+  static const off = PresenceConfig();
+
+  /// `_presence: true` — presence with the app-wide style.
+  static const on = PresenceConfig(enabled: true);
 
   final bool enabled;
 

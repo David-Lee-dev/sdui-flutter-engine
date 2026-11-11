@@ -429,6 +429,31 @@ void main() {
       expect(value(tester), 100);
     });
 
+    testWidgets('구간 곡선 목록은 구간마다 이어 그리고 마지막 to에서 끝난다', (tester) async {
+      Map<String, Object?> morph() => {
+        '_from': 0,
+        '_to': 100,
+        '_as': 'n',
+        '_duration': 100,
+        '_curve': [
+          {'until': 0.5, 'to': 1},
+          {'until': 1, 'to': 0.5},
+        ],
+      };
+      await tester.pumpWidget(mount(morph()));
+      await tester.pump(const Duration(milliseconds: 25));
+      expect(value(tester), closeTo(50, 1e-6));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(value(tester), closeTo(75, 1e-6));
+      // Recompiling the same list keeps the run going.
+      await tester.pumpWidget(mount(morph()));
+      await tester.pump(const Duration(milliseconds: 25));
+      expect(value(tester), closeTo(50, 1e-6));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(value(tester), closeTo(50, 1e-6));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('같은 내용으로 다시 컴파일되면 진행 중인 전이를 이어간다', (tester) async {
       Map<String, Object?> morph() => {
         '_from': 0,

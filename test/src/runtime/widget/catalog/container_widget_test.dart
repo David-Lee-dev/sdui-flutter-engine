@@ -129,6 +129,34 @@ void main() {
         },
       );
 
+      testWidgets('decoration box_shadow blur_style 이 BoxDecoration 에 실린다', (
+        tester,
+      ) async {
+        await _pump(tester, const {
+          'decoration': {
+            'color': '#ffffff',
+            'box_shadow': {'blur_radius': 6, 'blur_style': 'inner'},
+          },
+          'foreground_decoration': {
+            'box_shadow': [
+              {'blur_radius': 6, 'blur_style': 'solid'},
+            ],
+          },
+        });
+        final container = tester.widget<Container>(find.byType(Container));
+        expect(
+          (container.decoration as BoxDecoration?)?.boxShadow?.single.blurStyle,
+          BlurStyle.inner,
+        );
+        expect(
+          (container.foregroundDecoration as BoxDecoration?)
+              ?.boxShadow
+              ?.single
+              .blurStyle,
+          BlurStyle.solid,
+        );
+      });
+
       testWidgets('자식은 첫 번째만', (tester) async {
         await _pump(
           tester,

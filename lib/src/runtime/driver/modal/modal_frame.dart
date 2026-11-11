@@ -188,7 +188,9 @@ class _ModalFrameState extends State<ModalFrame>
             child: GestureDetector(
               onTap: _onBackdrop,
               behavior: HitTestBehavior.opaque,
-              child: ColoredBox(color: EnginePresentation.value.modal.barrierColor),
+              child: ColoredBox(
+                color: EnginePresentation.value.modal.barrierColor,
+              ),
             ),
           ),
         ),
@@ -199,6 +201,7 @@ class _ModalFrameState extends State<ModalFrame>
 
   Widget _positioned(Size size, double keyboard) {
     // Height budget is measured against what the keyboard leaves visible.
+    // For sheets this includes the bottom inset the surface paints behind.
     final style = EnginePresentation.value.modal;
     final available = size.height - keyboard;
     final maxHeight =
@@ -234,7 +237,9 @@ class _ModalFrameState extends State<ModalFrame>
     );
     final content = Padding(
       padding: EdgeInsets.only(bottom: keyboard),
-      child: SafeArea(top: false, child: box),
+      // Keep landscape side insets; the bottom one is handled inside the
+      // surface (see [_content]) so the surface itself reaches the bottom edge.
+      child: SafeArea(top: false, bottom: false, child: box),
     );
     if (widget.motion == null) {
       return Align(
@@ -278,25 +283,32 @@ class _ModalFrameState extends State<ModalFrame>
     final shape = widget.variant == ModalVariant.dialog
         ? BorderRadius.all(radius)
         : BorderRadius.vertical(top: radius);
+    final body = EngineSubtree.mount(
+      EngineSubtreeRequest(
+        template: _template,
+        rootData: widget.data ?? const {},
+        host: widget.host,
+        // All-or-nothing: a partially identified surface would have the body
+        // reporting dwell against a visit id nobody issued.
+        screenId: _observable ? widget.screenId : null,
+        screenViewId: _surfaceViewId,
+        surfaceType: _observable ? 'modal' : null,
+        modalId: _observable ? widget.modalId : null,
+        resolveExitReason: () => _exitReason,
+      ),
+    );
+    // A sheet's surface runs behind the home indicator while its body stops
+    // above it, so templates need no bottom `safe_area`. A transparent sheet
+    // paints its own card, which then owns the inset like a scaffold body.
+    final lifted = widget.variant == ModalVariant.bottomSheet && color != null
+        ? SafeArea(top: false, left: false, right: false, child: body)
+        : body;
     return Material(
       type: color == null ? MaterialType.transparency : MaterialType.canvas,
       color: color,
       borderRadius: shape,
       clipBehavior: color == null ? Clip.none : Clip.antiAlias,
-      child: EngineSubtree.mount(
-        EngineSubtreeRequest(
-          template: _template,
-          rootData: widget.data ?? const {},
-          host: widget.host,
-          // All-or-nothing: a partially identified surface would have the body
-          // reporting dwell against a visit id nobody issued.
-          screenId: _observable ? widget.screenId : null,
-          screenViewId: _surfaceViewId,
-          surfaceType: _observable ? 'modal' : null,
-          modalId: _observable ? widget.modalId : null,
-          resolveExitReason: () => _exitReason,
-        ),
-      ),
+      child: lifted,
     );
   }
 

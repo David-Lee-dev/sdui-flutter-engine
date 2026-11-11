@@ -30,7 +30,8 @@ final class MorphDirective extends Directive {
   /// Tween length; `null` takes the settle time of a spring curve name.
   final int? durationMs;
 
-  /// A curve name or a `[x1, y1, x2, y2]` cubic-bezier list.
+  /// A curve name, a `[x1, y1, x2, y2]` cubic-bezier list or a list of
+  /// `{until, to, curve}` segments.
   final Object curve;
   final int delayMs;
   final bool repeat;
@@ -56,13 +57,27 @@ final class MorphDirective extends Directive {
       other.reverse == reverse &&
       other.spring == spring;
 
-  static bool _sameCurve(Object a, Object b) {
-    if (a is! List || b is! List) return a == b;
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
+  /// Compares curve values by content: a bezier list, or a segment list
+  /// whose maps may nest a curve value.
+  static bool _sameCurve(Object? a, Object? b) {
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!_sameCurve(a[i], b[i])) return false;
+      }
+      return true;
     }
-    return true;
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final entry in a.entries) {
+        if (!b.containsKey(entry.key) ||
+            !_sameCurve(entry.value, b[entry.key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return a == b;
   }
 
   /// Returns external binding roots used by this directive.

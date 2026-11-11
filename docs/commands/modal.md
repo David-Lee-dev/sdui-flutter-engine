@@ -37,7 +37,7 @@ Sdui.initialize(
 | --- | --- | --- |
 | `barrierColor` | `Color(0x8A000000)` | Backdrop color. |
 | `borderRadius` | `16` | Body radius: top corners for sheets, all corners for dialogs. |
-| `sheetMaxHeightFactor` | `0.8` | Sheet height cap as a fraction of keyboard-adjusted height. |
+| `sheetMaxHeightFactor` | `0.8` | Sheet height cap as a fraction of keyboard-adjusted height, including the bottom inset area. |
 | `dialogMaxHeightFactor` | `0.9` | Dialog height cap as a fraction of keyboard-adjusted height. |
 | `dialogWidthFactor` | `0.9` | Dialog width as a fraction of viewport width. |
 
@@ -64,3 +64,23 @@ _type: modal
 method: close
 return: { confirmed: true }
 ```
+
+## Bottom-sheet insets
+
+Since 0.25.0 a bottom sheet's surface (its `background` and top radius) reaches
+the bottom edge of the screen, behind the home indicator, and the frame lifts the
+template body above the bottom inset inside that surface. Templates need no
+bottom `safe_area`: the inset is already consumed, so a `safe_area` or a vertical
+scroll view inside the sheet adds nothing. Left/right safe areas are still
+applied, and dialogs keep their surrounding `SafeArea`.
+
+A `background: none` sheet paints its own card, so the frame leaves the bottom
+inset to the template: the transparent body reaches the bottom edge and the
+template receives `MediaQuery.padding.bottom` like a scaffold body. Put the
+`safe_area` (`top: false`) inside the card so the card color runs behind the
+home indicator while its controls stay above it.
+
+The sheet sits above the keyboard when it is open. Flutter then reports bottom
+padding 0, so no inset is added. The height cap stays
+`sheetMaxHeightFactor × (screen height − keyboard height)` and includes the
+inset area.
