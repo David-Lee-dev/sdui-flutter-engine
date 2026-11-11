@@ -1,6 +1,6 @@
 # Media
 
-The `image` and `video` widgets delegate source resolution to app-installed policies while retaining template-facing presentation behavior in the engine.
+The `image`, `video`, and `model_3d` widgets delegate source resolution to app-installed policies while retaining template-facing presentation behavior in the engine.
 
 ## Images
 
@@ -43,3 +43,19 @@ fit: contain
 on_end: finished
 ```
 
+## 3D models
+
+See the full [`model_3d` widget reference](widgets/custom/model_3d.md). `Model3dSource.controllerFor(Model3dRequest(src))` returns an unloaded `SduiModel3dController` — a renderer-free contract, so a webview `<model-viewer>`, Filament, or SceneKit implementation can back it. The package ships no renderer: `model3dSource` is optional, and without it `model_3d` renders its `poster` image only. `Model3dSource.warmUp()` runs once in the background after boot, for expensive first-time setup before the first `model_3d` mounts.
+
+The widget mounts the controller's view under the poster at once, calls `initialize()`, reads `clips`, and drives `play(clip, loop:, crossfade:)` and `stop()` from the template's states. A non-looping clip holds its last frame and advances `Model3dPlayback.completions`; the engine detects a clip end by that counter. The engine owns gestures and the camera: it calls `setCamera(Model3dCamera(yaw, pitch, zoom))` right after creation and on every frame the camera moves, and the view never receives pointers, so every renderer moves the same way for the same template. For `progress` the engine also owns the playhead: it reads `clipDuration(clip)` and calls `setPose(clip, time)` on every frame the playhead moves. A failed `initialize()` is final — the widget disposes the controller and asks for a new one to retry — and `dispose()` may arrive while calls are still in flight; the contract's doc comments state the concurrency rules. Changing `src` disposes and replaces the controller; changing `state`, `camera`, `controls` or `auto_rotate` reuses it.
+
+```yaml
+_type: model_3d
+src: /assets/character.glb
+poster: /assets/character.png
+height: 200
+state: '${mood}'
+states:
+  idle: { clip: Idle, loop: true }
+  jump: { clip: Jump, next: idle }
+```

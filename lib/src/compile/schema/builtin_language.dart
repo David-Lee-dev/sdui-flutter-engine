@@ -576,6 +576,11 @@ abstract final class BuiltinLanguage {
       produces: LayoutProtocol.box,
       childProtocol: LayoutProtocol.box,
     ),
+    'model_3d': WidgetSchema(
+      kind: WidgetKind.action,
+      produces: LayoutProtocol.box,
+      childProtocol: LayoutProtocol.box,
+    ),
     'visibility': WidgetSchema(
       kind: WidgetKind.eager,
       produces: LayoutProtocol.box,

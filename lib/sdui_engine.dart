@@ -35,6 +35,13 @@ export 'src/contract/telemetry_sink.dart'
     show TelemetryEvent, TelemetryReservation, TelemetrySink;
 export 'src/contract/video_source.dart'
     show SduiVideoController, VideoPlayback, VideoRequest, VideoSource;
+export 'src/contract/model_3d_source.dart'
+    show
+        Model3dCamera,
+        Model3dPlayback,
+        Model3dRequest,
+        Model3dSource,
+        SduiModel3dController;
 
 // ── Optional-seam contracts and their package defaults ──────────────────────
 export 'src/runtime/media/asset_image_source.dart' show AssetImageSource;
