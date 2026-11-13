@@ -9,3 +9,6 @@ build/
 !/.codex/agents/
 /.codex/agents/*
 !/.codex/agents/*.toml
+
+# FVM Version Cache
+.fvm/

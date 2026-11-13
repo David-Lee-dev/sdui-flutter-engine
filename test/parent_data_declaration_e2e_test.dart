@@ -117,20 +117,13 @@ void main() {
     }
   });
 
-  testWidgets('Flutter 의 IndexedStack 은 자식과의 사이에 위젯을 넣어 Positioned 를 못 놓는다', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const Directionality(
-        textDirection: TextDirection.ltr,
-        child: IndexedStack(
-          children: [Positioned(left: 0, top: 0, child: SizedBox())],
-        ),
-      ),
-    );
+  // Flutter 3.38 의 IndexedStack 은 자식과의 사이에 위젯을 넣어 Positioned 를 못
+  // 놓는다(3.50 은 놓는다). 엔진은 지원하는 모든 Flutter 에서 같은 템플릿이 통하도록
+  // 받지 않는다.
+  test('indexed_stack 은 자식의 parent data 를 받지 않는다', () {
     expect(
-      tester.takeException().toString(),
-      contains('Incorrect use of ParentDataWidget'),
+      WidgetFactory.schemaOf('indexed_stack')!.childParentData,
+      ParentDataKind.none,
     );
   });
 }

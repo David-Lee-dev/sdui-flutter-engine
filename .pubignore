@@ -2,6 +2,8 @@
 .dart_tool/
 build/
 *.iml
+.fvm/
+.fvmrc
 
 # The renderer packages publish on their own.
 packages/
