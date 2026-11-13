@@ -1,8 +1,8 @@
 # sdui_model_filament
 
 Filament renderer for the [sdui_engine](../../README.md) `model_3d` widget,
-through [`thermion_flutter`](https://pub.dev/packages/thermion_flutter) 0.5
-(Filament 1.69.1).
+through [`thermion_flutter`](https://pub.dev/packages/thermion_flutter) 0.6
+(Filament 1.77.2).
 
 ```dart
 Sdui.initialize(
@@ -47,7 +47,7 @@ Sdui.initialize(
 
 Build: thermion uses Dart build hooks. The first build downloads prebuilt
 Filament static libraries from thermion's Cloudflare R2 bucket and caches
-them. iOS 13+.
+them. Requires Dart 3.12+, Flutter 3.44+ and iOS 13+.
 
 Status: Dart surface covered by widget tests (view before load, overlay,
 playback state, byte and disk caches, render gate). The native path runs on a

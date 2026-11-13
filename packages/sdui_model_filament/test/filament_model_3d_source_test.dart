@@ -13,6 +13,7 @@ import 'package:thermion_flutter/thermion_flutter.dart' as thermion;
 /// once released.
 final class _Native {
   final log = <String>[];
+  final calls = <Invocation>[];
 
   /// The model's clips in native order: name and seconds.
   List<(String, double)> clips = const [('Wave', 1.0), ('Jump', 1.0)];
@@ -54,14 +55,26 @@ final class _Viewer implements thermion.ThermionViewer {
       native.call<thermion.Camera>('getActiveCamera', _Camera(native));
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => switch (_nameOf(invocation)) {
-    // Its parameters change across thermion versions; match it by name.
-    'loadGltfFromBuffer' => native.call<thermion.ThermionAsset>(
-      'loadGltfFromBuffer',
-      _asset,
-    ),
-    final name => native.call<void>(name, null),
-  };
+  dynamic noSuchMethod(Invocation invocation) {
+    native.calls.add(invocation);
+    return switch (_nameOf(invocation)) {
+      // Its parameters change across thermion versions; match it by name.
+      'loadGltfFromBuffer' => native.call<thermion.ThermionAsset>(
+        'loadGltfFromBuffer',
+        _asset,
+      ),
+      'setBackgroundColor' => native.call<thermion.Skybox>(
+        'setBackgroundColor',
+        _Skybox(),
+      ),
+      final name => native.call<void>(name, null),
+    };
+  }
+}
+
+final class _Skybox implements thermion.Skybox {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 final class _View implements thermion.View {
@@ -70,8 +83,10 @@ final class _View implements thermion.View {
   final _Native native;
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      native.call<void>(_nameOf(invocation), null);
+  dynamic noSuchMethod(Invocation invocation) {
+    native.calls.add(invocation);
+    return native.call<void>(_nameOf(invocation), null);
+  }
 }
 
 final class _Camera implements thermion.Camera {
@@ -83,8 +98,10 @@ final class _Camera implements thermion.Camera {
   Future<double> getFocalLength() => native.call('getFocalLength', 28.0);
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      native.call<void>(_nameOf(invocation), null);
+  dynamic noSuchMethod(Invocation invocation) {
+    native.calls.add(invocation);
+    return native.call<void>(_nameOf(invocation), null);
+  }
 }
 
 /// A model with [_Native.clips], by default a one-second `Wave` and `Jump`.
@@ -105,6 +122,7 @@ final class _Asset implements thermion.ThermionAsset {
 
   @override
   dynamic noSuchMethod(Invocation invocation) {
+    native.calls.add(invocation);
     final name = _nameOf(invocation);
     if (name.contains('GltfAnimation')) {
       native.indices.add('$name ${invocation.positionalArguments.first}');
@@ -210,7 +228,9 @@ void main() {
     late _Native native;
     late Completer<void> bytes;
 
-    Future<FilamentModel3dController> controller() async {
+    Future<FilamentModel3dController> controller({
+      double iblIntensity = 30000,
+    }) async {
       native = _Native();
       bytes = Completer<void>();
       return await FilamentModel3dSource(
@@ -220,6 +240,7 @@ void main() {
             }),
             baseUrl: Uri.parse('http://host/'),
             diskCache: false,
+            iblIntensity: iblIntensity,
             platform: _Platform(native),
           ).controllerFor(const Model3dRequest(src: '/a.glb'))
           as FilamentModel3dController;
@@ -231,6 +252,127 @@ void main() {
       await model.initialize();
       return model;
     }
+
+    testWidgets('계약: 투명 배경과 지정한 IBL을 모델보다 먼저 설정한다', (tester) async {
+      final model = await controller(iblIntensity: 12345);
+      bytes.complete();
+      await model.initialize();
+
+      final background = native.calls.singleWhere(
+        (call) => call.memberName == #setBackgroundColor,
+      );
+      expect(background.positionalArguments, [0, 0, 0, 0]);
+      final blend = native.calls.singleWhere(
+        (call) => call.memberName == #setBlendMode,
+      );
+      expect(blend.positionalArguments, [thermion.BlendMode.transparent]);
+      final ibl = native.calls.singleWhere(
+        (call) => call.memberName == #loadIbl,
+      );
+      expect(ibl.positionalArguments, [FilamentModel3dSource.iblAsset]);
+      expect(ibl.namedArguments[#intensity], 12345);
+      expect(
+        native.log,
+        containsAllInOrder([
+          'setBackgroundColor',
+          'setBlendMode',
+          'loadIbl',
+          'loadGltfFromBuffer',
+          'transformToUnitCube',
+          'getGltfAnimationNames',
+        ]),
+      );
+      expect(model.stats.error, isNull);
+      await model.dispose();
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('계약: loop와 crossfade를 초 단위로 전달한다', (tester) async {
+      final model = await loaded(tester);
+      await model.play(
+        'Wave',
+        loop: true,
+        crossfade: const Duration(microseconds: 125000),
+      );
+      await model.play(
+        'Jump',
+        loop: false,
+        crossfade: const Duration(milliseconds: 250),
+      );
+
+      final plays = native.calls
+          .where((call) => call.memberName == #playGltfAnimation)
+          .toList();
+      expect(plays.map((call) => call.positionalArguments), [
+        [0],
+        [1],
+      ]);
+      expect(plays.map((call) => call.namedArguments[#loop]), [true, false]);
+      expect(plays.map((call) => call.namedArguments[#crossfade]), [
+        0.125,
+        0.25,
+      ]);
+      await model.dispose();
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('계약: 재생을 멈춘 뒤 포즈의 마이크로초를 초로 전달한다', (tester) async {
+      final model = await loaded(tester);
+      await model.play('Wave', loop: true);
+      native.calls.clear();
+      model.setPose('Wave', const Duration(microseconds: 123456));
+      await tester.pump();
+
+      final animation = native.calls
+          .where((call) => _nameOf(call).contains('GltfAnimation'))
+          .toList();
+      expect(animation.map((call) => call.memberName), [
+        #stopGltfAnimation,
+        #setGltfAnimationTime,
+      ]);
+      expect(animation.last.positionalArguments, [0, 0.123456]);
+      expect(model.playback.isPlaying, isFalse);
+      expect(model.playback.completions, 0);
+      await model.dispose();
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('계약: 로드 전과 호출 중 변경한 최신 카메라를 적용한다', (tester) async {
+      final model = await controller();
+      model.setCamera(const Model3dCamera(yaw: 90, zoom: 2));
+      bytes.complete();
+      await model.initialize();
+      final first =
+          native.calls
+                  .lastWhere((call) => call.memberName == #lookAt)
+                  .positionalArguments
+                  .first
+              as thermion.Vector3;
+      expect(first.x, greaterThan(0));
+      expect(first.y, closeTo(0, 1e-9));
+      expect(first.z, closeTo(0, 1e-9));
+
+      native.calls.clear();
+      native.hold('lookAt');
+      model.setCamera(const Model3dCamera(yaw: 0));
+      await tester.pump();
+      model.setCamera(const Model3dCamera(yaw: 45));
+      model.setCamera(const Model3dCamera(yaw: -90, zoom: 2));
+      native.release('lookAt');
+      await tester.pump();
+
+      final positions = native.calls
+          .where((call) => call.memberName == #lookAt)
+          .map((call) => call.positionalArguments.first as thermion.Vector3)
+          .toList();
+      expect(positions, hasLength(2));
+      expect(positions.first.z, closeTo(first.x * 2, 1e-9));
+      expect(positions.last.x, closeTo(-first.x, 1e-9));
+      expect(positions.last.y, closeTo(0, 1e-9));
+      expect(positions.last.z, closeTo(0, 1e-9));
+      await model.dispose();
+      await tester.pump(const Duration(seconds: 1));
+    });
 
     testWidgets('모델을 받는 중에 버리면 뷰어를 풀고 그 뒤로는 뷰어를 건드리지 않는다', (tester) async {
       final model = await controller();

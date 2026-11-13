@@ -53,9 +53,8 @@ final class FilamentModel3dSource extends Model3dSource {
     int cachedModels = 4,
     bool diskCache = true,
     this.debugOverlay = const bool.fromEnvironment('SDUI_MODEL_DEBUG'),
-    @visibleForTesting FilamentPlatform platform = const FilamentPlatform(),
-  }) : _platform = platform,
-       _models = ModelBytesCache(
+    @visibleForTesting this._platform = const FilamentPlatform(),
+  }) : _models = ModelBytesCache(
          baseUrl: baseUrl,
          client: client,
          bundle: bundle,

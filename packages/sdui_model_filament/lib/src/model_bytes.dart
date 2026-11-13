@@ -27,12 +27,11 @@ import 'model_disk_cache.dart';
 final class ModelBytesCache {
   ModelBytesCache({
     required this.baseUrl,
-    required http.Client client,
-    AssetBundle? bundle,
+    required this._client,
+    this._bundle,
     this.maxEntries = 4,
     this.disk,
-  }) : _client = client,
-       _bundle = bundle;
+  });
 
   final Uri baseUrl;
 

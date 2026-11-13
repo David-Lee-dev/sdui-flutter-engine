@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- Upgrade to `thermion_flutter` ^0.6.1 (Filament 1.77.2).
+- Require Dart 3.12+ and Flutter 3.44+; iOS 13+ stays supported.
+- Preserve the renderer API, loading, playback, camera and render-gate behavior.
+
 ## 0.1.0
 
 - `FilamentModel3dSource` / `FilamentModel3dController`: a `Model3dSource` for the
