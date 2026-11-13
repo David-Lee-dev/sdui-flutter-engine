@@ -21,6 +21,10 @@ enum LifecycleTrigger {
 
   /// Triggers immediately before disposal as fire-and-forget work.
   dispose,
+
+  /// Triggers when a system back would close the app: nothing in the app
+  /// handled it and the scope is visible (as for [remount]).
+  exitBack,
 }
 
 /// Schedules a named [action] for a lifecycle [trigger].

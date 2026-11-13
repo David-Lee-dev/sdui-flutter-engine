@@ -1,12 +1,12 @@
 # Lifecycle hooks
 
-`_scope._lifecycle` schedules named scope actions at five runtime moments.
+`_scope._lifecycle` schedules named scope actions at six runtime moments.
 
 ## Hook schema
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `on` | string | required | `mount`, `render`, `remount`, `interval`, or `dispose`. |
+| `on` | string | required | `mount`, `render`, `remount`, `interval`, `dispose`, or `exit_back`. |
 | `action` | string | required | Non-empty visible action name. |
 | `delay` | non-negative milliseconds | `0` | Delay before the firing; invalid values fall back to zero. |
 | `every` | positive milliseconds | required for `interval` | Repetition period; rejected for every other trigger. |
@@ -37,6 +37,7 @@ Here `op` is application vocabulary understood by the configured `NetworkClient`
 - `remount` fires when a previously obscured scope becomes visible again or when the app returns from paused/hidden state. Visibility combines the current route with `TickerMode`, covering outer navigators and inactive shell branches.
 - `interval` fires once after `delay` and then periodically every `every` while mounted. Its high-frequency engine logging is suppressed.
 - `dispose` dispatches immediately before action-host invalidation as fire-and-forget work.
+- `exit_back` (since 0.28.0, needs `lifecycle_exit_back_v1` in root `_requires`) fires when an Android system back would close the app — nothing in the app handled it — while the scope is visible in the same sense as `remount` and not exiting. The back is then consumed and the app stays. See [Exit back](exit-back.md).
 
 Timers are cancelled on disposal. Updating the lifecycle list cancels old schedules and starts the new set. Mount/render hooks therefore run again when lifecycle configuration is replaced on an existing scope; ordinary widget rebuilds do not restart them. A genuinely remounted/key-changed scope is a fresh scope and runs initial hooks again.
 

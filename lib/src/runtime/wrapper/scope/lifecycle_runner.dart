@@ -5,14 +5,16 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:sdui_engine/src/ir/model/lifecycle_hook.dart';
+import '../../exit_back_registry.dart';
 import '../../log/engine_log.dart';
 import '../../telemetry/telemetry.dart';
 import '../../widget/contract/action_sink.dart';
 import 'action_host.dart';
 
 /// Runs a scope's lifecycle hooks — the mount/render/interval/remount/dispose
-/// state machine, extracted from the scope widget so it has one job and can
-/// be exercised without mounting a widget tree.
+/// state machine plus `exit_back` candidacy and firing, extracted from the
+/// scope widget so it has one job and can be exercised without mounting a
+/// widget tree.
 ///
 /// The owning [State] stays responsible for what only a widget can know:
 /// visibility (context) and app-lifecycle observation (a
@@ -61,9 +63,14 @@ final class LifecycleRunner {
   bool _wasObscured = false;
   bool _inBackground = false;
 
+  /// The owner's last reported visibility.
+  bool _visible = false;
+
   /// Reacts to the owner's visibility: the first sighting starts the hooks;
   /// later obscured -> visible transitions fire `remount`.
   void visibilityChanged(bool visible) {
+    _visible = visible;
+    _syncExitBack();
     if (hooks.isEmpty || suspended) return;
     if (!_started) {
       _started = true;
@@ -103,10 +110,12 @@ final class LifecycleRunner {
       awaitsMount = _start();
     }
     if (!awaitsMount) _settleMount?.call();
+    _syncExitBack();
   }
 
   /// Fires `dispose` hooks (the host must still be live) and stops timers.
   void dispose() {
+    ExitBackRegistry.remove(_fireExitBack);
     suspended = false;
     fireByTrigger(LifecycleTrigger.dispose);
     _cancelTimers();
@@ -177,6 +186,7 @@ final class LifecycleRunner {
           _startInterval(hook);
         case LifecycleTrigger.remount:
         case LifecycleTrigger.dispose:
+        case LifecycleTrigger.exitBack:
           break;
       }
     }
@@ -263,8 +273,24 @@ final class LifecycleRunner {
     );
   }
 
-  /// Fires every hook of [trigger] (remount and dispose have no scheduling
-  /// of their own beyond each hook's `delay`).
+  /// Keeps this scope an `exit_back` candidate exactly while it is visible,
+  /// not exiting and declares an `exit_back` hook.
+  void _syncExitBack() {
+    final candidate =
+        _visible &&
+        !suspended &&
+        hooks.any((hook) => hook.trigger == LifecycleTrigger.exitBack);
+    if (candidate) {
+      ExitBackRegistry.add(_fireExitBack);
+    } else {
+      ExitBackRegistry.remove(_fireExitBack);
+    }
+  }
+
+  void _fireExitBack() => fireByTrigger(LifecycleTrigger.exitBack);
+
+  /// Fires every hook of [trigger] (remount, dispose and exit_back have no
+  /// scheduling of their own beyond each hook's `delay`).
   void fireByTrigger(LifecycleTrigger trigger) {
     for (final hook in hooks) {
       if (hook.trigger == trigger) _fire(hook);
@@ -279,6 +305,7 @@ final class LifecycleRunner {
       LifecycleTrigger.remount => ActionOrigin.remount,
       LifecycleTrigger.interval => ActionOrigin.interval,
       LifecycleTrigger.dispose => ActionOrigin.dispose,
+      LifecycleTrigger.exitBack => ActionOrigin.exitBack,
     },
   );
 }

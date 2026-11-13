@@ -17,6 +17,7 @@ import '../contract/video_source.dart';
 import '../runtime/motion/_base.dart';
 import '../runtime/transition/_base.dart';
 import '../presentation/presentation.dart';
+import 'exit_back_dispatcher.dart';
 import 'screen_page.dart';
 import '../impl/noop_telemetry_sink.dart';
 import '../engine.dart';
@@ -153,6 +154,10 @@ final class Sdui {
   ///   branches so tab state survives switches),
   /// - custom transitions, guards, or deep-link aliases.
   ///
+  /// A system back that nothing in the app handles fires the `exit_back`
+  /// hooks of the visible scopes instead of closing the app; without one the
+  /// app closes as usual.
+  ///
   /// @param initialLocation First screen, `/screens/home` by default.
   /// @param routes App routes matched before the generic screen route.
   /// @param loader Screen loader override; defaults to [screenLoader].
@@ -187,7 +192,7 @@ final class Sdui {
         );
       },
     );
-    return GoRouter(
+    return ExitBackRouter(
       initialLocation: initialLocation,
       routes: [...routes, route],
     );

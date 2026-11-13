@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.28.0
+
+- Added the `_scope._lifecycle` trigger `exit_back` (root `_requires`
+  `lifecycle_exit_back_v1`, required). `Sdui.router` now runs the normal back
+  flow first — navigators and shell branches pop, `PopScope(canPop: false)`
+  blocks, go_router `onExit` vetoes — and, when nothing handled the back,
+  fires the `exit_back` hooks of every visible scope (visible as for
+  `remount`) and keeps the app open. Without a visible hook the app closes
+  as before. A hook whose action is still running is deduplicated by the
+  action's `_dedupe`; the back is still consumed. The action origin is
+  `exit_back`. What happens next (a confirm modal, ...) is template
+  behavior; closing the app after a confirmation needs an app-provided
+  command. On Android 13+ the app must keep
+  `SystemNavigator.setFrameworkHandlesBack(true)` for the OS to deliver the
+  back to Flutter. See docs/exit-back.md.
+
 ## 0.27.0
 
 - Added the `model_3d` widget: a policy-backed 3D model driven by a state → clip

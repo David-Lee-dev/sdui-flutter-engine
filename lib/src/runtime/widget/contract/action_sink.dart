@@ -51,6 +51,7 @@ abstract final class ActionOrigin {
   static const remount = 'remount';
   static const interval = 'interval';
   static const dispose = 'dispose';
+  static const exitBack = 'exit_back';
   static const then = 'then';
   static const error = 'error';
   static const dismiss = 'dismiss';

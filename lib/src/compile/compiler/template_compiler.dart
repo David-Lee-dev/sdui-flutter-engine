@@ -126,6 +126,8 @@ final class TemplateCompiler {
     // 0.26.0: circular progress stroke_cap. Declare-only: older engines
     // ignore the property and preserve Flutter's default cap.
     'progress_stroke_cap_v1',
+    // 0.28.0: the `_lifecycle` `exit_back` trigger.
+    'lifecycle_exit_back_v1',
   };
 
   /// Builds the directive tree for a template root.
@@ -183,7 +185,8 @@ final class TemplateCompiler {
   /// `_skeleton_style` when `skeleton_style_v1` is not declared, and at the
   /// first node with `_skeleton: merge` when `skeleton_merge_v1` is not, and
   /// at the first `anchored_overlay` or `anchored` node, or `_motion` with
-  /// `exit_delay`, when `anchored_overlay_v1` is not.
+  /// `exit_delay`, when `anchored_overlay_v1` is not, and at the first scope
+  /// with an `exit_back` hook when `lifecycle_exit_back_v1` is not.
   static Directive _gateFeatures(Directive root, List<Object?> requires) {
     if (!requires.contains('wait_v1')) {
       final path = _firstPath(
@@ -235,6 +238,25 @@ final class TemplateCompiler {
           path,
           '"anchored_overlay", "anchored" and "_motion" "exit_delay" need '
           '"anchored_overlay_v1" in "_requires".',
+        );
+      }
+    }
+    if (!requires.contains('lifecycle_exit_back_v1')) {
+      final path = _firstPath(
+        root,
+        (d) =>
+            d is ScopeDirective &&
+                d.lifecycle.any(
+                  (hook) => hook.trigger == LifecycleTrigger.exitBack,
+                )
+            ? d.path
+            : null,
+      );
+      if (path != null) {
+        throw InvalidTemplateException(
+          path,
+          '"_lifecycle" "exit_back" needs "lifecycle_exit_back_v1" in '
+          '"_requires".',
         );
       }
     }
@@ -749,6 +771,7 @@ final class TemplateCompiler {
     'remount': LifecycleTrigger.remount,
     'interval': LifecycleTrigger.interval,
     'dispose': LifecycleTrigger.dispose,
+    'exit_back': LifecycleTrigger.exitBack,
   };
 
   static Directive _wrapScope(

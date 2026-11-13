@@ -209,6 +209,11 @@ class ScopeState extends State<Scope> with WidgetsBindingObserver {
         _observerRegistered = false;
       }
       _lifecycle.reconcile();
+      // A hookless scope never read its visibility (didChangeDependencies
+      // returns early), so a scope gaining hooks in place reads it now.
+      if (oldWidget.lifecycle.isEmpty && widget.lifecycle.isNotEmpty) {
+        _lifecycle.visibilityChanged(_isVisible());
+      }
     }
     final newSeed = widget.config.state;
     if (JsonValue.structurallyEqual(_acceptedSeed, newSeed)) return;
