@@ -52,7 +52,24 @@ Sdui.initialize(
 
 Build: thermion uses Dart build hooks. The first build downloads prebuilt
 Filament static libraries from thermion's Cloudflare R2 bucket and caches
-them. Requires Dart 3.12+, Flutter 3.44+ and iOS 13+.
+them. Requires Dart 3.12+, Flutter 3.44+ and iOS 16+ (sdui_engine's minimum).
+
+Android: thermion_flutter 0.6.1 compiles against SDK 33, below what its AndroidX
+dependencies require, so the app's `android/build.gradle.kts` raises it:
+
+```kotlin
+subprojects {
+    if (name == "thermion_flutter") {
+        afterEvaluate {
+            extensions.configure<com.android.build.gradle.LibraryExtension>("android") {
+                compileSdk = 36
+            }
+        }
+    }
+}
+```
+
+Put this block before `project.evaluationDependsOn(":app")`.
 
 Status: Dart surface covered by widget tests (view before load, overlay,
 playback state, byte and disk caches, render gate). The native path runs on a
