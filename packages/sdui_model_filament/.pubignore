@@ -1,0 +1,9 @@
+# A .pubignore replaces .gitignore for pub, so its entries repeat here.
+.dart_tool/
+build/
+pubspec.lock
+.flutter-plugins-dependencies
+pubspec_overrides.yaml
+
+# The measurement app runs against this checkout, not the published engine.
+example/
