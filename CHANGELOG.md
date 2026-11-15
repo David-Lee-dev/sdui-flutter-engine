@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.29.0
+
+- Model-hit actions through optional `Model3dTapController`;
+  `model_3d_tap_v1` is declare-only. Filament picking respects view DPR.
+
+- Model morph expressions with eased weights, jittered blink,
+  point/camera/pointer look-at and a secondary clip layer with completion actions.
+  Optional `Model3dMotionController` preserves implements-based controllers;
+  `model_3d_motion_v1` is declare-only. Hidden views pause expression work.
+
+- Model outfit show/hide, material recolouring and cached socket
+  props with cut/pop/drop/dissolve swaps. Immutable optional outfit capability
+  preserves existing controllers; changes keep the primary model and clips.
+  `model_3d_outfit_v1` is declare-only.
+
+- `model_3d` scene extras, eased point/node camera targets and
+  bounded two-finger pan. Optional `Model3dSceneController` with engine-internal
+  dispatch preserves existing controller implementations; extras update without
+  primary reload and pause while hidden. `model_3d_scene_v1` is declare-only.
+
+- `model_3d` lighting, contact/cast shadows, quality and exposure
+  update without reload through renderer-neutral `Model3dLook` / optional
+  `Model3dLookController`.
+  Existing 0.28 implements-based controllers remain compatible; capability
+  dispatch extensions stay internal. Look-at targets use `Model3dLookAtTarget`.
+  `model_3d_look_v1` is a declare-only feature.
+
+- `Model3dSource.frameRate` paces `model_3d` camera and progress
+  motion at the renderer rate without scheduling Flutter frames. Null keeps
+  display-rate vsync; hidden views pause and resume without a jump.
+
 ## 0.28.0
 
 - Added the `_scope._lifecycle` trigger `exit_back` (root `_requires`

@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sdui_engine/src/contract/model_3d_source.dart';
 
 import '../../../../util/props_resolver.dart';
+import 'model_3d_frame_clock.dart';
+import 'model_3d_props.dart';
 
 /// Which drag axes rotate the camera.
 enum Model3dRotate { none, horizontal, vertical, free }
@@ -20,12 +21,16 @@ final class Model3dControls {
     this.sensitivity = 1,
     this.inertia = true,
     this.returnAfter,
+    this.pan = false,
+    this.maxPan = 0.5,
   });
 
   /// Gestures off: the model passes every pointer to its ancestors.
   static const none = Model3dControls();
 
   final Model3dRotate rotate;
+  final bool pan;
+  final double maxPan;
 
   /// Pitch limits in degrees.
   final double minPitch;
@@ -51,7 +56,7 @@ final class Model3dControls {
     return min != null && max != null && max > min;
   }
 
-  bool get active => rotate != Model3dRotate.none || zooms;
+  bool get active => rotate != Model3dRotate.none || zooms || pan;
 
   @override
   bool operator ==(Object other) =>
@@ -63,7 +68,9 @@ final class Model3dControls {
       other.maxZoom == maxZoom &&
       other.sensitivity == sensitivity &&
       other.inertia == inertia &&
-      other.returnAfter == returnAfter;
+      other.returnAfter == returnAfter &&
+      other.pan == pan &&
+      other.maxPan == maxPan;
 
   @override
   int get hashCode => Object.hash(
@@ -75,6 +82,8 @@ final class Model3dControls {
     sensitivity,
     inertia,
     returnAfter,
+    pan,
+    maxPan,
   );
 
   /// Parses `controls`; `interactive: true` without `controls` means free
@@ -100,6 +109,8 @@ final class Model3dControls {
     final returnMs = PropsResolver.integer(raw['return_duration']);
     return Model3dControls(
       rotate: rotate,
+      pan: PropsResolver.flag(raw['pan']) ?? false,
+      maxPan: math.max(0, PropsResolver.number(raw['max_pan']) ?? 0.5),
       minPitch: math.min(minPitch, maxPitch),
       maxPitch: math.max(minPitch, maxPitch),
       minZoom: zooms ? math.min(minZoom ?? 1, maxZoom ?? 1) : null,
@@ -119,11 +130,18 @@ final class Model3dControls {
   if (raw is! Map) {
     return (const Model3dCamera(), const Duration(milliseconds: 300));
   }
+  final point = parseModel3dPoint(raw['target']);
   return (
     Model3dCamera(
       yaw: PropsResolver.number(raw['yaw']) ?? 0,
       pitch: PropsResolver.number(raw['pitch']) ?? 0,
       zoom: PropsResolver.number(raw['zoom']) ?? 1,
+      target: switch (raw['target']) {
+        final String node when node.trim().isNotEmpty => Model3dTarget.node(
+          node,
+        ),
+        _ => point == null ? const Model3dTarget() : Model3dTarget.point(point),
+      },
     ),
     Duration(milliseconds: PropsResolver.integer(raw['duration']) ?? 300),
   );
@@ -144,13 +162,14 @@ double parseAutoRotate(Object? raw) {
 final class Model3dCameraRig {
   Model3dCameraRig({
     required TickerProvider vsync,
+    int? frameRate,
     required Model3dCamera rest,
     required this.controls,
     required this.autoRotate,
     required this.onChanged,
   }) : _restTo = rest,
        _restFrom = rest {
-    _ticker = vsync.createTicker(_tick);
+    _ticker = Model3dFrameClock(vsync: vsync, rate: frameRate, onTick: _tick);
     _syncTicker();
   }
 
@@ -167,7 +186,7 @@ final class Model3dCameraRig {
 
   final ValueChanged<Model3dCamera> onChanged;
 
-  late final Ticker _ticker;
+  late final Model3dFrameClock _ticker;
 
   /// The previous tick's time; null until the next tick sets it, which then
   /// moves nothing.
@@ -183,6 +202,9 @@ final class Model3dCameraRig {
   double _pitch = 0;
   double _zoom = 1;
   double _zoomAtStart = 1;
+  Offset _pan = Offset.zero;
+  Offset _returnPan = Offset.zero;
+  bool _twoPointers = false;
 
   double _yawVelocity = 0;
   double _pitchVelocity = 0;
@@ -200,6 +222,7 @@ final class Model3dCameraRig {
       yaw: _lerp(_restFrom.yaw, _restTo.yaw, t),
       pitch: _lerp(_restFrom.pitch, _restTo.pitch, t),
       zoom: _lerp(_restFrom.zoom, _restTo.zoom, t),
+      target: Model3dTarget.lerp(_restFrom.target, _restTo.target, t),
     );
   }
 
@@ -212,6 +235,8 @@ final class Model3dCameraRig {
       yaw: _wrap(base.yaw + _spin + _yaw),
       pitch: base.pitch + _pitch,
       zoom: base.zoom * _zoom,
+      target: base.target,
+      pan: _pan,
     );
   }
 
@@ -242,6 +267,7 @@ final class Model3dCameraRig {
 
   void dragStart() {
     _dragging = true;
+    _twoPointers = false;
     _returning = false;
     _yawVelocity = 0;
     _pitchVelocity = 0;
@@ -267,8 +293,19 @@ final class Model3dCameraRig {
     _emit();
   }
 
+  /// Accumulates a view-plane drag in units of the viewport's shorter side.
+  void panUpdate(Offset delta, Size viewport) {
+    _twoPointers = true;
+    if (!controls.pan || viewport.shortestSide <= 0) return;
+    _pan += delta / viewport.shortestSide;
+    final distance = _pan.distance;
+    if (distance > controls.maxPan) _pan *= controls.maxPan / distance;
+    _emit();
+  }
+
   /// Scales the zoom by [scale] relative to the gesture start.
   void pinchUpdate(double scale) {
+    _twoPointers = true;
     if (!controls.zooms) return;
     final base = rest.zoom;
     _zoom =
@@ -287,7 +324,8 @@ final class Model3dCameraRig {
       _returning = true;
       _returnT = 0;
       _returnFrom = (_yaw, _pitch, _zoom);
-    } else if (controls.inertia) {
+      _returnPan = _pan;
+    } else if (controls.inertia && !_twoPointers) {
       final rate = degreesPerPixel * controls.sensitivity;
       if (_rotatesYaw) _yawVelocity = -velocity.dx * rate;
       if (_rotatesPitch) _pitchVelocity = velocity.dy * rate;
@@ -349,6 +387,7 @@ final class Model3dCameraRig {
       _yaw = _returnFrom.$1 * k;
       _pitch = _returnFrom.$2 * k;
       _zoom = 1 + (_returnFrom.$3 - 1) * k;
+      _pan = _returnPan * k;
       if (_returnT >= 1) _returning = false;
     }
 
@@ -386,6 +425,8 @@ final class Model3dCameraRig {
   /// the hidden time at once.
   void resume() => _last = null;
 
+  void setClockMuted(bool muted) => _ticker.muted = muted;
+
   void dispose() => _ticker.dispose();
 }
 
@@ -412,7 +453,7 @@ final class Model3dGestureLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final on = enabled && controls.active;
-    final zooms = on && controls.zooms;
+    final zooms = on && (controls.zooms || controls.pan);
     final rotate = on && !zooms ? controls.rotate : Model3dRotate.none;
     final horizontal = rotate == Model3dRotate.horizontal;
     final vertical = rotate == Model3dRotate.vertical;
@@ -424,6 +465,10 @@ final class Model3dGestureLayer extends StatelessWidget {
           ? (details) {
               if (details.pointerCount > 1) {
                 rig.pinchUpdate(details.scale);
+                rig.panUpdate(
+                  details.focalPointDelta,
+                  context.size ?? Size.zero,
+                );
               } else {
                 rig.dragUpdate(details.focalPointDelta);
               }

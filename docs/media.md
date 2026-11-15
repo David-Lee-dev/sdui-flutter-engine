@@ -45,6 +45,13 @@ on_end: finished
 
 ## 3D models
 
+`Model3dSource.frameRate` reports the renderer's frames per second. Its default
+null preserves display-rate vsync. A positive rate paces camera and progress
+motion with a timer that requests no Flutter frames; hidden views pause and
+resume without replaying hidden time. Gesture drags update directly.
+`FilamentModel3dSource(frameRate: 60)` is the default; `frameRate: null` uses the
+display rate for both the renderer and engine motion.
+
 See the full [`model_3d` widget reference](widgets/custom/model_3d.md). `Model3dSource.controllerFor(Model3dRequest(src))` returns an unloaded `SduiModel3dController` — a renderer-free contract, so a webview `<model-viewer>`, Filament, or SceneKit implementation can back it. The package ships no renderer: `model3dSource` is optional, and without it `model_3d` renders its `poster` image only. `Model3dSource.warmUp()` runs once in the background after boot, for expensive first-time setup before the first `model_3d` mounts.
 
 ### Filament renderer (`sdui_model_filament`)
@@ -101,3 +108,53 @@ states:
   idle: { clip: Idle, loop: true }
   jump: { clip: Jump, next: idle }
 ```
+
+### Model look
+
+The renderer-neutral `Model3dLook`, `Model3dLight`, `Model3dShadow`,
+`Model3dShadowType` and `Model3dQuality` travel through
+`Model3dLookController.setLook`. The widget sends the look after creation and
+when props change, also during loading; renderers retain the latest value and
+apply it after load. The engine dispatches only to controllers implementing this
+optional capability; existing `implements SduiModel3dController` classes need no
+new members. See
+[model_3d lighting and shadows](widgets/custom/model_3d.md#lighting-and-shadows)
+for defaults and template examples.
+
+
+The optional `Model3dSceneController` capability receives immutable
+`Model3dSceneItem` snapshots through engine-internal capability dispatch.
+Existing controller implementations need no extra member: the extension is a
+no-op without that capability. The widget sends extras before initialize and on
+changes without reloading the primary; hidden views send `active: false`.
+`Model3dCamera.target` carries a point, a primary node or flattened weighted
+leaves during easing; the renderer resolves node world positions each placement.
+`pan` is a dimensionless camera-plane offset relative to the primary extent's
+diagonal. See [Scene](widgets/custom/model_3d.md#scene) for placement units,
+slot identity, failure behavior and primary-only readiness.
+
+
+### Model outfit
+
+`Model3dOutfit` is an immutable renderer-neutral snapshot of named node
+show/hide lists, material colours, socket-to-source attachments and transition
+settings. Implement the optional `Model3dOutfitController`; engine-internal
+`setOutfit` dispatch forwards to it and leaves existing base-controller
+implementations compatible. The widget sends one default empty snapshot after
+creation, before initialize, and then sends value changes without recreating the
+controller. Keep the latest request until loading finishes. See
+[Outfit](widgets/custom/model_3d.md#outfit) for the asset authoring contract.
+
+### Model expressions and motion
+
+The optional exported `Model3dMotionController` capability adds `setMorphs`,
+`setLookAt` (with `Model3dLookAtTarget.camera`, `.pointer` or `.point`), `setLayer`, `setMotionActive` and a monotonic `layerCompletions`
+counter. Engine-internal extensions dispatch safely for existing implements-based
+controllers. The engine owns morph easing, jittered blink and pointer tracking;
+renderers own pose composition and layer completion, notifying the usual playback
+listeners when the counter advances. Absent motion props make no new calls.
+See [Expressions and motion](widgets/custom/model_3d.md#expressions-and-motion).
+
+Model sources may implement the optional `Model3dTapController` for local-position
+picking; see [model taps](widgets/custom/model_3d.md#model-taps).
+Existing implements-based controllers remain compatible.

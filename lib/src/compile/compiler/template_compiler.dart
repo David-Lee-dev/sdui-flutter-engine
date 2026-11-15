@@ -128,6 +128,12 @@ final class TemplateCompiler {
     'progress_stroke_cap_v1',
     // 0.28.0: the `_lifecycle` `exit_back` trigger.
     'lifecycle_exit_back_v1',
+    // 0.29.0: model appearance, scene, outfit, motion and picking. Declare-only.
+    'model_3d_look_v1',
+    'model_3d_scene_v1',
+    'model_3d_outfit_v1',
+    'model_3d_motion_v1',
+    'model_3d_tap_v1',
   };
 
   /// Builds the directive tree for a template root.

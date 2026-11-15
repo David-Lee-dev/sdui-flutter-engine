@@ -1,0 +1,19 @@
+# model_3d expressions, look-at and layered clips (0.29.0)
+
+User decisions 2026-11-14: add facial expressions via blend shapes (5), head/gaze turning toward a point (6) and layering a second clip over the base clip (7). Structure decisions delegated to main for this session.
+
+Facts (thermion 0.6.1): `asset.getMorphTargets(entity)` → `MorphTargetSet` with `setWeight(name, w)`, `setWeights`, `setWeightAt`; `asset.getBoneNames()/getBones()`; `asset.setBoneTransform(boneIndex, Matrix4)`; `asset.playGltfAnimation(index, loop:, crossfade:)` can run several glTF animations at once (a later one overrides the channels it animates); `asset.resetBones()`.
+
+## Requirements
+- M1 `morphs`: `{ target_name: weight }` (weights 0–1) on the primary model; a change eases every named weight from its current value over `morph_duration` ms (default 150). Names match the morph target names in any mesh of the model; unknown names are ignored. `blink: true` (or `{ target, every, duration }`, defaults target `blink`, every 4000 ms ± 30 % jitter, duration 150 ms) closes and opens that target periodically without template work.
+- M2 `look_at`: `{ bone, target, weight, max_yaw, max_pitch, duration }` turns `bone` (default `head`; a missing bone disables it) toward `target`: `camera` (follows the camera), `pointer` (follows the last touch position over the view, easing back to rest `duration` ms after release) or `[x, y, z]` in model units. The rotation is added on top of the playing clip, clamped to `max_yaw`/`max_pitch` degrees (defaults 60/30), blended by `weight` (0–1, default 1), and eased (no snapping) when the target or weight changes.
+- M3 `layer`: `{ clip, loop, weight? }` plays a second clip at the same time as the state/progress clip; the channels it animates override the base (authors make layer clips that animate only the bones they need, e.g. a wave that moves one arm). Changing or clearing `layer` crossfades it out/in over `crossfade_duration`. `on_layer_end` fires when a non-looping layer clip ends.
+- M4 All three update without reloading; they keep the render gate held only while they change (an idle blink schedules frames only during the blink).
+- M5 Contract: an optional capability interface dispatched through an extension (like the scene and outfit capabilities) carrying the morph, look-at and layer operations (existing `implements` consumers must keep compiling); renderer-agnostic value types exported, while dispatch extensions remain engine-internal. `Model3dLookAt.target` is `Model3dLookAtTarget { camera, pointer, point }`, with nullable point coordinates carried separately; pointer coordinates remain view-normalized. Blink timing is owned by the engine (it calls `setMorphs`), so every renderer blinks alike; pointer tracking is owned by the engine gesture layer.
+- M6 Declare-only feature `model_3d_motion_v1`.
+- M7 Docs and unreleased CHANGELOG entries; asset contract notes (morph target names, head bone name, layer clips animate a subset of bones). Do not publish.
+
+## Tests
+Engine (fake controller, fake time): morph map parses and eases via calls; blink fires on schedule with jitter bounds and stops when disabled/hidden; look_at parses, pointer targets come from pointer events over the view and ease back after release; layer parses, changes call the layer method with crossfade; `on_layer_end` fires; absent props → no calls.
+Renderer (fake asset): morph weights reach the morph target set of meshes that have the names; unknown names skipped; look_at applies a bone transform composed with the animated pose each rendered frame while active and stops when cleared; layer plays a second animation index alongside the base and stops it with crossfade.
+Device: RobotExpressive (morphs Angry/Surprised/Sad, head bone) with blink, look_at pointer and a Wave layer over Walking at 60 fps; record CPU/GPU.

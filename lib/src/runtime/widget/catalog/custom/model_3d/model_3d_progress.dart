@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import '../../../../util/props_resolver.dart';
+import 'model_3d_frame_clock.dart';
 
 /// The `progress` prop of a `model_3d`: one clip held at a playhead the
 /// template sets, e.g. a tap counter stepping through a long animation.
@@ -78,11 +78,12 @@ final class Model3dProgress {
 final class Model3dPlayhead {
   Model3dPlayhead({
     required TickerProvider vsync,
+    int? frameRate,
     required this.onPose,
     required this.onEnd,
     required this.onArrive,
   }) {
-    _ticker = vsync.createTicker(_tick);
+    _ticker = Model3dFrameClock(vsync: vsync, rate: frameRate, onTick: _tick);
   }
 
   /// Receives the clip and time to show; called once per moved frame.
@@ -96,7 +97,7 @@ final class Model3dPlayhead {
   /// target replaced mid-way never arrives; only the last one does.
   final VoidCallback onArrive;
 
-  late final Ticker _ticker;
+  late final Model3dFrameClock _ticker;
 
   /// The previous tick's time; null until the next tick sets it, which then
   /// moves nothing.
@@ -219,6 +220,8 @@ final class Model3dPlayhead {
   /// so after a hidden view shows again the first tick would otherwise play
   /// the hidden time at once.
   void resume() => _last = null;
+
+  void setClockMuted(bool muted) => _ticker.muted = muted;
 
   void dispose() => _ticker.dispose();
 }
