@@ -23,6 +23,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # The native fakes implement thermion_dart interfaces directly.
+  thermion_dart: ^0.6.1
 
 flutter:
   assets:
