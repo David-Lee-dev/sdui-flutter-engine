@@ -1,6 +1,6 @@
 name: sdui_model_filament
 description: "Filament renderer for the sdui_engine `model_3d` widget, backed by thermion_flutter."
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/David-Lee-dev/sdui-flutter-engine
 publish_to: http://100.115.77.18:28400/api/packages/david/pub
 
@@ -17,7 +17,7 @@ dependencies:
   thermion_flutter: ^0.6.1
   sdui_engine:
     hosted: http://100.115.77.18:28400/api/packages/david/pub
-    version: ^0.27.0
+    version: ^0.29.0
 
 dev_dependencies:
   flutter_test:
@@ -27,3 +27,4 @@ dev_dependencies:
 flutter:
   assets:
     - assets/lightroom_ibl.ktx
+    - assets/contact_shadow.png

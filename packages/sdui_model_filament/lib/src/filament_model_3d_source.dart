@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
@@ -10,7 +9,15 @@ import 'filament_platform.dart';
 import 'load_stats.dart';
 import 'model_bytes.dart';
 import 'model_disk_cache.dart';
+import 'model_framing.dart';
+import 'model_glb.dart';
+import 'model_look.dart';
+import 'model_motion.dart';
+import 'model_outfit.dart';
+import 'model_scene.dart';
+import 'native_lane.dart';
 import 'render_gate.dart';
+import 'viewer_pool.dart';
 
 /// A [Model3dSource] that renders each `model_3d` natively with Filament (through
 /// `thermion_flutter`) into a Flutter `Texture`.
@@ -49,6 +56,8 @@ final class FilamentModel3dSource extends Model3dSource {
     this.prefetch = const [],
     this.loadTimeout = const Duration(seconds: 30),
     this.iblIntensity = 30000,
+    this.frameRate = 60,
+    this.keepAlive = const Duration(seconds: 10),
     AssetBundle? bundle,
     int cachedModels = 4,
     bool diskCache = true,
@@ -62,7 +71,7 @@ final class FilamentModel3dSource extends Model3dSource {
          disk: diskCache ? ModelDiskCache() : null,
        );
 
-  /// Model srcs loaded into memory during [warmUp].
+  /// Models parsed ahead during [warmUp], bounded by cachedModels.
   final List<String> prefetch;
 
   /// How long a model may take to load before the widget falls back to its
@@ -72,18 +81,36 @@ final class FilamentModel3dSource extends Model3dSource {
   /// Brightness of the bundled studio image-based light.
   final double iblIntensity;
 
+  /// Renderer frames per second, also used for engine camera and progress
+  /// motion. Null uses the display rate.
+  @override
+  final int? frameRate;
+
   /// Paints [ModelDebugOverlay] over every view.
   final bool debugOverlay;
+
+  /// How long disposed viewers remain reusable; zero releases immediately.
+  final Duration keepAlive;
 
   final FilamentPlatform _platform;
   final ModelBytesCache _models;
 
+  late final _pool = ViewerPool(
+    platform: _platform,
+    models: _models,
+    frameRate: frameRate,
+    keepAlive: keepAlive,
+    prefetch: prefetch,
+    settle: _gate.settle,
+  );
+
+  @override
+  Future<void> warmUp() => _pool.warmUp();
+
   /// Filament's neutral studio environment (`lightroom_ibl.ktx`, Apache-2.0).
-  static const iblAsset =
-      'asset://packages/sdui_model_filament/assets/lightroom_ibl.ktx';
+  static const iblAsset = studioIblAsset;
 
   int _mounts = 0;
-  int? _warmUpMs;
 
   /// Renders only the models that change or play, and pauses Filament's
   /// frame loop while every model is still. Surfaces the platform recreated
@@ -103,31 +130,24 @@ final class FilamentModel3dSource extends Model3dSource {
       FilamentModel3dController(request, this);
 
   ModelLoadStats _statsFor(String src) =>
-      ModelLoadStats(src: src, mount: ++_mounts, warmUpMs: _warmUpMs);
-
-  @override
-  Future<void> warmUp() async {
-    final clock = Stopwatch()..start();
-    final loads = [for (final src in prefetch) _models.load(src)];
-    // The first viewer creates the engine and render thread, which outlive
-    // it; later viewers attach to them.
-    final viewer = await _platform.createViewer();
-    await viewer.dispose();
-    _gate.settle();
-    await Future.wait(loads);
-    _warmUpMs = clock.elapsedMilliseconds;
-    debugPrint('[sdui_model_filament] warm-up took ${_warmUpMs}ms');
-  }
+      ModelLoadStats(src: src, mount: ++_mounts, warmUpMs: _pool.warmUpMs);
 }
 
 /// Drives one Filament viewer for the engine's `model_3d` widget.
 ///
 /// Native calls on the viewer run one after another ([_native]), so
-/// [dispose] destroys the viewer only after the call in flight and no later
+/// [dispose] releases or keeps the viewer after the call in flight; no later
 /// call reaches it. Each [play] takes a run number that a later play, stop,
 /// pose of the playing clip or dispose moves on, so a superseded play's late
 /// work never changes [playback].
-final class FilamentModel3dController implements SduiModel3dController {
+final class FilamentModel3dController
+    implements
+        SduiModel3dController,
+        Model3dLookController,
+        Model3dSceneController,
+        Model3dOutfitController,
+        Model3dMotionController,
+        Model3dTapController {
   FilamentModel3dController(this._request, this._source)
     : stats = _source._statsFor(_request.src);
 
@@ -142,41 +162,135 @@ final class FilamentModel3dController implements SduiModel3dController {
   /// Set once the viewer exists, so the view allocates its texture while the
   /// model is still loading.
   final _viewer = ValueNotifier<ThermionViewer?>(null);
-  final _listeners = <VoidCallback>[];
+  final _hits = <ThermionEntity, Model3dHit>{};
+  double _devicePixelRatio = 1;
+  final _picks = <Completer<ThermionEntity?>>{};
+  @override
+  Future<Model3dHit?> hitTest(Offset localPosition) async {
+    final viewer = _viewer.value;
+    if (_disposed ||
+        viewer == null ||
+        _asset == null ||
+        !localPosition.dx.isFinite ||
+        !localPosition.dy.isFinite) {
+      return null;
+    }
+    final result = Completer<ThermionEntity?>();
+    _picks.add(result);
+    _syncRenderingHold();
+    try {
+      // Only submission uses the lane. Waiting there for the callback would
+      // prevent the render work that produces the pick two or three frames later.
+      _quietly(
+        _native(() async {
+          if (result.isCompleted) return;
+          try {
+            await viewer.view.pick(
+              (localPosition.dx * _devicePixelRatio).round(),
+              (localPosition.dy * _devicePixelRatio).round(),
+              (hit) {
+                if (!result.isCompleted) result.complete(hit.entity);
+              },
+            );
+          } catch (error, stack) {
+            if (!result.isCompleted) result.completeError(error, stack);
+          }
+        }),
+      );
+      final entity = await result.future.timeout(
+        const Duration(milliseconds: 150),
+        onTimeout: () => null,
+      );
+      final hit = _disposed ? null : _hits[entity];
+      return _disposed ? null : hit;
+    } on NativeDisposed {
+      return null;
+    } finally {
+      if (!result.isCompleted) result.complete(null);
+      _picks.remove(result);
+      _syncRenderingHold();
+    }
+  }
+
   Future<void>? _loading;
   ThermionAsset? _asset;
-  double? _framedAspect;
-  Model3dCamera _camera = const Model3dCamera();
-
-  /// Camera distance that frames the model at zoom 1; set once the asset is
-  /// loaded and the view's aspect is known.
-  double? _distance;
-  bool _placing = false;
-  bool _placeAgain = false;
-  Timer? _clipEnd;
-
-  /// The model's clips by name, with their native animation index.
-  Map<String, ({int index, Duration duration})> _clips = const {};
-  List<String> _clipNames = const [];
-
-  /// The clip index a [play] started, until [stop] or a pose of that clip.
-  int? _playing;
-
-  /// The current play's number; see [_endPlay].
-  int _run = 0;
-  (String, Duration)? _pose;
-  bool _posing = false;
-  bool _poseAgain = false;
-  Model3dPlayback _playback = const Model3dPlayback();
-  bool _disposed = false;
+  ViewerLease? _primary;
+  bool _ready = false;
+  final _nativeLane = NativeLane();
+  bool get _disposed => _nativeLane.disposed;
   Widget? _view;
 
-  /// The tail of the native calls queued on the viewer.
-  Future<void> _lane = Future.value();
+  final _sceneClock = Stopwatch()..start();
+  int? _lastSceneFrame;
+  Future<void> _hookLane = Future.value();
+  bool _hookRegistered = false;
 
-  /// Radius the camera keeps in frame; the asset is scaled so its largest
-  /// extent spans -1..1.
-  static const _frameRadius = 1.15;
+  /// Every producer shares this hold decision; stopping primary playback must
+  /// never pause an extra clip or spin.
+  void _syncRenderingHold() {
+    if (_disposed || _viewer.value == null) return;
+    _source._gate.hold(
+      this,
+      playing:
+          _motion.playingFrames ||
+          _motion.motionFrames ||
+          _outfit.needsFrames ||
+          _picks.isNotEmpty ||
+          _scene.spinning ||
+          _scene.playingFrames,
+    );
+    _syncFrameHook();
+  }
+
+  void _syncFrameHook() {
+    // Thermion waits for running hooks during registration. Never await this
+    // operation on the native lane: a running hook may itself need that lane.
+    final next = _hookLane.then((_) async {
+      final viewer = _viewer.value;
+      if (viewer == null || _disposed) return;
+      final needed =
+          _ready &&
+          (_outfit.needsFrames ||
+              _scene.spinning ||
+              _motion.motionFrames ||
+              (_motion.playingFrames && _framing.tracksNode));
+      if (needed == _hookRegistered) return;
+      final app = _source._platform.appFor(viewer);
+      _lastSceneFrame = null;
+      if (needed) {
+        await app.registerRequestFrameHook(_onSceneFrame);
+      } else {
+        await app.unregisterRequestFrameHook(_onSceneFrame);
+      }
+      _hookRegistered = needed;
+    });
+    _hookLane = next.then((_) {}, onError: (_) {});
+    _quietly(next);
+  }
+
+  Future<void> _onSceneFrame() async {
+    if (_disposed) return;
+    final now = _sceneClock.elapsedMicroseconds;
+    final last = _lastSceneFrame;
+    _lastSceneFrame = now;
+    final dt = last == null
+        ? 0.0
+        : (now - last) / Duration.microsecondsPerSecond;
+    try {
+      var posed = false;
+      await _native(() async {
+        posed = await _motion.frame(_sceneClock.elapsed);
+        await _outfit.advanceOutfit(_sceneClock.elapsed);
+        if (_scene.spinning) await _scene.frame(dt);
+      });
+      if ((posed || _motion.playing != null) && _framing.tracksNode) {
+        await _framing.place();
+      }
+      _motion.settleFrame();
+    } on NativeDisposed {
+      return;
+    }
+  }
 
   @override
   Future<void> initialize() =>
@@ -185,79 +299,114 @@ final class FilamentModel3dController implements SduiModel3dController {
   Future<void> _load() async {
     try {
       final src = _request.src;
-      final cached = _source._models.contains(src);
+      final kept =
+          _source._pool.takeKept(src) ?? await _source._pool.takeWarm(src);
+      final reused = kept?.transforms.isNotEmpty ?? false;
+      final cached = kept?.prepared != null || _source._models.contains(src);
       final bytesStarted = stats.elapsedMs;
-      final bytes = _source._models.load(src).then((data) {
-        _ifAlive(
-          () => stats.served(
-            bytes: data.length,
-            cached: cached,
-            ms: stats.elapsedMs - bytesStarted,
-          ),
-        );
-        return data;
-      });
-      // A load that ends before awaiting the bytes leaves their error here.
-      unawaited(bytes.then((_) {}, onError: (_) {}));
+      final bytes =
+          (kept?.prepared == null
+                  ? _source._models.load(src)
+                  : Future.value(kept!.prepared!.bytes))
+              .then((data) {
+                _ifAlive(
+                  () => stats.served(
+                    bytes: data.length,
+                    cached: cached,
+                    ms: stats.elapsedMs - bytesStarted,
+                  ),
+                );
+                return data;
+              });
+      // Observe both failures immediately, even if native loading ends early.
+      final boundsFuture = kept?.bounds != null
+          ? Future.value((kept!.bounds, null, null))
+          : bytes.then(_framing.computeBounds);
+      unawaited(boundsFuture.then((_) {}, onError: (_) {}));
 
-      final viewer = await _source._platform.createViewer();
+      final viewer = kept?.viewer ?? await _source._pool.createViewer();
       if (_disposed) {
-        await viewer.dispose();
+        await _source._platform.releaseViewer(viewer);
         return;
       }
+      _primary = kept ?? ViewerLease(src, viewer);
+      _primary!.src = src;
       _viewer.value = viewer;
       stats.mark('viewer');
 
-      await _native(() async {
-        await viewer.setBackgroundColor(0, 0, 0, 0);
-        await viewer.view.setBlendMode(BlendMode.transparent);
-        await viewer.setPostProcessing(true);
-        await viewer.setAntiAliasing(false, true, false);
-        await viewer.loadIbl(
-          FilamentModel3dSource.iblAsset,
-          intensity: _source.iblIntensity,
-        );
-      });
+      if (!reused) await _native(_look.resetDefaults);
 
       final data = await bytes;
-      final asset = await _native(() => viewer.loadGltfFromBuffer(data));
-      final clips = await _native(() async {
-        await asset.transformToUnitCube();
-        final names = await asset.getGltfAnimationNames();
-        final clips = <String, ({int index, Duration duration})>{};
-        for (var i = 0; i < names.length; i++) {
-          // glTF does not require unique names; a name plays its first clip.
-          if (clips.containsKey(names[i])) {
-            debugPrint(
-              '[sdui_model_filament] clip "${names[i]}" #$i ignored: '
-              '"${names[i]}" is clip #${clips[names[i]]!.index}',
-            );
-            continue;
-          }
-          clips[names[i]] = (
-            index: i,
-            duration: Duration(
-              microseconds:
-                  (await asset.getGltfAnimationDuration(i) *
-                          Duration.microsecondsPerSecond)
-                      .round(),
-            ),
+      final prepared = _primary!.prepared ?? PreparedModelAsset.read(data);
+      final asset =
+          _primary!.asset ??
+          await _native<ThermionAsset>(
+            () => viewer.loadGltfFromBuffer(prepared.bytes),
+          );
+      await _native(() async {
+        final bindings = await _outfit.bindOutfitAsset(asset, prepared);
+        for (var i = 0; i < bindings.length; i++) {
+          final binding = bindings[i];
+          if (binding.entity == null || binding.materials.isEmpty) continue;
+          final materials = binding.materials.map((m) => m.name).toSet();
+          _hits[binding.entity!] = Model3dHit(
+            node: prepared.names[i],
+            material: materials.length == 1 ? materials.single : null,
           );
         }
-        return clips;
+      });
+      await _native(() async {
+        final (computed, error, stack) = await boundsFuture;
+        if (error != null) Error.throwWithStackTrace(error, stack!);
+        await _framing.resolveBounds(asset, _primary!.bounds ?? computed);
+        await _motion.loadClips(asset);
       });
       _asset = asset;
-      _clips = Map.unmodifiable(clips);
-      _clipNames = List.unmodifiable(clips.keys);
+      _primary!
+        ..asset = asset
+        ..prepared = prepared
+        ..bounds = _framing.bounds;
+      if (!reused) {
+        final app = _source._platform.appFor(viewer);
+        await _native(() async {
+          for (final entity in {
+            asset.entity,
+            ...await asset.getChildEntities(),
+          }) {
+            _primary!.transforms[entity] = (await app.getLocalTransform(
+              entity,
+            )).clone();
+          }
+        });
+      } else {
+        await _native(() async {
+          await _motion.resetForReuse(asset, _primary!.transforms, prepared);
+          await _outfit.resetForReuse();
+          await _look.resetDefaults();
+        });
+      }
       stats.mark('asset');
 
-      await _frame(_framedAspect ?? 1);
+      await _outfit.reconcileOutfit();
+      if (_motion.morphs.isNotEmpty) await _motion.applyMorphs();
+      await _look.applyLook();
+      await _framing.frame(_framing.framedAspect ?? 1);
+      if (_motion.layer != null) {
+        await _motion.configureLayer(Duration.zero);
+      } else if (_motion.lookAt != null) {
+        await _motion.configureMotion();
+      }
       _touch();
-      _ifAlive(() => stats.mark('ready'));
+      _ifAlive(() {
+        _ready = true;
+        stats.mark('ready');
+      });
+      _syncRenderingHold();
+      _scene.reconcileScene();
       debugPrint(
-        '[sdui_model_filament] ${stats.summary()}, clips: $_clipNames',
+        '[sdui_model_filament] ${stats.summary()}, clips: ${_motion.clipNames}',
       );
-    } on _Disposed {
+    } on NativeDisposed {
       return;
     } catch (error) {
       _ifAlive(() => stats.fail('$error'));
@@ -268,29 +417,6 @@ final class FilamentModel3dController implements SduiModel3dController {
 
   void _ifAlive(VoidCallback action) {
     if (!_disposed) action();
-  }
-
-  /// Runs [call] on the viewer after the native calls queued before it, or
-  /// throws [_Disposed] once the view is disposed.
-  Future<T> _native<T>(Future<T> Function() call) {
-    final next = _lane.then(
-      (_) => _disposed ? throw const _Disposed() : call(),
-    );
-    _lane = next.then((_) {}, onError: (_) {});
-    return next;
-  }
-
-  /// Runs [work] unawaited: a disposed view drops it, and other failures are
-  /// logged rather than left unhandled.
-  void _quietly(Future<void> work) {
-    unawaited(
-      work.then(
-        (_) {},
-        onError: (Object error) {
-          if (error is! _Disposed) debugPrint('[sdui_model_filament] $error');
-        },
-      ),
-    );
   }
 
   /// Runs frames so this view's change reaches the screen.
@@ -305,218 +431,110 @@ final class FilamentModel3dController implements SduiModel3dController {
     _quietly(_native(() => viewer.setRendering(rendering)));
   }
 
-  /// Sets the zoom-1 distance so [_frameRadius] fits the narrower field of
-  /// view, then places the camera.
-  Future<void> _frame(double aspect) async {
-    _framedAspect = aspect;
-    final viewer = _viewer.value;
-    if (viewer == null || _asset == null || _disposed) return;
-    _distance = await _native(() async {
-      final camera = await viewer.getActiveCamera();
-      final focalLength = await camera.getFocalLength();
-      // Filament's lens projection assumes a 24mm-tall sensor.
-      final vertical = 2 * math.atan(12 / focalLength);
-      final horizontal = 2 * math.atan(math.tan(vertical / 2) * aspect);
-      final fov = math.min(vertical, horizontal);
-      return _frameRadius / math.sin(fov / 2);
-    });
-    await _place();
-  }
+  late final ModelFraming _framing = ModelFraming(
+    lane: _nativeLane,
+    getViewer: () => _viewer.value,
+    getAsset: () => _asset,
+    touch: _touch,
+  );
+  late final ModelMotion _motion = ModelMotion(
+    lane: _nativeLane,
+    platform: _source._platform,
+    getViewer: () => _viewer.value,
+    getAsset: () => _asset,
+    touch: _touch,
+    getBounds: () => _framing.bounds,
+    clock: _sceneClock,
+    changed: _syncRenderingHold,
+    getCamera: () => _framing.camera,
+    getCameraPosition: () => _framing.cameraPosition,
+    getDistance: () => _framing.distance,
+  );
+  late final ModelOutfit _outfit = ModelOutfit(
+    lane: _nativeLane,
+    platform: _source._platform,
+    getViewer: () => _viewer.value,
+    getAsset: () => _asset,
+    touch: _touch,
+    getBounds: () => _framing.bounds,
+    models: _source._models,
+    clock: _sceneClock,
+    changed: _syncRenderingHold,
+    getLook: () => _look.look,
+  );
+  late final ModelScene _scene = ModelScene(
+    lane: _nativeLane,
+    platform: _source._platform,
+    getViewer: () => _viewer.value,
+    getAsset: () => _asset,
+    touch: _touch,
+    models: _source._models,
+    changed: _syncRenderingHold,
+    getLook: () => _look.look,
+  );
+  late final ModelLook _look = ModelLook(
+    lane: _nativeLane,
+    platform: _source._platform,
+    getViewer: () => _viewer.value,
+    getAsset: () => _asset,
+    getBounds: () => _framing.bounds,
+    iblIntensity: _source.iblIntensity,
+    touch: _touch,
+    extraAssets: () => [..._scene.assets, ..._outfit.assets],
+  );
 
   @override
   void setCamera(Model3dCamera camera) {
-    _camera = camera;
-    _quietly(_place());
-  }
-
-  /// Orbits the camera to [_camera]. Calls arrive every frame while the
-  /// camera moves; while one placement is in flight, later ones collapse
-  /// into a single follow-up with the latest camera.
-  Future<void> _place() async {
-    final viewer = _viewer.value;
-    final distance = _distance;
-    if (viewer == null || distance == null || _disposed) return;
-    if (_placing) {
-      _placeAgain = true;
-      return;
-    }
-    _placing = true;
-    try {
-      do {
-        _placeAgain = false;
-        final target = _camera;
-        final yaw = target.yaw * math.pi / 180;
-        // Straight up or down has no defined "up" for lookAt.
-        final pitch = target.pitch.clamp(-89.0, 89.0) * math.pi / 180;
-        final d = distance / (target.zoom > 0 ? target.zoom : 1);
-        await _native(() async {
-          final camera = await viewer.getActiveCamera();
-          await camera.lookAt(
-            Vector3(
-              d * math.cos(pitch) * math.sin(yaw),
-              d * math.sin(pitch),
-              d * math.cos(pitch) * math.cos(yaw),
-            ),
-          );
-        });
-        _touch();
-      } while (_placeAgain && !_disposed);
-    } finally {
-      _placing = false;
-    }
+    _framing.camera = camera;
+    _syncFrameHook();
+    _quietly(_framing.place().then((_) => _motion.cameraChanged()));
   }
 
   @override
-  List<String> get clips => _clipNames;
-
+  void setLook(Model3dLook look) => _look.setLook(look);
   @override
-  Duration? clipDuration(String clip) => _clips[clip]?.duration;
-
+  void setOutfit(Model3dOutfit outfit) => _outfit.setOutfit(outfit);
   @override
-  void setPose(String clip, Duration time) {
-    _pose = (clip, time);
-    final asset = _asset;
-    final index = _clips[clip]?.index ?? -1;
-    // A playing clip would overwrite the pose on its next frame.
-    if (asset != null && index >= 0 && index == _playing) {
-      _endPlay();
-      _quietly(_native(() => asset.stopGltfAnimation(index)));
-    }
-    _quietly(_applyPose());
-  }
-
-  /// Holds the asset at [_pose]. Like [_place], placements in flight
-  /// collapse later poses into one follow-up with the latest.
-  Future<void> _applyPose() async {
-    final asset = _asset;
-    if (asset == null || _disposed) return;
-    if (_posing) {
-      _poseAgain = true;
-      return;
-    }
-    _posing = true;
-    try {
-      do {
-        _poseAgain = false;
-        final (clip, time) = _pose!;
-        final index = _clips[clip]?.index ?? -1;
-        if (index < 0) continue;
-        await _native(
-          () => asset.setGltfAnimationTime(
-            index,
-            time.inMicroseconds / Duration.microsecondsPerSecond,
-          ),
-        );
-        _touch();
-      } while (_poseAgain && !_disposed);
-    } finally {
-      _posing = false;
-    }
+  void setScene(List<Model3dSceneItem> scene, {bool active = true}) {
+    _lastSceneFrame = null;
+    _scene.setScene(scene, active: active);
   }
 
   @override
-  Model3dPlayback get playback => _playback;
-
+  void setMorphs(Map<String, double> weights) => _motion.setMorphs(weights);
+  @override
+  void setLookAt(Model3dLookAt? lookAt) => _motion.setLookAt(lookAt);
+  @override
+  void setLayer(Model3dLayer? layer, {Duration crossfade = Duration.zero}) =>
+      _motion.setLayer(layer, crossfade: crossfade);
+  @override
+  void setMotionActive(bool active) => _motion.setMotionActive(active);
+  @override
+  int get layerCompletions => _motion.layerCompletions;
+  @override
+  List<String> get clips => _motion.clips;
+  @override
+  Duration? clipDuration(String clip) => _motion.clipDuration(clip);
+  @override
+  void setPose(String clip, Duration time) => _motion.setPose(clip, time);
+  @override
+  Model3dPlayback get playback => _motion.playback;
   @override
   Future<void> play(
     String clip, {
     required bool loop,
     Duration crossfade = Duration.zero,
-  }) async {
-    final run = ++_run;
-    _clipEnd?.cancel();
-    _update(
-      Model3dPlayback(
-        clip: clip,
-        isPlaying: true,
-        completions: _playback.completions,
-      ),
-    );
-    final asset = _asset;
-    final index = _clips[clip]?.index ?? -1;
-    if (asset == null || index < 0) return;
-    _playing = index;
-    _source._gate.hold(this, playing: true);
-    final double? seconds;
-    try {
-      seconds = await _native(() async {
-        await asset.playGltfAnimation(
-          index,
-          loop: loop,
-          crossfade: crossfade.inMicroseconds / Duration.microsecondsPerSecond,
-        );
-        // Filament reports no end event: a non-looping clip ends after its
-        // duration and holds its last frame.
-        return loop ? null : await asset.getGltfAnimationDuration(index);
-      });
-    } on _Disposed {
-      return;
-    } catch (_) {
-      if (run == _run) _endPlay();
-      rethrow;
-    }
-    if (seconds == null || run != _run) return;
-    _clipEnd = Timer(
-      Duration(
-        microseconds: (seconds * Duration.microsecondsPerSecond).round(),
-      ),
-      () {
-        if (run != _run) return;
-        _source._gate.hold(this, playing: false);
-        _update(
-          Model3dPlayback(
-            clip: clip,
-            isPlaying: false,
-            completions: _playback.completions + 1,
-          ),
-        );
-      },
-    );
-  }
-
+  }) => _motion.play(clip, loop: loop, crossfade: crossfade);
   @override
-  Future<void> stop() async {
-    final asset = _asset;
-    final index = _clips[_playback.clip]?.index ?? -1;
-    _endPlay();
-    if (asset == null || index < 0) return;
-    try {
-      await _native(() => asset.stopGltfAnimation(index));
-    } on _Disposed {
-      return;
-    }
-    _touch();
-  }
-
-  /// Ends the current play the moment it is superseded: its late native
-  /// work and timer see a newer [_run] and leave [playback] alone.
-  void _endPlay() {
-    _run++;
-    _clipEnd?.cancel();
-    _playing = null;
-    if (_viewer.value != null) _source._gate.hold(this, playing: false);
-    _update(
-      Model3dPlayback(
-        clip: _playback.clip,
-        isPlaying: false,
-        completions: _playback.completions,
-      ),
-    );
-  }
-
+  Future<void> stop() => _motion.stop();
   @override
-  void addListener(VoidCallback listener) => _listeners.add(listener);
-
+  void addListener(VoidCallback listener) => _motion.addListener(listener);
   @override
-  void removeListener(VoidCallback listener) => _listeners.remove(listener);
+  void removeListener(VoidCallback listener) =>
+      _motion.removeListener(listener);
 
-  void _update(Model3dPlayback playback) {
-    if (_disposed) return;
-    _playback = playback;
-    for (final listener in [..._listeners]) {
-      listener();
-    }
-  }
+  Future<T> _native<T>(Future<T> Function() work) => _nativeLane.run(work);
+  void _quietly(Future<void> work) => _nativeLane.observe(work);
 
   @override
   Widget buildView() {
@@ -531,24 +549,43 @@ final class FilamentModel3dController implements SduiModel3dController {
   @override
   Future<void> dispose() async {
     if (_disposed) return;
-    _disposed = true;
-    _run++;
-    _clipEnd?.cancel();
-    _listeners.clear();
+    _nativeLane.disposed = true;
+    for (final result in _picks) {
+      if (!result.isCompleted) result.complete(null);
+    }
+    _motion.invalidate();
     final viewer = _viewer.value;
-    _viewer.value = null;
-    _asset = null;
     if (viewer == null) return;
+    await _hookLane;
+    if (_hookRegistered) {
+      await _source._platform
+          .appFor(viewer)
+          .unregisterRequestFrameHook(_onSceneFrame);
+      _hookRegistered = false;
+    }
+    _viewer.value = null;
     _source._gate.release(this);
-    // The call in flight finishes; every queued one throws [_Disposed].
-    await _lane;
-    await _source._platform.releaseViewer(viewer);
+    // The call in flight finishes; every queued one throws [NativeDisposed].
+    await _nativeLane.drain;
+    _asset = null;
+    var cleaned = false;
+    try {
+      if (_primary?.asset != null) await _motion.dispose(_primary!.asset!);
+      try {
+        await _outfit.dispose(viewer);
+        await _scene.dispose(viewer);
+      } finally {
+        await _look.dispose(viewer);
+      }
+      cleaned = true;
+    } finally {
+      if (cleaned && _ready && _primary != null) {
+        await _source._pool.keepOrRelease(_primary!);
+      } else {
+        await _source._platform.releaseViewer(viewer);
+      }
+    }
   }
-}
-
-/// Unwinds work queued on a disposed view before it reaches the viewer.
-final class _Disposed implements Exception {
-  const _Disposed();
 }
 
 /// The Filament texture. It takes no pointers: the engine handles gestures
@@ -560,6 +597,9 @@ final class _FilamentView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    controller._devicePixelRatio =
+        MediaQuery.maybeDevicePixelRatioOf(context) ??
+        View.of(context).devicePixelRatio;
     return LayoutBuilder(
       builder: (context, constraints) {
         final aspect =
@@ -568,8 +608,8 @@ final class _FilamentView extends StatelessWidget {
                 constraints.maxHeight > 0
             ? constraints.maxWidth / constraints.maxHeight
             : 1.0;
-        if (aspect != controller._framedAspect) {
-          controller._quietly(controller._frame(aspect));
+        if (aspect != controller._framing.framedAspect) {
+          controller._quietly(controller._framing.frame(aspect));
         }
         // A new layout may recreate the texture, which needs a frame.
         controller._touch();

@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.3.0
+
+- Requires sdui_engine ^0.29.0 (Model3dSource.frameRate and the optional
+  look/scene/outfit/motion/tap capabilities).
+- Queue camera/pose/morph/configuration and reuse pose writes in the
+  native frame hook. Look-at follows moving targets continuously with a 180°/s
+  angular limit (including zero duration) and holds its exit side behind the
+  model until cone reentry, avoiding auto-rotate head flicker. The effective yaw
+  cone is capped at 170° so even `maxYaw: 180` preserves rear-side hysteresis.
+
+- Split native sequencing, viewer reuse, GLB preparation, framing,
+  look, outfit, motion and scene ownership into separate libraries. Reuse resets
+  through the same look-default path; bounds decoding shares strict GLB parsing
+  and rejects oversized zero-base accessors before allocation.
+
+- Retain up to two disposed private viewers for 10 seconds
+  (`keepAlive`, zero disables), restore authored state before same-source reuse,
+  disable kept viewers' native rendering and release on expiry/memory pressure.
+  Reuse warm-up's viewer and parse bounded prefetch assets before first mount;
+  preserve warm handoff for non-matching sources. Concurrent views share cached
+  bytes only because Thermion cannot isolate instance materials.
+
+- Model-hit actions through the optional tap capability, with original
+  node/material names, view DPR and bounded picking. `model_3d_tap_v1` is
+  declare-only. Loading, warm-up and prefetch no longer request CPU geometry.
+
+- Primary morph updates on every matching mesh and renderer-driven
+  base/layer/look-at posing. Bone turns compose with fresh animated transforms;
+  layers blend node TRS weights with entrance/exit envelopes and report ends.
+  Base switches cut while look-at/layer is enabled. Native clip crossfades and
+  general weighted morph-channel blending are unavailable in this mode. Weight-only
+  layer changes retain the cursor and completion state and retarget the envelope.
+
+- Model outfit show/hide, material recolouring and cached socket
+  props with cut/pop/drop/dissolve swaps. Immutable optional outfit capability
+  preserves existing controllers; changes keep the primary model and clips.
+  `model_3d_outfit_v1` is declare-only. Skinned parts flash their isolated
+  emissive factors with a whole-character pop; rigid drop respects ancestor
+  transforms. Recolours use linear factors, and look changes reach prop shadows.
+  Unreadable outfit metadata preserves the original bytes for native loading,
+  including legacy NUL-padded JSON, unsupported headers and invalid JSON lengths.
+
+- Independently cached scene extras with authored transforms,
+  looping clips and native-frame-hook spin; per-slot reconciliation, hidden-scene
+  pause, shared lighting/shadows and aggregate rendering holds. Point/node focus
+  and pan use primary world space, with node updates during playback/pose.
+- Frame the primary bounding sphere (half the world-extent diagonal)
+  instead of the largest half-edge margin so wide/boxy models fit at zoom 1.
+
+- Frame models using selected-scene initial-pose bounds, including
+  node transforms, weighted skin joints, inverse binds and default morphs.
+  Keep glTF transforms intact and frame the camera from the world-space
+  centre and extent, with scale- and zoom-aware clipping. Compute bounds on a
+  background isolate while the native model loads; reuse them for contact-shadow
+  height and size. Unsupported geometry keeps native normalization with a log.
+
+- Apply `Model3dLook` environment/rotation, directional key light,
+  reusable textured contact shadow, cast/receive self-shadowing, AA/render
+  quality/AO presets and exposure. Release look resources with the viewer.
+
+- `FilamentModel3dSource(frameRate: 60)` caps rendering from every
+  viewer's creation and reports the rate to the engine for camera and progress
+  pacing. `frameRate: null` uses the display rate.
+
 ## 0.2.0
 
 - Upgrade to `thermion_flutter` ^0.6.1 (Filament 1.77.2).

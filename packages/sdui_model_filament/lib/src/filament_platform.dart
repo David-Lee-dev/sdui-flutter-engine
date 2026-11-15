@@ -6,6 +6,9 @@ import 'package:thermion_flutter/thermion_flutter.dart';
 class FilamentPlatform {
   const FilamentPlatform();
 
+  /// The engine that owns this viewer; never a global singleton.
+  FilamentApp appFor(ThermionViewer viewer) => viewer.app;
+
   Future<ThermionViewer> createViewer() => ThermionFlutterPlugin.createViewer();
 
   /// Destroys [viewer] together with the texture it renders into.
@@ -19,6 +22,10 @@ class FilamentPlatform {
       await ThermionFlutterPlugin.instance.onViewerDisposed(viewer.view);
     }
   }
+
+  /// Caps Filament's scheduler; zero uses the display rate.
+  void setTargetFramerate(int fps) =>
+      ThermionFlutterPlugin.instance.setTargetFramerate(fps);
 
   void resumeFrames() => ThermionFlutterPlugin.instance.resumeFrameScheduler();
 

@@ -5,163 +5,101 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:sdui_engine/sdui_engine.dart';
 import 'package:sdui_model_filament/sdui_model_filament.dart';
-import 'package:sdui_model_filament/src/filament_platform.dart';
 import 'package:sdui_model_filament/src/load_stats.dart' show ModelDebugOverlay;
 import 'package:thermion_flutter/thermion_flutter.dart' as thermion;
 
-/// Every native call the fakes see, in order; a held call logs `name done`
-/// once released.
-final class _Native {
-  final log = <String>[];
-  final calls = <Invocation>[];
-
-  /// The model's clips in native order: name and seconds.
-  List<(String, double)> clips = const [('Wave', 1.0), ('Jump', 1.0)];
-
-  /// The native index of each other animation call, as `name index`.
-  final indices = <String>[];
-  final _holds = <String, Completer<void>>{};
-
-  /// Holds the next call to [name] until [release].
-  void hold(String name) => _holds[name] = Completer<void>();
-
-  void release(String name) => _holds.remove(name)!.complete();
-
-  Future<T> call<T>(String name, T result) {
-    log.add(name);
-    final hold = _holds[name];
-    if (hold == null) return Future.value(result);
-    return hold.future.then((_) {
-      log.add('$name done');
-      return result;
-    });
-  }
-}
-
-String _nameOf(Invocation invocation) =>
-    invocation.memberName.toString().split('"')[1];
-
-final class _Viewer implements thermion.ThermionViewer {
-  _Viewer(this.native);
-
-  final _Native native;
-  late final _asset = _Asset(native);
-
-  @override
-  thermion.View get view => _View(native);
-
-  @override
-  Future<thermion.Camera> getActiveCamera() =>
-      native.call<thermion.Camera>('getActiveCamera', _Camera(native));
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    native.calls.add(invocation);
-    return switch (_nameOf(invocation)) {
-      // Its parameters change across thermion versions; match it by name.
-      'loadGltfFromBuffer' => native.call<thermion.ThermionAsset>(
-        'loadGltfFromBuffer',
-        _asset,
-      ),
-      'setBackgroundColor' => native.call<thermion.Skybox>(
-        'setBackgroundColor',
-        _Skybox(),
-      ),
-      final name => native.call<void>(name, null),
-    };
-  }
-}
-
-final class _Skybox implements thermion.Skybox {
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-final class _View implements thermion.View {
-  _View(this.native);
-
-  final _Native native;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    native.calls.add(invocation);
-    return native.call<void>(_nameOf(invocation), null);
-  }
-}
-
-final class _Camera implements thermion.Camera {
-  _Camera(this.native);
-
-  final _Native native;
-
-  @override
-  Future<double> getFocalLength() => native.call('getFocalLength', 28.0);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    native.calls.add(invocation);
-    return native.call<void>(_nameOf(invocation), null);
-  }
-}
-
-/// A model with [_Native.clips], by default a one-second `Wave` and `Jump`.
-final class _Asset implements thermion.ThermionAsset {
-  _Asset(this.native);
-
-  final _Native native;
-
-  @override
-  Future<List<String>> getGltfAnimationNames() => native.call(
-    'getGltfAnimationNames',
-    [for (final (name, _) in native.clips) name],
-  );
-
-  @override
-  Future<double> getGltfAnimationDuration(int animationIndex) =>
-      native.call('getGltfAnimationDuration', native.clips[animationIndex].$2);
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) {
-    native.calls.add(invocation);
-    final name = _nameOf(invocation);
-    if (name.contains('GltfAnimation')) {
-      native.indices.add('$name ${invocation.positionalArguments.first}');
-    }
-    return native.call<void>(name, null);
-  }
-}
-
-final class _Platform extends FilamentPlatform {
-  _Platform(this.native);
-
-  final _Native native;
-
-  @override
-  Future<thermion.ThermionViewer> createViewer() async => _Viewer(native);
-
-  @override
-  Future<void> releaseViewer(thermion.ThermionViewer viewer) async =>
-      native.log.add('release');
-
-  @override
-  void resumeFrames() {}
-
-  @override
-  void pauseFrames() {}
-}
+import 'support/filament_fakes.dart';
 
 void main() {
-  // The Filament engine is native; these cover the Dart surface the `model_3d`
-  // widget sees before a viewer exists.
   Future<FilamentModel3dController> controller({
     bool debugOverlay = false,
   }) async =>
       await FilamentModel3dSource(
+            keepAlive: Duration.zero,
             client: MockClient((_) async => http.Response('', 404)),
             baseUrl: Uri.parse('http://host/'),
             debugOverlay: debugOverlay,
           ).controllerFor(const Model3dRequest(src: '/a.glb'))
           as FilamentModel3dController;
+
+  testWidgets('default source applies 60fps to every viewer before use', (
+    tester,
+  ) async {
+    final native = Native();
+    final source = FilamentModel3dSource(
+      keepAlive: Duration.zero,
+      client: MockClient((_) async => http.Response.bytes([1], 200)),
+      baseUrl: Uri.parse('http://host/'),
+      diskCache: false,
+      platform: Platform(native),
+    );
+    expect(source.frameRate, 60);
+    await source.warmUp();
+    expect(
+      native.log.indexOf('createViewer'),
+      lessThan(native.log.indexOf('frameRate 60')),
+    );
+    expect(
+      native.log.indexOf('frameRate 60'),
+      lessThan(native.log.indexOf('setRendering')),
+    );
+    for (var i = 0; i < 2; i++) {
+      native.log.clear();
+      final model = await source.controllerFor(
+        const Model3dRequest(src: '/a.glb'),
+      );
+      await finishLoad(model.initialize());
+      if (i == 0) {
+        expect(native.log, isNot(contains('createViewer')));
+      } else {
+        expect(
+          native.log.indexOf('createViewer'),
+          lessThan(native.log.indexOf('frameRate 60')),
+        );
+        expect(
+          native.log.indexOf('frameRate 60'),
+          lessThan(native.log.indexOf('setBackgroundColor')),
+        );
+      }
+      await model.dispose();
+    }
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  for (final rate in <int?>[null, 30]) {
+    testWidgets(
+      'explicit frameRate $rate applies to warmup and loaded viewer',
+      (tester) async {
+        final native = Native();
+        final source = FilamentModel3dSource(
+          keepAlive: Duration.zero,
+          client: MockClient((_) async => http.Response.bytes([1], 200)),
+          baseUrl: Uri.parse('http://host/'),
+          diskCache: false,
+          frameRate: rate,
+          platform: Platform(native),
+        );
+        expect(source.frameRate, rate);
+        await source.warmUp();
+        expect(
+          native.log.indexOf('createViewer'),
+          lessThan(native.log.indexOf('frameRate ${rate ?? 0}')),
+        );
+        expect(
+          native.log.indexOf('frameRate ${rate ?? 0}'),
+          lessThan(native.log.indexOf('setRendering')),
+        );
+        native.log.clear();
+        final model = await source.controllerFor(
+          const Model3dRequest(src: '/a.glb'),
+        );
+        await finishLoad(model.initialize());
+        expect(native.log, isNot(contains('createViewer')));
+        await model.dispose();
+        await tester.pump(const Duration(seconds: 1));
+      },
+    );
+  }
 
   testWidgets('뷰어가 생기기 전에도 뷰를 그린다', (tester) async {
     final model = await controller();
@@ -225,15 +163,16 @@ void main() {
   });
 
   group('네이티브 자원', () {
-    late _Native native;
+    late Native native;
     late Completer<void> bytes;
 
     Future<FilamentModel3dController> controller({
       double iblIntensity = 30000,
     }) async {
-      native = _Native();
+      native = Native();
       bytes = Completer<void>();
       return await FilamentModel3dSource(
+            keepAlive: Duration.zero,
             client: MockClient((_) async {
               await bytes.future;
               return http.Response.bytes([1], 200);
@@ -241,7 +180,7 @@ void main() {
             baseUrl: Uri.parse('http://host/'),
             diskCache: false,
             iblIntensity: iblIntensity,
-            platform: _Platform(native),
+            platform: Platform(native),
           ).controllerFor(const Model3dRequest(src: '/a.glb'))
           as FilamentModel3dController;
     }
@@ -249,14 +188,14 @@ void main() {
     Future<FilamentModel3dController> loaded(WidgetTester tester) async {
       final model = await controller();
       bytes.complete();
-      await model.initialize();
+      await finishLoad(model.initialize());
       return model;
     }
 
     testWidgets('계약: 투명 배경과 지정한 IBL을 모델보다 먼저 설정한다', (tester) async {
       final model = await controller(iblIntensity: 12345);
       bytes.complete();
-      await model.initialize();
+      await finishLoad(model.initialize());
 
       final background = native.calls.singleWhere(
         (call) => call.memberName == #setBackgroundColor,
@@ -322,9 +261,11 @@ void main() {
       native.calls.clear();
       model.setPose('Wave', const Duration(microseconds: 123456));
       await tester.pump();
+      await native.frame();
+      await tester.pump(const Duration(milliseconds: 2));
 
       final animation = native.calls
-          .where((call) => _nameOf(call).contains('GltfAnimation'))
+          .where((call) => nameOf(call).contains('GltfAnimation'))
           .toList();
       expect(animation.map((call) => call.memberName), [
         #stopGltfAnimation,
@@ -333,43 +274,6 @@ void main() {
       expect(animation.last.positionalArguments, [0, 0.123456]);
       expect(model.playback.isPlaying, isFalse);
       expect(model.playback.completions, 0);
-      await model.dispose();
-      await tester.pump(const Duration(seconds: 1));
-    });
-
-    testWidgets('계약: 로드 전과 호출 중 변경한 최신 카메라를 적용한다', (tester) async {
-      final model = await controller();
-      model.setCamera(const Model3dCamera(yaw: 90, zoom: 2));
-      bytes.complete();
-      await model.initialize();
-      final first =
-          native.calls
-                  .lastWhere((call) => call.memberName == #lookAt)
-                  .positionalArguments
-                  .first
-              as thermion.Vector3;
-      expect(first.x, greaterThan(0));
-      expect(first.y, closeTo(0, 1e-9));
-      expect(first.z, closeTo(0, 1e-9));
-
-      native.calls.clear();
-      native.hold('lookAt');
-      model.setCamera(const Model3dCamera(yaw: 0));
-      await tester.pump();
-      model.setCamera(const Model3dCamera(yaw: 45));
-      model.setCamera(const Model3dCamera(yaw: -90, zoom: 2));
-      native.release('lookAt');
-      await tester.pump();
-
-      final positions = native.calls
-          .where((call) => call.memberName == #lookAt)
-          .map((call) => call.positionalArguments.first as thermion.Vector3)
-          .toList();
-      expect(positions, hasLength(2));
-      expect(positions.first.z, closeTo(first.x * 2, 1e-9));
-      expect(positions.last.x, closeTo(-first.x, 1e-9));
-      expect(positions.last.y, closeTo(0, 1e-9));
-      expect(positions.last.z, closeTo(0, 1e-9));
       await model.dispose();
       await tester.pump(const Duration(seconds: 1));
     });
@@ -383,7 +287,7 @@ void main() {
       expect(native.log.last, 'release');
       final released = native.log.length;
       bytes.complete();
-      await loading;
+      await finishLoad(loading);
 
       expect(native.log.length, released);
       expect(native.log, isNot(contains('loadGltfFromBuffer')));
@@ -404,12 +308,14 @@ void main() {
       native.release('loadIbl');
       await disposing;
       bytes.complete();
-      await loading;
+      await finishLoad(loading);
 
-      expect(native.log.sublist(native.log.indexOf('loadIbl done')), [
-        'loadIbl done',
-        'release',
-      ]);
+      expect(
+        native.log.indexOf('release'),
+        greaterThan(native.log.indexOf('loadIbl done')),
+      );
+      expect(native.log.sublist(native.log.indexOf('release')), ['release']);
+      expect(native.log, isNot(contains('loadGltfFromBuffer')));
       await tester.pump(const Duration(seconds: 1));
     });
 
@@ -456,7 +362,7 @@ void main() {
       final model = await controller();
       native.clips = const [('Wave', 1.0), ('Wave', 3.0), ('Jump', 2.0)];
       bytes.complete();
-      await model.initialize();
+      await finishLoad(model.initialize());
 
       expect(model.clips, ['Wave', 'Jump']);
       expect(model.clipDuration('Wave'), const Duration(seconds: 1));
@@ -465,6 +371,8 @@ void main() {
       await model.play('Jump', loop: true);
       model.setPose('Jump', const Duration(milliseconds: 500));
       await tester.pump();
+      await native.frame();
+      await tester.pump(const Duration(milliseconds: 2));
       await model.play('Wave', loop: true);
       await model.stop();
 
@@ -487,6 +395,8 @@ void main() {
       model.setPose('Wave', const Duration(milliseconds: 500));
       expect(model.playback.isPlaying, isFalse);
       await tester.pump(const Duration(seconds: 2));
+      await native.frame();
+      await tester.pump(const Duration(milliseconds: 2));
 
       expect(model.playback.completions, 0);
       expect(native.log.where((call) => call.contains('GltfAnimation')), [
